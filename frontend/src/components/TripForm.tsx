@@ -1,6 +1,10 @@
-import { useState } from "react";
-import type { ApiOptions, ApiStatus, Pace, TransportMode, TripRequest } from "../types";
+import { useCallback, useEffect, useState } from "react";
+import { api } from "../services/api";
+import type {
+  AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, Pace, ParsedTrip, TransportMode, TripRequest,
+} from "../types";
 import { MODE_LABEL, pretty } from "../utils";
+import Autocomplete from "./Autocomplete";
 import ChipSelect from "./ChipSelect";
 
 interface Props {
@@ -8,11 +12,12 @@ interface Props {
   status: ApiStatus | null;
   submitting: boolean;
   onSubmit: (req: TripRequest) => void;
+  prefill?: { parsed: ParsedTrip; version: number } | null;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function TripForm({ options, status, submitting, onSubmit }: Props) {
+export default function TripForm({ options, status, submitting, onSubmit, prefill }: Props) {
   const mock = status?.data_mode === "mock";
   const [req, setReq] = useState<TripRequest>({
     accommodation: { type: "hotel", name_or_address: mock ? "Hotel on MI Road, Jaipur" : "" },
@@ -33,6 +38,27 @@ export default function TripForm({ options, status, submitting, onSubmit }: Prop
   });
   const [useCoords, setUseCoords] = useState(false);
   const [coords, setCoords] = useState({ lat: "", lng: "" });
+  const [cityLoc, setCityLoc] = useState<LatLng | null>(null);       // from the city dropdown
+  const [pinned, setPinned] = useState<LatLng | null>(null);         // exact accommodation point from suggestions
+
+  // apply fields read from a free-text description (DescribeTrip)
+  useEffect(() => {
+    if (!prefill) return;
+    const f = prefill.parsed.fields;
+    setReq((r) => ({
+      ...r,
+      ...Object.fromEntries(Object.entries(f).filter(([k, v]) => k !== "accommodation" && v !== undefined)),
+      currency: f.currency && options.currencies.includes(f.currency) ? f.currency : r.currency,
+      accommodation: { ...r.accommodation, ...(f.accommodation ?? {}) },
+    }) as TripRequest);
+    if (prefill.parsed.city) setCityLoc({ lat: prefill.parsed.city.lat, lng: prefill.parsed.city.lng });
+    if (f.accommodation?.name_or_address) setPinned(null);
+  }, [prefill, options.currencies]);
+
+  const fetchCities = useCallback(
+    (q: string, signal: AbortSignal) => api.citySuggestions(q, signal).then((r) => r.results), []);
+  const fetchAddresses = useCallback(
+    (q: string, signal: AbortSignal) => api.addressSuggestions(q, cityLoc, signal).then((r) => r.results), [cityLoc]);
 
   const set = <K extends keyof TripRequest>(k: K, v: TripRequest[K]) => setReq((r) => ({ ...r, [k]: v }));
   const toggleMode = (m: TransportMode) =>
@@ -40,7 +66,7 @@ export default function TripForm({ options, status, submitting, onSubmit }: Prop
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const location = useCoords && coords.lat && coords.lng ? { lat: Number(coords.lat), lng: Number(coords.lng) } : null;
+    const location = useCoords && coords.lat && coords.lng ? { lat: Number(coords.lat), lng: Number(coords.lng) } : pinned;
     onSubmit({ ...req, accommodation: { ...req.accommodation, location } });
   };
 
@@ -51,8 +77,19 @@ export default function TripForm({ options, status, submitting, onSubmit }: Prop
       <div className="grid-2">
         <label className="field">
           <span>Destination city</span>
-          <input required value={req.destination_city} onChange={(e) => set("destination_city", e.target.value)}
-                 placeholder={mock ? "Jaipur" : "Any city, e.g. Lisbon, Tokyo, Delhi"} />
+          <Autocomplete<CitySuggestion>
+            value={req.destination_city} required minChars={2}
+            placeholder={mock ? "Jaipur" : "Start typing a city, e.g. Lis..."}
+            onChange={(v) => { set("destination_city", v); setCityLoc(null); }}
+            onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); }}
+            fetchItems={fetchCities} itemKey={(c) => String(c.id)}
+            renderItem={(c) => (
+              <span className="ac-item"><strong>{c.name}</strong>
+                <span className="muted small"> {[c.region, c.country].filter((x) => x && x !== c.name).join(", ")}</span>
+              </span>
+            )}
+            footer="City data © GeoNames"
+          />
           {mock ? <small className="muted">Demo mode supports {status?.mock_city} only.</small>
             : <small className="muted">Works for cities worldwide.</small>}
         </label>
@@ -69,10 +106,19 @@ export default function TripForm({ options, status, submitting, onSubmit }: Prop
                   onChange={(e) => set("accommodation", { ...req.accommodation, type: e.target.value })}>
             {options.accommodation_types.map((t) => <option key={t} value={t}>{pretty(t)}</option>)}
           </select>
-          <input className="span-2" required value={req.accommodation.name_or_address}
-                 placeholder="Hotel name, Airbnb address or any address"
-                 onChange={(e) => set("accommodation", { ...req.accommodation, name_or_address: e.target.value })} />
+          <Autocomplete<AddressSuggestion>
+            className="span-2" value={req.accommodation.name_or_address} required minChars={3}
+            placeholder="Hotel name, Airbnb address or any address"
+            onChange={(v) => { set("accommodation", { ...req.accommodation, name_or_address: v }); setPinned(null); }}
+            onSelect={(a) => { set("accommodation", { ...req.accommodation, name_or_address: a.label }); setPinned({ lat: a.lat, lng: a.lng }); }}
+            fetchItems={fetchAddresses} itemKey={(a) => `${a.lat},${a.lng},${a.label}`}
+            renderItem={(a) => <span className="ac-item">{a.label}{a.kind && <span className="muted small"> · {a.kind.replace(/_/g, " ")}</span>}</span>}
+            footer={cityLoc ? "Results near your destination · Photon / OpenStreetMap" : "Photon / OpenStreetMap"}
+          />
         </div>
+        {pinned && !useCoords && (
+          <p className="small muted mt-xs">Exact location pinned: {pinned.lat.toFixed(5)}, {pinned.lng.toFixed(5)}</p>
+        )}
         <label className="check mt-s">
           <input type="checkbox" checked={useCoords} onChange={(e) => setUseCoords(e.target.checked)} />
           I know the exact coordinates

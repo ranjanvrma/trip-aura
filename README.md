@@ -29,6 +29,7 @@ trip-aura/
 │   │   │   ├── heuristic_routes.py Distance/speed route estimates using a city's metro/rail stations
 │   │   │   ├── google/             Google Maps Platform clients (Places New, Routes, Geocoding, Time Zone)
 │   │   │   └── mock/               Demo dataset + mock providers (clearly labelled)
+│   │   ├── nlp/                    city_index (GeoNames), trip_parser, interests, semantic (embeddings), sentiment
 │   │   ├── services/               places, routes, geocoding, location, fx (exchange rates), enrichment
 │   │   │                           (Google ratings), AI, orchestration (itinerary_service)
 │   │   ├── engines/
@@ -41,7 +42,7 @@ trip-aura/
 │   │   │   ├── fares.py            Mode speed profiles and heuristic durations
 │   │   │   └── pace.py             Relaxed / moderate / packed profiles
 │   │   └── routers/                /api/meta, /api/trips, /api/trips/{id}/live, /api/routes
-│   ├── tests/                      pytest suite (91 tests)
+│   ├── tests/                      pytest suite (107 tests)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -95,6 +96,19 @@ A city fails only when none of steps 1–3 could be reached.
 - Wikimedia requires a contact URL in the User-Agent (`OPEN_USER_AGENT`).
 
 Tested live on 7 Nov 2026 with Lisbon (EUR), Tokyo (JPY) and Delhi (INR).
+
+## NLP and deep-learning features
+
+| Feature | How it works | Where |
+|---|---|---|
+| City autocomplete | Offline index of about 34k cities (GeoNames `cities15000`, CC BY 4.0) with local and alternate names. Prefix search ranked by primary name and population, with fuzzy matching for typos (Tokio → Tokyo, Lisboa → Lisbon, Bombay → Mumbai). Takes 15–100 ms | `nlp/city_index.py`, `GET /api/geo/cities?q=` |
+| Address suggestions | Photon (OpenStreetMap search-as-you-type), biased to the chosen city. Picking a result pins exact coordinates, so no separate geocoding step is needed | `GET /api/geo/addresses?q=&lat=&lng=` |
+| "Describe your trip" | Rule-based parser (regex, lexicons, typo tolerance, the city index) that fills the form. It handles days or nights, travellers ("with my wife", "family of 4"), budgets in any form ("Rs 25k", "€1.5k", "$80 per day"), dates ("12 Dec", "next friday"), hotel, pace, diet, food types, transport (including "no taxis" and "public transport") and interests. Everything it extracted is listed, plus notes on anything it couldn't work out | `nlp/trip_parser.py`, `POST /api/nlp/parse-trip` |
+| Typo-tolerant interests | Typos are corrected (musuems → museums) and a thesaurus expands phrases ("temples" → religious sites, "history buff" → history + monuments + museums). Corrections appear as itinerary warnings | `nlp/interests.py` |
+| Semantic interest matching (DL) | Local sentence-embedding model (BAAI/bge-small-en-v1.5, ONNX via fastembed, ~65 MB, CPU). It compares each interest with each candidate place's name, description and categories, so "street art" can match a mural district with no shared keyword. Matches are labelled "AI text matching" in the reasons | `nlp/semantic.py`, `services/itinerary_service.py` |
+| Review sentiment (NLP + DL) | Each review sentence is scored with a negation-aware lexicon combined with zero-shot embedding polarity. A dish counts as "popular" only from non-negative mentions, so "the biryani was cold and bland" isn't evidence | `nlp/sentiment.py`, `engines/food.py` |
+
+The embedding model downloads on first use into `backend/data/models`. If it can't load, matching falls back to keywords, and `/api/meta/status` → `nlp.semantic_matching` shows which mode is active. The GeoNames files download on the first city search into `backend/data/geonames`.
 
 ## Implemented features
 
@@ -190,6 +204,9 @@ Things to check when you connect:
 | `ROUTING_ENGINE` | `heuristic` | `heuristic` (distance × speed estimates) or `osrm` |
 | `OSRM_DRIVING_URL` / `OSRM_WALKING_URL` | public OSRM demo servers | Used when `ROUTING_ENGINE=osrm` (demo servers aren't meant for production) |
 | `MAX_CANDIDATE_PLACES` / `MAX_FOOD_CANDIDATES` | `150` / `800` | How many attractions and restaurants the planner considers |
+| `SEMANTIC_ENABLED` / `SEMANTIC_MODEL` | `true` / `BAAI/bge-small-en-v1.5` | Local embedding model for semantic interests and sentiment |
+| `DATA_DIR` | `backend/data` | Where the GeoNames index and the model are stored |
+| `GEONAMES_URL` / `PHOTON_URL` | GeoNames dumps / photon.komoot.io | City index source and address autocomplete server |
 | `AI_ENABLED` | `false` | Turns on the optional AI overview |
 | `ANTHROPIC_API_KEY` | empty | Needed when `AI_ENABLED=true` |
 | `ANTHROPIC_MODEL` | `claude-opus-5-5` | Model for the overview (uses server-side refusal fallback) |
@@ -251,7 +268,8 @@ cd backend
 .venv/Scripts/python -m pytest -q
 ```
 
-Current result: **91 passed**. The suite runs offline (open-data tests use a fake city and `httpx.MockTransport`) and covers:
+Current result: **107 passed**. The suite runs offline (open-data tests use a fake city and `httpx.MockTransport`; NLP tests use a small fake city table and a stand-in embedding model) and covers:
+- **NLP:** city search (prefix ranking, alternate names, typos, country hints), the trip-description parser on varied phrasings, budget and date extraction, interest normalisation, sentiment with negation, negative dish mentions excluded, semantic matching raising suitability, and the `/api/nlp` and `/api/geo` endpoints
 - **Open data:** OSM opening-hours parser (overnight spans, wrap-around days, overrides), fee and diet tags, Overture rows, Wikidata type filtering, Wikivoyage dish extraction, place merging, cost model, exchange rates, city cache round-trip, Nominatim parsing, and Google enrichment that only attaches a rating on a close name match
 - **Scheduling:** opening windows, split hours, closed days, chronological non-overlapping timelines, start and end at the accommodation, three meals, pace limits, no repeated attractions, rest periods
 - **Recommendation scoring:** bounds, weights, interest, budget, distance and pace effects, discovery flag, independence from external ratings
@@ -276,3 +294,6 @@ The frontend type-checks and builds with `npm run build`.
 | DELETE | `/api/trips/{id}` | Delete a trip |
 | POST | `/api/trips/{id}/live` | Live position, then next stop, fresh estimates and alerts |
 | POST | `/api/routes/compare` | Compare modes between two points |
+| GET | `/api/geo/cities?q=` | City autocomplete (2+ letters) |
+| GET | `/api/geo/addresses?q=&lat=&lng=` | Address/hotel suggestions near a city |
+| POST | `/api/nlp/parse-trip` | Free-text trip description → form fields |

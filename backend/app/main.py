@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.errors import TripAuraError
 from app.core.logging_config import configure_logging
 from app.db.database import init_engine
-from app.routers import location, meta, routes, trips
+from app.routers import geo, location, meta, nlp, routes, trips
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -66,3 +66,5 @@ app.include_router(meta.router)
 app.include_router(trips.router)
 app.include_router(location.router)
 app.include_router(routes.router)
+app.include_router(geo.router)
+app.include_router(nlp.router)

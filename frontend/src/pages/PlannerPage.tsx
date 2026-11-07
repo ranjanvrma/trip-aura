@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import DescribeTrip from "../components/DescribeTrip";
 import TripForm from "../components/TripForm";
 import { api, ApiError } from "../services/api";
-import type { ApiOptions, ApiStatus, TripRequest, TripSummary } from "../types";
+import type { ApiOptions, ApiStatus, ParsedTrip, TripRequest, TripSummary } from "../types";
 
 export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const nav = useNavigate();
   const [options, setOptions] = useState<ApiOptions | null>(null);
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [prefill, setPrefill] = useState<{ parsed: ParsedTrip; version: number } | null>(null);
   const [error, setError] = useState<{ message: string; details?: unknown } | null>(null);
 
   useEffect(() => {
@@ -56,7 +58,9 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
             downloaded and cached; later trips there are instant.
           </div>
         )}
-        {options && status ? <TripForm options={options} status={status} submitting={submitting} onSubmit={submit} />
+        {options && status && <DescribeTrip onParsed={(p) => setPrefill((old) => ({ parsed: p, version: (old?.version ?? 0) + 1 }))} />}
+        {options && status ? <TripForm options={options} status={status} submitting={submitting} onSubmit={submit}
+                                       prefill={prefill} />
           : <div className="card">Loading options...</div>}
       </div>
       <aside className="card">

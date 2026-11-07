@@ -1,5 +1,6 @@
 import type {
-  ApiErrorBody, ApiOptions, ApiStatus, Itinerary, LatLng, LiveProgress, TransportMode, TripRequest, TripSummary,
+  AddressSuggestion, ApiErrorBody, ApiOptions, ApiStatus, CitySuggestion, Itinerary, LatLng, LiveProgress, ParsedTrip,
+  TransportMode, TripRequest, TripSummary,
 } from "../types";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -37,6 +38,13 @@ export const api = {
   createTrip: (req: TripRequest) => request<Itinerary>("/api/trips", { method: "POST", body: JSON.stringify(req) }),
   regenerate: (id: number) => request<Itinerary>(`/api/trips/${id}/regenerate`, { method: "POST" }),
   deleteTrip: (id: number) => request<void>(`/api/trips/${id}`, { method: "DELETE" }),
+  citySuggestions: (q: string, signal?: AbortSignal) =>
+    request<{ results: CitySuggestion[] }>(`/api/geo/cities?q=${encodeURIComponent(q)}`, { signal }),
+  addressSuggestions: (q: string, near?: LatLng | null, signal?: AbortSignal) =>
+    request<{ results: AddressSuggestion[] }>(
+      `/api/geo/addresses?q=${encodeURIComponent(q)}${near ? `&lat=${near.lat}&lng=${near.lng}` : ""}`, { signal }),
+  parseTrip: (text: string) =>
+    request<ParsedTrip>("/api/nlp/parse-trip", { method: "POST", body: JSON.stringify({ text }) }),
   liveProgress: (id: number, body: {
     current: LatLng; accuracy_m?: number; day_number: number; next_item_id?: string | null;
     planned_mode?: TransportMode | null; previous_duration_min?: number | null; client_time?: string;

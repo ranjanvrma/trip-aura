@@ -41,10 +41,23 @@ def status() -> dict:
             "routing": s.routing_engine.value,
             "city_cache_days": s.city_cache_days,
         } if mode == DataMode.OPEN else None,
+        "nlp": _nlp_status(),
         "ai": {"enabled": s.ai_enabled, "configured": bool(s.anthropic_api_key.strip()), "model": s.anthropic_model},
         "mock_city": "Jaipur" if mode == DataMode.MOCK else None,
         "worldwide": mode != DataMode.MOCK,
         "problems": problems,
+    }
+
+
+def _nlp_status() -> dict:
+    from app.nlp.registry import get_city_index, get_semantic
+
+    sem = get_semantic()
+    return {
+        "semantic_matching": sem.status,
+        "city_index": "ready" if get_city_index().ready else "loads on first search",
+        "features": ["city autocomplete", "address suggestions", "trip description parser",
+                     "typo-tolerant interests", "semantic interest matching", "review sentiment"],
     }
 
 

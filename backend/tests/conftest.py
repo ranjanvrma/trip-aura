@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("DATA_MODE", "mock")
 os.environ.setdefault("AI_ENABLED", "false")
+os.environ.setdefault("SEMANTIC_ENABLED", "false")
 os.environ["GOOGLE_MAPS_API_KEY"] = ""
 
 

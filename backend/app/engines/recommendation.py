@@ -38,11 +38,17 @@ class ScoringContext:
     origin: LatLng
     weekdays: list[int]                      # weekday index (0=Mon) of each trip day
     costs: CostModel | None = None           # estimates for prices the data source lacks
+    # interests after typo correction / thesaurus expansion (defaults to the request's)
+    interests: list[str] | None = None
+    # semantic (embedding) match strength 0..1: {place_id: {interest: strength}}
+    semantic: dict[str, dict[str, float]] = field(default_factory=dict)
     pace: PaceProfile = field(init=False)
     daily_budget_pp: float = field(init=False)
 
     def __post_init__(self) -> None:
         self.pace = profile_for(self.req.pace)
+        if self.interests is None:
+            self.interests = list(self.req.interests)
         if self.costs is None:
             self.costs = CostModel.build("IN" if self.req.currency == "INR" else "US", self.req.currency)
         spendable = self.req.budget - self.req.accommodation_cost_total
@@ -136,7 +142,16 @@ def _fmt_money(amount: float, currency: str) -> str:
 def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     req = ctx.req
     km = haversine_km(ctx.origin.lat, ctx.origin.lng, place.location.lat, place.location.lng)
-    interest, matched = interest_component(place, req.interests)
+    interest, matched = interest_component(place, ctx.interests)
+    # semantic (embedding) match: catches "street art" -> a mural district, "sunsets" -> a viewpoint
+    sem = ctx.semantic.get(place.id, {})
+    semantic_hits = sorted((i for i, s in sem.items() if s >= 0.4 and i not in matched), key=lambda i: -sem[i])
+    if semantic_hits:
+        sem_value = 0.45 + 0.35 * sem[semantic_hits[0]]
+        if sem_value > interest:
+            interest = sem_value
+        else:
+            interest = clamp(interest + 0.05 * len(semantic_hits))
     discovery = False
     if interest == 0.0 and place.is_famous:
         interest, discovery = 0.45, True
@@ -155,8 +170,13 @@ def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     reasons: list[str] = []
     if matched:
         reasons.append("Matches your interests: " + ", ".join(m.replace("_", " ") for m in matched))
-        if place.is_famous:
-            reasons.append("One of the city's best-known sights")
+    if semantic_hits:
+        reasons.append("Similar in meaning to your interest in " + ", ".join(i.replace("_", " ") for i in semantic_hits[:2])
+                       + " (AI text matching)")
+    if (matched or semantic_hits) and place.is_famous:
+        reasons.append("One of the city's best-known sights")
+    elif matched or semantic_hits:
+        pass
     elif discovery:
         reasons.append("Outside your selected interests, but one of the city's best-known sights")
     elif req.interests:

@@ -214,6 +214,20 @@ export interface LiveProgress {
   data_source: string;
 }
 
+export interface CitySuggestion {
+  id: number; name: string; region: string; country: string; country_code: string;
+  lat: number; lng: number; population: number; display: string; query: string;
+}
+
+export interface AddressSuggestion { label: string; name: string; lat: number; lng: number; kind?: string | null }
+
+export interface ParsedTrip {
+  fields: Partial<Omit<TripRequest, "accommodation">> & { accommodation?: Partial<AccommodationInput> };
+  understood: string[];
+  notes: string[];
+  city: CitySuggestion | null;
+}
+
 export interface ApiErrorBody {
   error: { code: string; message: string; details?: unknown };
 }

@@ -3,13 +3,14 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.core.config import get_settings
+from app.nlp.registry import get_semantic
 from app.services.itinerary_service import ItineraryService
 from app.services.providers import get_providers
 
 
 @lru_cache
 def _service(mode: str, key_present: bool) -> ItineraryService:
-    return ItineraryService(get_providers(), get_settings())
+    return ItineraryService(get_providers(), get_settings(), semantic=get_semantic())
 
 
 def get_itinerary_service() -> ItineraryService:

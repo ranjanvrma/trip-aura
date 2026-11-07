@@ -19,6 +19,8 @@ from app.schemas.common import DataSource
 from app.schemas.itinerary import DayPlan, DishSuggestion, Itinerary, ItemType, ItineraryItem
 from app.schemas.place import Place
 from app.schemas.trip import TripRequest
+from app.nlp.interests import expand_interests, interest_phrase
+from app.nlp.semantic import strength
 from app.services import ai_service
 from app.services.fx_service import FxService
 from app.services.geocoding_service import GeocodingService
@@ -36,10 +38,34 @@ BUDGET_STEPS = [
 ]
 
 
+def place_text(p: Place) -> str:
+    cats = " ".join(c.replace("_", " ") for c in p.categories if not c.startswith("search:"))
+    desc = p.description if p.description and not p.description.startswith("http") else ""
+    return f"{p.name}. {desc}. {cats}".strip()
+
+
+def semantic_interest_matches(semantic, interests: list[str], places: list[Place]) -> dict[str, dict[str, float]]:
+    """{place_id: {interest: strength 0..1}} using sentence embeddings (only non-zero strengths kept)."""
+    try:
+        sims = semantic.similarity([interest_phrase(i) for i in interests], [place_text(p) for p in places])
+    except Exception as exc:  # model failure -> lexical matching only
+        log.warning("Semantic matching failed: %s", exc)
+        return {}
+    out: dict[str, dict[str, float]] = {}
+    for qi, interest in enumerate(interests):
+        for pi, p in enumerate(places):
+            s = strength(float(sims[qi, pi]))
+            if s > 0:
+                out.setdefault(p.id, {})[interest] = round(s, 3)
+    return out
+
+
 class ItineraryService:
-    def __init__(self, providers: ProviderBundle, settings: Settings, fx: FxService | None = None):
+    def __init__(self, providers: ProviderBundle, settings: Settings, fx: FxService | None = None,
+                 semantic=None):
         self.providers = providers
         self.settings = settings
+        self.semantic = semantic   # SemanticMatcher or None (lexical matching only)
         self.places = PlacesService(providers.places)
         self.geo = GeocodingService(providers.geocoding)
         self.routes = RoutesService(providers.routes)
@@ -88,11 +114,22 @@ class ItineraryService:
         warnings += costs.notes
         ctx = ScoringContext(req=req, origin=home.location, weekdays=weekdays, costs=costs)
 
-        attractions = self.places.attraction_candidates(city, req)[: self.settings.max_candidate_places]
+        # NLP: typo-correct and expand interests ("musuems" -> museums, "temples" -> religious sites)
+        expanded, corrections = expand_interests(req.interests)
+        for raw, fixed in corrections.items():
+            warnings.append(f"Interpreted interest '{raw.replace('_', ' ')}' as '{fixed.replace('_', ' ')}'.")
+        ctx.interests = expanded
+        search_req = req.model_copy(update={"interests": expanded})
+
+        attractions = self.places.attraction_candidates(city, search_req)[: self.settings.max_candidate_places]
         food_places = self.places.food_candidates(city, req, self.settings.max_food_candidates)
         log.info("Planning %s: %d attraction and %d food candidates (%s)", city.name, len(attractions),
                  len(food_places), self.source.value)
-        food = FoodEngine(ctx, food_places)
+        # DL: semantic similarity between each interest and each place's text
+        semantic = self.semantic if (self.semantic is not None and self.semantic.available) else None
+        if semantic and expanded and attractions:
+            ctx.semantic = semantic_interest_matches(semantic, expanded, attractions)
+        food = FoodEngine(ctx, food_places, semantic=semantic)
         if not food.candidates:
             warnings.append("No restaurants matched your dietary preferences; meal costs are generic estimates.")
 
@@ -173,7 +210,7 @@ class ItineraryService:
 
     @staticmethod
     def _dishes(food: FoodEngine, city_data, req: TripRequest) -> list[DishSuggestion]:
-        out = city_popular_dishes([c.place for c in food.candidates], req.food_preferences)
+        out = city_popular_dishes([c.place for c in food.candidates], req.food_preferences, food.semantic)
         have = {d.name.lower() for d in out}
         if city_data:
             for d in city_data.guide_dishes:

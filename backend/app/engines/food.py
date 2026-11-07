@@ -176,28 +176,48 @@ def _dish_allowed(dish: str, diets: list[str]) -> bool:
     return True
 
 
-def _mentions(place: Place) -> dict[str, list[str]]:
-    found: dict[str, list[str]] = defaultdict(list)
+POSITIVE_THRESHOLD = -0.2   # sentences below this polarity are not counted as evidence of popularity
+
+
+def _mentions(place: Place, semantic=None) -> dict[str, list[tuple[str, float]]]:
+    """{dish: [(review sentence, polarity -1..1), ...]} - sentence-level, sentiment-scored."""
+    from app.nlp.sentiment import sentence_polarity, split_sentences
+
+    hits_by_sentence: list[tuple[str, list[str]]] = []
     for review in place.reviews:
-        text = review.text.lower()
-        hits = [d for d in DISHES if re.search(rf"\b{re.escape(d)}\b", text)]
-        # prefer the longest match ("kesar lassi" over "lassi") within one review
-        hits = [h for h in hits if not any(h != o and h in o for o in hits)]
+        for sentence in split_sentences(review.text):
+            low = sentence.lower()
+            hits = [d for d in DISHES if re.search(r"\b" + re.escape(d) + r"\b", low)]
+            # prefer the longest match ("kesar lassi" over "lassi") within one sentence
+            hits = [h for h in hits if not any(h != o and h in o for o in hits)]
+            if hits:
+                hits_by_sentence.append((sentence, hits))
+    found: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    if not hits_by_sentence:
+        return found
+    polarity = sentence_polarity([s for s, _ in hits_by_sentence], semantic)
+    for (sentence, hits), pol in zip(hits_by_sentence, polarity):
         for h in hits:
-            found[h].append(review.text)
+            found[h].append((sentence, pol))
     return found
 
 
-def dish_suggestions(place: Place, diets: list[str]) -> list[DishSuggestion]:
+def dish_suggestions(place: Place, diets: list[str], semantic=None) -> list[DishSuggestion]:
     out: list[DishSuggestion] = []
-    for dish, texts in sorted(_mentions(place).items(), key=lambda kv: -len(kv[1])):
+    mentions = _mentions(place, semantic)
+    ranked = sorted(mentions.items(), key=lambda kv: -sum(1 for _, p in kv[1] if p >= POSITIVE_THRESHOLD))
+    for dish, hits in ranked:
         if not _dish_allowed(dish, diets):
             continue
+        positive = [t for t, p in hits if p >= POSITIVE_THRESHOLD]
+        negative = len(hits) - len(positive)
+        if not positive:
+            continue  # only negative mentions: not a recommendation
         source = place.reviews[0].source if place.reviews else None
-        status = "popular" if len(texts) >= 2 else "mentioned"
-        out.append(DishSuggestion(name=dish.title(), status=status, evidence=[t[:140] for t in texts[:2]],
-                                  evidence_source=source, mention_count=len(texts)))
-    have = {d.name.lower() for d in out}
+        status = "popular" if len(positive) >= 2 else "mentioned"
+        out.append(DishSuggestion(name=dish.title(), status=status, evidence=[t[:140] for t in positive[:2]],
+                                  evidence_source=source, mention_count=len(positive), negative_mentions=negative))
+    have = {d.name.lower() for d in out} | {d.lower() for d in mentions}
     for cuisine in place.cuisines:
         for dish in CUISINE_SUGGESTIONS.get(cuisine, []):
             if dish not in have and _dish_allowed(dish, diets):
@@ -207,17 +227,21 @@ def dish_suggestions(place: Place, diets: list[str]) -> list[DishSuggestion]:
     return out[:5]
 
 
-def city_popular_dishes(places: list[Place], diets: list[str]) -> list[DishSuggestion]:
-    """Dishes mentioned in reviews of at least two different places."""
+def city_popular_dishes(places: list[Place], diets: list[str], semantic=None) -> list[DishSuggestion]:
+    """Dishes mentioned positively in reviews of at least two different places."""
     by_dish: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for p in places:
-        for dish, texts in _mentions(p).items():
-            by_dish[dish].append((p.name, texts[0]))
+        if not p.reviews:
+            continue
+        for dish, hits in _mentions(p, semantic).items():
+            positive = [t for t, pol in hits if pol >= POSITIVE_THRESHOLD]
+            if positive:
+                by_dish[dish].append((p.name, positive[0]))
     out = []
     for dish, refs in sorted(by_dish.items(), key=lambda kv: -len(kv[1])):
         if len(refs) < 2 or not _dish_allowed(dish, diets):
             continue
-        src = places[0].reviews[0].source if places and places[0].reviews else None
+        src = next((p.reviews[0].source for p in places if p.reviews), None)
         out.append(DishSuggestion(name=dish.title(), status="popular",
                                   evidence=[f"{name}: \"{text[:100]}\"" for name, text in refs[:3]],
                                   evidence_source=src, mention_count=len(refs)))
@@ -233,8 +257,9 @@ class FoodCandidate:
 
 
 class FoodEngine:
-    def __init__(self, ctx: ScoringContext, places: list[Place]):
+    def __init__(self, ctx: ScoringContext, places: list[Place], semantic=None):
         self.ctx = ctx
+        self.semantic = semantic
         self.candidates: list[FoodCandidate] = []
         self.rejected: list[tuple[Place, str]] = []
         for p in places:
@@ -272,7 +297,7 @@ class FoodEngine:
     def recommendations(self, limit: int = 10) -> list[FoodRecommendation]:
         ranked = sorted(self.candidates, key=lambda c: -c.base_score.score)[:limit]
         return [FoodRecommendation(place=c.place, suitability=c.base_score, meal_types=c.place.best_time,
-                                   dishes=dish_suggestions(c.place, self.ctx.req.food_preferences),
+                                   dishes=dish_suggestions(c.place, self.ctx.req.food_preferences, self.semantic),
                                    diet_match=c.check.reasons + [f"Diet info: {c.check.confidence}"])
                 for c in ranked]
 

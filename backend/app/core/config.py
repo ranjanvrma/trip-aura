@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     osrm_driving_url: str = "https://router.project-osrm.org/route/v1/driving"
     osrm_walking_url: str = "https://routing.openstreetmap.de/routed-foot/route/v1/foot"
 
+    # ---- NLP / DL -------------------------------------------------------------
+    # Local sentence-embedding model (ONNX via fastembed) for semantic interest matching and
+    # review sentiment. Downloaded once (~65 MB) into DATA_DIR/models. Falls back to lexical
+    # matching when disabled or unavailable.
+    semantic_enabled: bool = True
+    semantic_model: str = "BAAI/bge-small-en-v1.5"
+    data_dir: str = str(BACKEND_DIR / "data")
+    geonames_url: str = "https://download.geonames.org/export/dump"
+    photon_url: str = "https://photon.komoot.io/api/"
+
     # ---- AI -----------------------------------------------------------------
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5-5"

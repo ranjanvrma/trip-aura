@@ -91,7 +91,8 @@ class DishSuggestion(BaseModel):
                                     'travel guide, e.g. Wikivoyage) or "suggestion" (no evidence)')
     evidence: list[str] = Field(default_factory=list)
     evidence_source: DataSource | None = None
-    mention_count: int = 0
+    mention_count: int = 0          # positive or neutral mentions (sentiment-checked)
+    negative_mentions: int = 0      # mentions in negative sentences, not counted as evidence
 
 
 class FoodRecommendation(BaseModel):
