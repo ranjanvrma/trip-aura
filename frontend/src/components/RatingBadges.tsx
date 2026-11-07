@@ -1,0 +1,40 @@
+import type { ExternalRating, SuitabilityScore } from "../types";
+
+/** External (Google or demo) rating. Always shown separately from our suitability score. */
+export function ExternalRatingBadge({ rating }: { rating?: ExternalRating | null }) {
+  if (!rating || rating.rating == null) {
+    return <span className="badge badge-muted" title={rating?.label ?? "No rating"}>No rating</span>;
+  }
+  const google = rating.provider === "google" && rating.verified;
+  return (
+    <span className={`badge ${google ? "badge-google" : "badge-mock"}`} title={rating.label}>
+      {google ? "Google" : "Demo"} {"★"} {rating.rating.toFixed(1)}
+      {rating.review_count != null && <span className="muted"> ({rating.review_count.toLocaleString()})</span>}
+    </span>
+  );
+}
+
+export function SuitabilityBadge({ score }: { score?: SuitabilityScore | null }) {
+  if (!score) return null;
+  const tone = score.score >= 4 ? "good" : score.score >= 3 ? "ok" : "low";
+  return (
+    <span className={`badge badge-fit badge-fit-${tone}`} title="TripAura suitability score - personalised to your trip">
+      Fit {score.score.toFixed(1)}/5
+    </span>
+  );
+}
+
+export function ScoreBreakdown({ score }: { score: SuitabilityScore }) {
+  return (
+    <div className="breakdown">
+      {Object.entries(score.components).map(([k, v]) => (
+        <div key={k} className="bar-row">
+          <span className="bar-label">{k}</span>
+          <span className="bar"><span style={{ width: `${Math.round(v * 100)}%` }} /></span>
+          <span className="bar-val">{Math.round(v * 100)}%</span>
+          <span className="muted small">x{score.weights[k]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
