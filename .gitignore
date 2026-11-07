@@ -28,3 +28,6 @@ Thumbs.db
 
 # Downloaded data (GeoNames index, embedding models)
 backend/data/
+
+# TypeScript incremental build info
+*.tsbuildinfo
