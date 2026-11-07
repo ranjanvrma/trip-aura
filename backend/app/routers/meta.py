@@ -13,24 +13,44 @@ router = APIRouter(prefix="/api/meta", tags=["meta"])
 @router.get("/status")
 def status() -> dict:
     s = get_settings()
-    live = s.data_mode == DataMode.LIVE
+    mode = s.data_mode
+    problems: list[str] = []
+    if mode == DataMode.LIVE and not s.google_configured:
+        problems.append("DATA_MODE=live but GOOGLE_MAPS_API_KEY is missing - requests will fail until it is set.")
+    duckdb_ok = True
+    if mode == DataMode.OPEN and s.overture_enabled:
+        try:
+            import duckdb  # noqa: F401
+        except ImportError:
+            duckdb_ok = False
+            problems.append("The 'duckdb' package is not installed, so the Overture places layer is skipped.")
     return {
-        "data_mode": s.data_mode.value,
+        "data_mode": mode.value,
         "google": {
             "configured": s.google_configured,
-            "active": live and s.google_configured,
+            "active": (mode == DataMode.LIVE and s.google_configured)
+                      or (mode == DataMode.OPEN and s.google_configured and s.google_enrichment),
+            "role": {"live": "all places, ratings and routes", "open": "ratings/reviews enrichment",
+                     "mock": "not used"}[mode.value],
             "services": {"places": "Places API (New)", "routes": "Routes API", "geocoding": "Geocoding API",
                          "timezone": "Time Zone API"},
         },
+        "open_data": {
+            "sources": ["Nominatim", "Overture Maps" + ("" if duckdb_ok else " (unavailable)"), "Wikidata",
+                        "OpenStreetMap (Overpass)", "Wikivoyage"],
+            "routing": s.routing_engine.value,
+            "city_cache_days": s.city_cache_days,
+        } if mode == DataMode.OPEN else None,
         "ai": {"enabled": s.ai_enabled, "configured": bool(s.anthropic_api_key.strip()), "model": s.anthropic_model},
-        "mock_city": "Jaipur" if not live else None,
-        "problems": (["DATA_MODE=live but GOOGLE_MAPS_API_KEY is missing - requests will fail until it is set."]
-                     if live and not s.google_configured else []),
+        "mock_city": "Jaipur" if mode == DataMode.MOCK else None,
+        "worldwide": mode != DataMode.MOCK,
+        "problems": problems,
     }
 
 
 @router.get("/options")
 def options() -> dict:
+    s = get_settings()
     return {
         "interests": PRESET_INTERESTS,
         "food_preferences": PRESET_DIETS,
@@ -38,5 +58,5 @@ def options() -> dict:
         "transport_modes": [m.value for m in TransportMode],
         "paces": [p.value for p in Pace],
         "accommodation_types": [a.value for a in AccommodationType],
-        "currencies": list(SUPPORTED_CURRENCIES),
+        "currencies": ["INR"] if s.data_mode == DataMode.MOCK else list(SUPPORTED_CURRENCIES),
     }

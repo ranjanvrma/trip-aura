@@ -12,5 +12,14 @@ export default function DataSourceBanner({ status, error }: { status: ApiStatus 
     );
   }
   if (status.problems.length) return <div className="banner banner-error">{status.problems.join(" ")}</div>;
+  if (status.data_mode === "open") {
+    return (
+      <div className="banner banner-live">
+        <strong>Worldwide open data.</strong> Places come from {status.open_data?.sources.join(", ")}.
+        {status.google.active ? " Google ratings are added where a place can be matched." :
+          " Open data has no ratings; add a Google key for ratings."} Travel times are estimates.
+      </div>
+    );
+  }
   return <div className="banner banner-live">Live mode: places, ratings and routes from Google Maps Platform.</div>;
 }

@@ -1,5 +1,5 @@
 from app.engines import budget as be
-from app.engines.fares import estimate_fare
+from app.engines.costs import CostModel
 from app.providers.mock.providers import _all_places
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.itinerary import ItemType
@@ -12,6 +12,14 @@ def req(**kw) -> TripRequest:
             "budget": 10000, "travelers": 1}
     data.update(kw)
     return TripRequest.model_validate(data)
+
+
+IN = CostModel.build("IN", "INR")
+
+
+def estimate_fare(mode, km, currency, travelers=1):
+    assert currency == "INR"
+    return IN.fare(mode, km, travelers)
 
 
 def test_fare_per_person_vs_per_vehicle():
@@ -36,7 +44,7 @@ def test_entry_cost_multiplies_travelers_and_estimates_unknown():
     assert be.entry_cost(albert, req(travelers=3)).amount == albert.entry_fee.amount * 3
     unknown = Place(id="x", name="X", kind=PlaceKind.ATTRACTION, location=LatLng(lat=0, lng=0), source=DataSource.GOOGLE)
     m = be.entry_cost(unknown, req(travelers=2))
-    assert m.amount == be.UNKNOWN_ENTRY_FEE["INR"] * 2 and m.verified is False and "not available" in m.note
+    assert m.amount == IN.unknown_entry_fee * 2 and m.verified is False and "not available" in m.note
     park = unknown.model_copy(update={"kind": PlaceKind.PARK})
     assert be.entry_cost(park, req()).amount == 0
 
@@ -49,7 +57,7 @@ def test_meal_cost_breakfast_factor_and_price_level():
     assert breakfast == round(lunch * be.BREAKFAST_FACTOR, 2)
     generic = Place(id="g", name="G", kind=PlaceKind.RESTAURANT, location=LatLng(lat=0, lng=0),
                     price_level=3, source=DataSource.GOOGLE)
-    assert be.meal_cost(generic, "dinner", req()).amount == be.PRICE_LEVEL_MEAL["INR"][3]
+    assert be.meal_cost(generic, "dinner", req()).amount == IN.meal(3)
 
 
 def test_summary_totals_add_up(mock_service):

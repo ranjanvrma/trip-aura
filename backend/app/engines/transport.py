@@ -13,7 +13,8 @@ from dataclasses import dataclass
 
 from app.core.errors import TripAuraError
 from app.core.geo import haversine_km
-from app.engines.fares import estimate_fare, heuristic_duration_min
+from app.engines.costs import CostModel
+from app.engines.fares import heuristic_duration_min
 from app.engines.pace import PaceProfile
 from app.providers.base import CityContext, RouteResult
 from app.schemas.common import DataSource, LatLng, Money
@@ -79,13 +80,14 @@ def choose(options: list[TransportOption], preferred: set[TransportMode]) -> tup
 
 class TransportEngine:
     def __init__(self, routes: RoutesService, city: CityContext, req: TripRequest, pace: PaceProfile,
-                 weights: TransportWeights | None = None):
+                 weights: TransportWeights | None = None, costs: CostModel | None = None):
         self.routes = routes
         self.city = city
         self.req = req
         self.pace = pace
         self.weights = weights or TransportWeights()
         self.preferred = set(req.transport_modes)
+        self.costs = costs or CostModel.build("IN" if req.currency == "INR" else "US", req.currency)
         # ~25% of the daily spend for transport, spread over ~6 legs a day
         daily = (req.budget - req.accommodation_cost_total) / req.num_days
         self.leg_allowance = daily * 0.25 / 6
@@ -118,12 +120,11 @@ class TransportEngine:
                                    cost=Money.estimate(0, self.req.currency, note="Not available on this route"),
                                    practical=False, score=0.0, note=r.note or "Not available on this route",
                                    traffic_aware=False, source=r.source)
-        if r.fare is not None and r.fare.currency == self.req.currency:
-            cost = r.fare.model_copy(update={"amount": round(r.fare.amount * travelers, 2)})
+        if r.fare is not None:
+            fare = self.costs.to_trip_currency(r.fare)
+            cost = fare.model_copy(update={"amount": round(fare.amount * travelers, 2)})
         else:
-            cost = estimate_fare(r.mode, r.distance_km, self.req.currency, travelers)
-            if r.fare is not None:
-                cost.note = (cost.note or "") + f" (provider fare in {r.fare.currency} not converted)"
+            cost = self.costs.fare(r.mode, r.distance_km, travelers)
         practical = r.available
         note = r.note
         if r.mode == TransportMode.WALKING and r.distance_km > self.pace.max_walk_km:

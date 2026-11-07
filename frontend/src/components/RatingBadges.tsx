@@ -3,7 +3,11 @@ import type { ExternalRating, SuitabilityScore } from "../types";
 /** External (Google or demo) rating. Always shown separately from our suitability score. */
 export function ExternalRatingBadge({ rating }: { rating?: ExternalRating | null }) {
   if (!rating || rating.rating == null) {
-    return <span className="badge badge-muted" title={rating?.label ?? "No rating"}>No rating</span>;
+    return (
+      <span className="badge badge-muted" title={rating?.label ?? "Open data has no ratings and no Google match was found"}>
+        No rating
+      </span>
+    );
   }
   const google = rating.provider === "google" && rating.verified;
   return (

@@ -4,7 +4,8 @@ import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
 
 function Dish({ d }: { d: DishSuggestion }) {
   const label = d.status === "popular" ? `Popular · ${d.mention_count} reviews`
-    : d.status === "mentioned" ? "Mentioned in 1 review" : "Suggestion";
+    : d.status === "mentioned" ? "Mentioned in 1 review"
+    : d.status === "guide" ? "Named in travel guide" : "Suggestion";
   return (
     <li className={`dish dish-${d.status}`} title={d.evidence.join("\n") || "No review evidence - general suggestion for this cuisine"}>
       {d.name} <small>({label}{d.evidence_source === "mock" ? ", demo reviews" : ""})</small>
@@ -18,9 +19,12 @@ export default function RestaurantList({ recs, popular }: { recs: FoodRecommenda
       <h3>Food recommendations</h3>
       {popular.length > 0 && (
         <div className="mb-m">
-          <h4>Dishes popular across reviews</h4>
+          <h4>Local dishes</h4>
           <ul className="dishes">{popular.map((d) => <Dish key={d.name} d={d} />)}</ul>
-          <p className="small muted">"Popular" means at least two separate reviews mention it. Hover for the evidence.</p>
+          <p className="small muted">
+            "Popular" means at least two separate reviews mention it; "travel guide" means Wikivoyage names it.
+            Hover for the evidence. Dishes with unknown ingredients are hidden for strict diets.
+          </p>
         </div>
       )}
       <div className="rest-grid">
@@ -28,7 +32,10 @@ export default function RestaurantList({ recs, popular }: { recs: FoodRecommenda
           <article key={r.place.id} className="rest">
             <div className="row between wrap gap-s">
               <strong>{r.place.name}</strong>
-              <span className="small muted">{moneyLabel(r.place.avg_cost_per_person)} pp</span>
+              <span className="small muted">
+                {r.place.avg_cost_per_person ? `${moneyLabel(r.place.avg_cost_per_person)} pp`
+                  : r.place.price_level != null ? `${"$".repeat(Math.max(1, r.place.price_level))}${r.place.price_level_estimated ? " (est.)" : ""}` : ""}
+              </span>
             </div>
             <div className="row wrap gap-s mt-xs">
               <ExternalRatingBadge rating={r.place.external_rating} />

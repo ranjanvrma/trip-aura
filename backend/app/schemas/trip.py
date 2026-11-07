@@ -5,9 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.currencies import SUPPORTED_CURRENCIES
 from app.schemas.common import LatLng
-
-SUPPORTED_CURRENCIES = ("INR", "USD", "EUR", "GBP")
 
 
 class Pace(str, Enum):

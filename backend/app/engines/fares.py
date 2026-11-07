@@ -1,15 +1,8 @@
-"""Transport speed profiles and fare tables.
-
-All values here are ESTIMATES used when a provider does not return a real fare
-(Google returns fares only for some transit routes; never for cabs or autos).
-Every Money produced here has verified=False and source="estimate".
-"""
+"""Transport speed profiles and heuristic durations. Fares live in engines/costs.py."""
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
-from app.schemas.common import DataSource, Money
 from app.schemas.trip import TransportMode
 
 
@@ -32,58 +25,6 @@ MODE_PROFILES: dict[TransportMode, ModeProfile] = {
     TransportMode.CAB: ModeProfile(24, 6, 1.3, True, False, 4),
     TransportMode.PERSONAL_VEHICLE: ModeProfile(25, 6, 1.3, True, False, 5),
 }
-
-# (base, per_km, minimum, maximum or None) in the given currency.
-FARE_TABLES: dict[str, dict[TransportMode, tuple[float, float, float, float | None]]] = {
-    "INR": {
-        TransportMode.WALKING: (0, 0, 0, 0),
-        TransportMode.METRO: (8, 2.5, 10, 35),
-        TransportMode.BUS: (10, 1.0, 10, 40),
-        TransportMode.TRAIN: (15, 0.6, 15, None),
-        TransportMode.AUTO: (30, 15, 40, None),
-        TransportMode.CAB: (60, 18, 100, None),
-        TransportMode.PERSONAL_VEHICLE: (30, 6, 30, None),   # fuel + one parking fee
-    },
-    "USD": {
-        TransportMode.WALKING: (0, 0, 0, 0),
-        TransportMode.METRO: (2.5, 0, 2.5, 3.5),
-        TransportMode.BUS: (2.0, 0, 2.0, 3.0),
-        TransportMode.TRAIN: (3.0, 0.25, 3.0, None),
-        TransportMode.AUTO: (3.0, 1.2, 5.0, None),
-        TransportMode.CAB: (4.0, 1.8, 8.0, None),
-        TransportMode.PERSONAL_VEHICLE: (5.0, 0.2, 5.0, None),
-    },
-    "EUR": {
-        TransportMode.WALKING: (0, 0, 0, 0),
-        TransportMode.METRO: (2.0, 0, 2.0, 3.5),
-        TransportMode.BUS: (2.0, 0, 2.0, 3.0),
-        TransportMode.TRAIN: (3.0, 0.2, 3.0, None),
-        TransportMode.AUTO: (3.0, 1.1, 5.0, None),
-        TransportMode.CAB: (4.0, 1.7, 8.0, None),
-        TransportMode.PERSONAL_VEHICLE: (4.0, 0.2, 4.0, None),
-    },
-    "GBP": {
-        TransportMode.WALKING: (0, 0, 0, 0),
-        TransportMode.METRO: (2.8, 0, 2.8, 4.0),
-        TransportMode.BUS: (1.75, 0, 1.75, 2.0),
-        TransportMode.TRAIN: (3.0, 0.25, 3.0, None),
-        TransportMode.AUTO: (3.0, 1.0, 5.0, None),
-        TransportMode.CAB: (4.0, 1.6, 7.0, None),
-        TransportMode.PERSONAL_VEHICLE: (4.0, 0.2, 4.0, None),
-    },
-}
-
-
-def estimate_fare(mode: TransportMode, distance_km: float, currency: str, travelers: int = 1) -> Money:
-    base, per_km, minimum, maximum = FARE_TABLES[currency][mode]
-    unit = max(minimum, base + per_km * distance_km) if mode != TransportMode.WALKING else 0.0
-    if maximum is not None:
-        unit = min(unit, maximum)
-    profile = MODE_PROFILES[mode]
-    multiplier = travelers if profile.per_person else math.ceil(travelers / profile.capacity)
-    note = "per person fare table" if profile.per_person else f"per vehicle (x{multiplier})"
-    return Money.estimate(unit * multiplier, currency, note=f"Estimated {mode.value} cost, {note}")
-
 
 def simulated_traffic_multiplier(minute_of_day: int) -> float:
     """Deterministic time-of-day congestion used ONLY in mock mode (labelled as simulated)."""

@@ -4,7 +4,10 @@ You enter where you're staying, the destination, days, budget, interests, food p
 
 - **Backend:** Python, FastAPI, SQLAlchemy (SQLite), Pydantic
 - **Frontend:** React, Vite, TypeScript (Leaflet/OSM map now; Google Maps JS renderer turns on with a key)
-- **Data sources:** `mock` (bundled Jaipur demo data, no keys) or `live` (Google Places API (New), Routes API, Geocoding API, Time Zone API)
+- **Data sources** (`DATA_MODE`):
+  - `open` (default): any city worldwide from open data, with no API key. Sources are Overture Maps, Wikidata, OpenStreetMap, Wikivoyage, Nominatim and ECB exchange rates. Google ratings are added on top when a key is set.
+  - `live`: Google Places API (New), Routes API, Geocoding API, Time Zone API
+  - `mock`: bundled Jaipur demo data, for offline testing
 - **AI (optional):** Anthropic API writes a short overview from data the engines have already computed. The engines don't depend on it.
 
 ---
@@ -17,23 +20,28 @@ trip-aura/
 │   ├── app/
 │   │   ├── main.py                 FastAPI app, CORS, error handlers
 │   │   ├── core/                   config (env vars), errors, logging, geo/time helpers
-│   │   ├── db/                     SQLAlchemy engine + Trip model
+│   │   ├── db/                     SQLAlchemy engine + Trip and CityDataset (open-data cache) models
 │   │   ├── schemas/                Pydantic models (trip, place, itinerary, location)
 │   │   ├── providers/
 │   │   │   ├── base.py             Provider interfaces (Places / Routes / Geocoding)
+│   │   │   ├── open/               Worldwide open data: city_store (load + cache), overture, wikimedia
+│   │   │   │                       (Wikidata + Wikivoyage), osm (Overpass + tag parsing), http, providers
+│   │   │   ├── heuristic_routes.py Distance/speed route estimates using a city's metro/rail stations
 │   │   │   ├── google/             Google Maps Platform clients (Places New, Routes, Geocoding, Time Zone)
 │   │   │   └── mock/               Demo dataset + mock providers (clearly labelled)
-│   │   ├── services/               places, routes, geocoding, location, AI, orchestration (itinerary_service)
+│   │   ├── services/               places, routes, geocoding, location, fx (exchange rates), enrichment
+│   │   │                           (Google ratings), AI, orchestration (itinerary_service)
 │   │   ├── engines/
 │   │   │   ├── recommendation.py   Personalised suitability score (0-5)
 │   │   │   ├── itinerary.py        Day planning, 2-opt ordering, opening hours, meals, rests
 │   │   │   ├── food.py             Diet filtering, restaurant picks, evidence-based dishes
 │   │   │   ├── transport.py        Mode comparison + practical-mode recommendation
 │   │   │   ├── budget.py           Costing, verified vs estimated totals, savings suggestions
-│   │   │   ├── fares.py            Speed profiles and fare tables (estimates)
+│   │   │   ├── costs.py            Worldwide cost model: country price index + FX, curated India table
+│   │   │   ├── fares.py            Mode speed profiles and heuristic durations
 │   │   │   └── pace.py             Relaxed / moderate / packed profiles
 │   │   └── routers/                /api/meta, /api/trips, /api/trips/{id}/live, /api/routes
-│   ├── tests/                      pytest suite (64 tests)
+│   ├── tests/                      pytest suite (91 tests)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -49,6 +57,44 @@ trip-aura/
 │   └── .env.example
 └── .claude/launch.json             Dev-server definitions (backend, frontend)
 ```
+
+## Worldwide data (open mode)
+
+Nothing is scraped. Each city loads on demand the first time someone plans a trip there, then it's cached in SQLite for `CITY_CACHE_DAYS` (default 30). The first trip to a new city takes about 1–3 minutes; later trips there take seconds.
+
+| Step | Source | What it gives | If it fails |
+|---|---|---|---|
+| City + accommodation geocoding | Nominatim (OSM) | Coordinates, country, city size | Error (can't plan without it) |
+| 1. Places (primary) | Overture Maps places, read from public files on S3 via DuckDB (~15–20 s per city) | Restaurants, cafés, museums, parks, historic sites, plazas, beaches, stations, cuisines, chains | Warning; other layers continue |
+| 2. Famous sights | Wikidata query service | Notable places nearby, ranked by how many Wikipedia language editions cover them, plus English names and descriptions | Warning ("famous" detection limited) |
+| 3. Details (best effort, 90 s budget) | OpenStreetMap via Overpass (three mirrors) | Opening hours, entry fees, vegetarian/vegan/Jain tags, metro vs train stations | Warning; hours and fees stay unknown |
+| 4. Local dishes | Wikivoyage "Eat" section | Dish names with a quoted sentence as evidence | Warning |
+| Costs | ECB rates via Frankfurter + a hand-kept country price index | Fares, meal and entry estimates in any of 31 currencies | Error only when converting is needed and rates are down |
+| Ratings (optional) | Google Places, when `GOOGLE_MAPS_API_KEY` is set | Google rating and reviews for the ~30–40 places in the plan, only when the name matches within 250 m | Warning; places keep "No rating" |
+
+A city fails only when none of steps 1–3 could be reached.
+
+**How the layers combine:**
+- Overture is the base layer.
+- Wikidata and OSM records are merged into it by matching name (accent-insensitive) within 150–300 m. Unmatched records are added as new places.
+- Near-duplicate sights (the same place under two spellings) are removed before scheduling.
+
+**What open data cannot tell you, and how it's shown:**
+- **Ratings:** "No rating" unless Google enrichment found a match.
+- **Opening hours:** "Not available". The scheduler assumes 09:00–18:00 and says so.
+- **Entry fees:** the OSM `fee`/`charge` tags when present. Otherwise "probably free (assumed)" for squares, parks, monuments and places of worship, and a labelled typical estimate for everything else.
+- **Diet:** recorded as confirmed, likely or unverified. For strict diets, dishes with unknown ingredients are hidden.
+- **Travel times:** estimated from distance and typical speeds, plus a typical rush-hour slowdown, not live traffic. You can set `ROUTING_ENGINE=osrm` to get real road distances.
+- **Metro:** only offered when stations are mapped near both ends of a leg.
+
+**Licences and attribution:** every itinerary carries an `attributions` list, shown as a footer in the UI.
+- OpenStreetMap is ODbL 1.0, which is share-alike. A database you redistribute that's built from OSM data must stay under ODbL.
+- Overture is CDLA-Permissive-2.0, and its Foursquare records are Apache-2.0.
+- Wikidata is CC0. Wikivoyage is CC BY-SA 4.0.
+- The public Nominatim and Overpass servers are for light use. For production, self-host them or use a paid provider (`NOMINATIM_URL`, `OVERPASS_URLS`).
+- Wikimedia requires a contact URL in the User-Agent (`OPEN_USER_AGENT`).
+
+Tested live on 7 Nov 2026 with Lisbon (EUR), Tokyo (JPY) and Delhi (INR).
 
 ## Implemented features
 
@@ -112,7 +158,11 @@ The code for these is written and unit-tested against mocked HTTP responses, but
 - `providers/google/geocoding.py`: Geocoding API for the city and accommodation, plus the Time Zone API so departure times are local
 - `components/map/GoogleMap.tsx`: Maps JavaScript API renderer (markers, polylines, traffic layer, accuracy circle)
 
-To switch to live data, set `DATA_MODE=live` and `GOOGLE_MAPS_API_KEY` in `backend/.env`, and optionally `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env`.
+There are two ways to use a key:
+- **Keep `DATA_MODE=open` and set `GOOGLE_MAPS_API_KEY`.** Open data stays the base layer, and Google adds ratings and reviews to the places in each plan (`services/enrichment.py`, about 30–40 Text Search calls per trip).
+- **Set `DATA_MODE=live`.** Google supplies everything: places, routes with live traffic, and geocoding.
+
+`VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env` turns on the Google map renderer in either mode.
 
 Things to check when you connect:
 - The field masks match your SKU tier.
@@ -125,9 +175,21 @@ Things to check when you connect:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATA_MODE` | `mock` | `mock` or `live` |
+| `DATA_MODE` | `open` | `open` (worldwide open data), `live` (Google) or `mock` (Jaipur demo) |
 | `GOOGLE_MAPS_API_KEY` | empty | Server key: Places API (New), Routes API, Geocoding API, Time Zone API |
+| `GOOGLE_ENRICHMENT` | `true` | In open mode, add Google ratings when a key is set |
 | `GOOGLE_HTTP_TIMEOUT_SECONDS` | `10` | Timeout for Google requests |
+| `OPEN_USER_AGENT` | `TripAura/0.1 (+https://github.com/ranjanvrma/trip-aura)` | Identifies the app to OSM/Wikimedia. Must include a contact URL or email, or Wikimedia returns HTTP 403 |
+| `NOMINATIM_URL` | public Nominatim | Geocoding server (self-host for production) |
+| `OVERPASS_URLS` | 3 public mirrors | Comma-separated Overpass endpoints, tried in order |
+| `OSM_TIME_BUDGET_SECONDS` | `90` | Total time allowed for the best-effort OSM layer per city |
+| `OVERTURE_ENABLED` / `OVERTURE_RELEASE` | `true` / latest | Overture places layer. The release is auto-detected from the STAC catalog |
+| `WIKIVOYAGE_ENABLED` | `true` | Guidebook dish suggestions |
+| `CITY_CACHE_DAYS` | `30` | How long a loaded city is reused before refreshing |
+| `FX_URL` | Frankfurter (ECB rates) | Exchange rates for non-USD currencies |
+| `ROUTING_ENGINE` | `heuristic` | `heuristic` (distance × speed estimates) or `osrm` |
+| `OSRM_DRIVING_URL` / `OSRM_WALKING_URL` | public OSRM demo servers | Used when `ROUTING_ENGINE=osrm` (demo servers aren't meant for production) |
+| `MAX_CANDIDATE_PLACES` / `MAX_FOOD_CANDIDATES` | `150` / `800` | How many attractions and restaurants the planner considers |
 | `AI_ENABLED` | `false` | Turns on the optional AI overview |
 | `ANTHROPIC_API_KEY` | empty | Needed when `AI_ENABLED=true` |
 | `ANTHROPIC_MODEL` | `claude-opus-5-5` | Model for the overview (uses server-side refusal fallback) |
@@ -178,7 +240,9 @@ npm run dev
 - API: http://127.0.0.1:8000
 - Interactive API docs: http://127.0.0.1:8000/docs
 
-In mock mode, use **Jaipur** as the destination and an address such as "Hotel on MI Road". Mock localities include MI Road, C-Scheme, Bani Park, Civil Lines, Amer, Old City, Malviya Nagar and Raja Park. You can also give exact coordinates.
+In the default open mode, enter any city and a hotel name or address (for example "Lisbon" with "Rossio, Lisbon"). The first trip to a city takes 1–3 minutes while its data loads.
+
+With `DATA_MODE=mock`, use **Jaipur** and an address such as "Hotel on MI Road". Mock localities include MI Road, C-Scheme, Bani Park, Civil Lines, Amer, Old City, Malviya Nagar and Raja Park. You can also give exact coordinates.
 
 ## Tests
 
@@ -187,7 +251,8 @@ cd backend
 .venv/Scripts/python -m pytest -q
 ```
 
-Current result: **64 passed**. The suite covers:
+Current result: **91 passed**. The suite runs offline (open-data tests use a fake city and `httpx.MockTransport`) and covers:
+- **Open data:** OSM opening-hours parser (overnight spans, wrap-around days, overrides), fee and diet tags, Overture rows, Wikidata type filtering, Wikivoyage dish extraction, place merging, cost model, exchange rates, city cache round-trip, Nominatim parsing, and Google enrichment that only attaches a rating on a close name match
 - **Scheduling:** opening windows, split hours, closed days, chronological non-overlapping timelines, start and end at the accommodation, three meals, pace limits, no repeated attractions, rest periods
 - **Recommendation scoring:** bounds, weights, interest, budget, distance and pace effects, discovery flag, independence from external ratings
 - **Budget:** fares per person vs per vehicle, minimums and caps, entry and meal costing, totals adding up, verified vs estimated split, over-budget suggestions, fit-to-budget

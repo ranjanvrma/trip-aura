@@ -127,6 +127,11 @@ export default function TripPage() {
             </section>
           )}
           <RestaurantList recs={it.food_recommendations} popular={it.popular_dishes} />
+          {it.attributions.length > 0 && (
+            <footer className="small muted attributions">
+              <strong>Data sources:</strong> {it.attributions.join(" · ")}
+            </footer>
+          )}
         </div>
         <div className="col-side">
           <div className="sticky">

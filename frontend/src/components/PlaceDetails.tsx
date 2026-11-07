@@ -3,6 +3,11 @@ import { moneyLabel, pretty } from "../utils";
 import { ExternalRatingBadge, ScoreBreakdown, SuitabilityBadge } from "./RatingBadges";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SOURCE_LABEL: Record<string, string> = {
+  osm: "OpenStreetMap", overture: "Overture Maps", wikidata: "Wikidata", google: "Google Maps Platform",
+  mock: "Demo dataset (mock)",
+};
+const OSM_TYPE: Record<string, string> = { n: "node", w: "way", r: "relation" };
 
 export default function PlaceDetails({ item, onClose }: { item: ItineraryItem; onClose: () => void }) {
   const p = item.place;
@@ -59,15 +64,28 @@ export default function PlaceDetails({ item, onClose }: { item: ItineraryItem; o
               })}
             </tbody>
           </table>
-        ) : <p className="small warn">Opening hours not published by the provider.</p>
+        ) : <p className="small warn">Opening hours not available in the data - check before visiting.</p>
       )}
       {p.reviews.length > 0 && (
         <>
-          <h4>Reviews <span className="muted small">({p.source === "google" ? "from Google" : "demo reviews"})</span></h4>
+          <h4>Reviews <span className="muted small">({p.reviews[0].source === "google" ? "from Google" : "demo reviews"})</span></h4>
           <ul className="small reviews">{p.reviews.slice(0, 3).map((r) => <li key={r.text}>"{r.text}"</li>)}</ul>
         </>
       )}
-      {p.google_maps_uri && <a href={p.google_maps_uri} target="_blank" rel="noreferrer">Open in Google Maps</a>}
+      <p className="small muted">
+        Data source: {SOURCE_LABEL[p.source] ?? p.source}
+        {p.prominence ? " · covered by " + p.prominence + " Wikipedia editions" : ""}
+      </p>
+      <div className="row gap-m wrap small">
+        {p.google_maps_uri && <a href={p.google_maps_uri} target="_blank" rel="noreferrer">Open in Google Maps</a>}
+        {p.external_ids?.wikidata && (
+          <a href={"https://www.wikidata.org/wiki/" + p.external_ids.wikidata} target="_blank" rel="noreferrer">Wikidata</a>
+        )}
+        {p.external_ids?.osm && (
+          <a href={"https://www.openstreetmap.org/" + OSM_TYPE[p.external_ids.osm[0]] + "/" + p.external_ids.osm.slice(1)}
+             target="_blank" rel="noreferrer">OpenStreetMap</a>
+        )}
+      </div>
     </aside>
   );
 }

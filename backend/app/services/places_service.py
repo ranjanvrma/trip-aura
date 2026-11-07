@@ -55,29 +55,39 @@ class PlacesService:
                     seen[place.id] = place.model_copy(deep=True)
         return list(seen.values())
 
+    @property
+    def _local(self) -> bool:
+        """Mock and open-data providers hold the whole city locally: filter by tag instead of text search."""
+        return not getattr(self._p, "supports_text_search", True)
+
     def attraction_candidates(self, city: CityContext, req: TripRequest) -> list[Place]:
         cname = city.name.split(",")[0]
-        queries = [PlaceQuery(text=f"top tourist attractions in {cname}", tag="famous", kind="attraction")]
-        for interest in req.interests:
-            phrase = INTEREST_QUERIES.get(interest, interest.replace("_", " "))
-            queries.append(PlaceQuery(text=f"{phrase} in {cname}", tag=interest, kind="attraction"))
-        queries.append(PlaceQuery(text=f"parks in {cname}", tag="parks", kind="attraction"))
-        if self.source.value == "mock":
-            queries.append(PlaceQuery(text="all", tag="all", kind="attraction", max_results=100))
+        if self._local:
+            queries = [PlaceQuery(text="famous", tag="famous", kind="attraction", max_results=40)]
+            queries += [PlaceQuery(text=i, tag=i, kind="attraction", max_results=60) for i in req.interests]
+            queries += [PlaceQuery(text="parks", tag="parks", kind="attraction", max_results=25),
+                        PlaceQuery(text="all", tag="all", kind="attraction", max_results=100)]
+        else:
+            queries = [PlaceQuery(text=f"top tourist attractions in {cname}", tag="famous", kind="attraction")]
+            for interest in req.interests:
+                phrase = INTEREST_QUERIES.get(interest, interest.replace("_", " "))
+                queries.append(PlaceQuery(text=f"{phrase} in {cname}", tag=interest, kind="attraction"))
+            queries.append(PlaceQuery(text=f"parks in {cname}", tag="parks", kind="attraction"))
         places = self._run(city, queries)
         return [p for p in places if p.kind in (PlaceKind.ATTRACTION, PlaceKind.PARK)]
 
-    def food_candidates(self, city: CityContext, req: TripRequest) -> list[Place]:
+    def food_candidates(self, city: CityContext, req: TripRequest, limit: int = 800) -> list[Place]:
         cname = city.name.split(",")[0]
-        queries = [PlaceQuery(text=f"best restaurants in {cname}", tag="restaurants", kind="food")]
-        for d in req.food_preferences:
-            if d in DIET_QUERIES:
-                queries.append(PlaceQuery(text=f"{DIET_QUERIES[d]} in {cname}", tag=d, kind="food"))
-        for c in req.food_categories or ["local_cuisine", "cafes"]:
-            phrase = FOOD_CATEGORY_QUERIES.get(c, c.replace("_", " "))
-            queries.append(PlaceQuery(text=f"{phrase} in {cname}", tag=c, kind="food"))
-        if self.source.value == "mock":
-            queries.append(PlaceQuery(text="all", tag="all", kind="food", max_results=100))
+        if self._local:
+            queries = [PlaceQuery(text="all", tag="all", kind="food", max_results=limit)]
+        else:
+            queries = [PlaceQuery(text=f"best restaurants in {cname}", tag="restaurants", kind="food")]
+            for d in req.food_preferences:
+                if d in DIET_QUERIES:
+                    queries.append(PlaceQuery(text=f"{DIET_QUERIES[d]} in {cname}", tag=d, kind="food"))
+            for c in req.food_categories or ["local_cuisine", "cafes"]:
+                phrase = FOOD_CATEGORY_QUERIES.get(c, c.replace("_", " "))
+                queries.append(PlaceQuery(text=f"{phrase} in {cname}", tag=c, kind="food"))
         places = self._run(city, queries)
         return [p for p in places if p.kind in (PlaceKind.RESTAURANT, PlaceKind.CAFE)]
 

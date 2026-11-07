@@ -87,7 +87,8 @@ class DayPlan(BaseModel):
 
 class DishSuggestion(BaseModel):
     name: str
-    status: str = Field(description='"popular" (backed by review evidence) or "suggestion" (no evidence)')
+    status: str = Field(description='"popular" (>=2 reviews), "mentioned" (1 review), "guide" (named in a '
+                                    'travel guide, e.g. Wikivoyage) or "suggestion" (no evidence)')
     evidence: list[str] = Field(default_factory=list)
     evidence_source: DataSource | None = None
     mention_count: int = 0
@@ -142,5 +143,6 @@ class Itinerary(BaseModel):
     unscheduled: list[UnscheduledPlace] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     disclaimers: list[str] = Field(default_factory=list)
+    attributions: list[str] = Field(default_factory=list)
     ai_summary: str | None = None
     ai_status: str = "disabled"

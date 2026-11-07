@@ -32,6 +32,41 @@ DISHES: dict[str, set[str]] = {
     "pizza": {"veg", "nonveg"}, "pasta": {"veg", "nonveg"}, "millet bowl": {"veg", "vegan"},
     "cold coffee": {"veg"}, "samosa": {"veg", "vegan"}, "pav bhaji": {"veg"}, "paneer tikka": {"veg"},
     "falafel": {"veg", "vegan"}, "ramen": {"nonveg", "veg"}, "sushi": {"nonveg"}, "croissant": {"veg", "egg"},
+    # worldwide additions (diet tags describe the usual preparation; always check locally)
+    "pastel de nata": {"veg", "egg"}, "pasteis de nata": {"veg", "egg"}, "pasteis de belem": {"veg", "egg"},
+    "caldo verde": {"nonveg", "veg"}, "sardines": {"nonveg"}, "ginjinha": {"veg", "vegan"}, "bacalhau": {"nonveg"}, "francesinha": {"nonveg"}, "bifana": {"nonveg"},
+    "paella": {"nonveg"}, "tapas": {"veg", "nonveg"}, "churros": {"veg", "egg"}, "gazpacho": {"veg", "vegan"},
+    "tortilla espanola": {"veg", "egg"}, "patatas bravas": {"veg", "vegan"}, "jamon": {"nonveg"},
+    "risotto": {"veg", "nonveg"}, "gelato": {"veg"}, "tiramisu": {"veg", "egg"}, "lasagne": {"nonveg", "veg"},
+    "carbonara": {"nonveg", "egg"}, "margherita": {"veg"}, "focaccia": {"veg", "vegan"}, "arancini": {"veg", "nonveg"},
+    "crepe": {"veg", "egg"}, "croque monsieur": {"nonveg"}, "baguette": {"veg", "vegan"}, "ratatouille": {"veg", "vegan"},
+    "macarons": {"veg", "egg"}, "bouillabaisse": {"nonveg"}, "escargots": {"nonveg"}, "onion soup": {"veg"},
+    "bratwurst": {"nonveg"}, "pretzel": {"veg", "vegan"}, "schnitzel": {"nonveg", "egg"}, "currywurst": {"nonveg"},
+    "strudel": {"veg"}, "sachertorte": {"veg", "egg"}, "goulash": {"nonveg"}, "pierogi": {"veg", "nonveg"},
+    "fish and chips": {"nonveg"}, "full english breakfast": {"nonveg", "egg"}, "scones": {"veg", "egg"},
+    "sunday roast": {"nonveg"}, "pad thai": {"nonveg", "egg", "veg"}, "green curry": {"nonveg", "veg"},
+    "tom yum": {"nonveg"}, "som tam": {"nonveg", "veg"}, "mango sticky rice": {"veg", "vegan"},
+    "pho": {"nonveg"}, "banh mi": {"nonveg"}, "spring rolls": {"veg", "nonveg"}, "dim sum": {"nonveg", "veg"},
+    "dumplings": {"veg", "nonveg"}, "peking duck": {"nonveg"}, "hot pot": {"nonveg", "veg"}, "baozi": {"veg", "nonveg"},
+    "tempura": {"nonveg", "veg", "egg"}, "udon": {"veg", "nonveg"}, "okonomiyaki": {"nonveg", "egg"},
+    "takoyaki": {"nonveg"}, "matcha": {"veg", "vegan", "jain"}, "bibimbap": {"veg", "nonveg", "egg"},
+    "kimchi": {"veg", "vegan"}, "bulgogi": {"nonveg"}, "tteokbokki": {"veg"}, "tacos": {"nonveg", "veg"},
+    "guacamole": {"veg", "vegan"}, "enchiladas": {"nonveg", "veg"}, "mole": {"nonveg"}, "tamales": {"nonveg", "veg"},
+    "ceviche": {"nonveg"}, "empanadas": {"nonveg", "veg"}, "asado": {"nonveg"}, "feijoada": {"nonveg"},
+    "pao de queijo": {"veg", "egg"}, "acai": {"veg", "vegan"}, "baklava": {"veg"}, "doner kebab": {"nonveg"},
+    "meze": {"veg", "nonveg"}, "simit": {"veg", "vegan"}, "turkish delight": {"veg", "vegan"},
+    "souvlaki": {"nonveg"}, "moussaka": {"nonveg"}, "gyros": {"nonveg"}, "spanakopita": {"veg", "egg"},
+    "hummus": {"veg", "vegan"}, "shawarma": {"nonveg"}, "tabbouleh": {"veg", "vegan"}, "manakish": {"veg"},
+    "tagine": {"nonveg", "veg"}, "couscous": {"veg", "vegan", "nonveg"}, "mint tea": {"veg", "vegan", "jain"},
+    "koshari": {"veg", "vegan"}, "injera": {"veg", "vegan"}, "jollof rice": {"nonveg", "veg"},
+    "nasi goreng": {"nonveg", "egg"}, "satay": {"nonveg"}, "rendang": {"nonveg"}, "laksa": {"nonveg"},
+    "nasi lemak": {"nonveg", "egg"}, "hainanese chicken rice": {"nonveg"}, "chilli crab": {"nonveg"},
+    "adobo": {"nonveg"}, "momo": {"veg", "nonveg"}, "dal bhat": {"veg", "vegan"}, "hoppers": {"veg", "egg"},
+    "kottu": {"nonveg", "egg", "veg"}, "vada pav": {"veg", "vegan"}, "pani puri": {"veg", "vegan"},
+    "butter naan": {"veg"}, "rogan josh": {"nonveg"}, "dosa": {"veg", "vegan"}, "uttapam": {"veg", "vegan"},
+    "burger": {"nonveg", "veg"}, "bagel": {"veg", "vegan"}, "cheesecake": {"veg", "egg"}, "barbecue": {"nonveg"},
+    "poutine": {"veg"}, "meat pie": {"nonveg"}, "pavlova": {"veg", "egg"}, "stroopwafel": {"veg", "egg"},
+    "waffles": {"veg", "egg"}, "frites": {"veg", "vegan"}, "smorrebrod": {"nonveg", "veg"}, "cinnamon bun": {"veg", "egg"},
 }
 CUISINE_SUGGESTIONS: dict[str, list[str]] = {
     "rajasthani": ["dal baati churma", "gatte ki sabzi", "ker sangri", "laal maas"],
@@ -39,8 +74,23 @@ CUISINE_SUGGESTIONS: dict[str, list[str]] = {
     "south_indian": ["masala dosa", "idli", "filter coffee"],
     "street_food": ["pyaaz kachori", "samosa", "pav bhaji"],
     "sweets": ["ghevar", "rabri"], "cafe": ["cold coffee", "croissant"], "mughlai": ["seekh kebab", "biryani"],
-    "chinese": ["momos"], "italian": ["pizza", "pasta"], "vegan": ["millet bowl", "falafel"],
+    "chinese": ["dumplings", "dim sum"], "italian": ["pizza", "pasta", "risotto"], "vegan": ["millet bowl", "falafel"],
     "jain": ["jain thali"], "tea": ["masala chai"], "drinks": ["lassi"],
+    "indian": ["thali", "paneer tikka", "biryani"], "portuguese": ["pastel de nata", "bacalhau", "bifana"],
+    "spanish": ["tapas", "paella", "patatas bravas"], "tapas": ["tapas", "patatas bravas"],
+    "french": ["crepe", "onion soup", "ratatouille"], "crepe": ["crepe"], "german": ["bratwurst", "schnitzel", "pretzel"],
+    "austrian": ["schnitzel", "strudel"], "british": ["fish and chips", "sunday roast"], "fish_and_chips": ["fish and chips"],
+    "pizza": ["margherita"], "thai": ["pad thai", "green curry", "som tam"], "vietnamese": ["pho", "banh mi"],
+    "japanese": ["ramen", "tempura", "udon"], "sushi": ["sushi"], "ramen": ["ramen"], "korean": ["bibimbap", "kimchi"],
+    "mexican": ["tacos", "guacamole", "enchiladas"], "peruvian": ["ceviche"], "argentinian": ["asado", "empanadas"],
+    "brazilian": ["feijoada", "pao de queijo"], "turkish": ["meze", "baklava", "doner kebab"], "kebab": ["doner kebab"],
+    "greek": ["souvlaki", "moussaka", "spanakopita"], "lebanese": ["hummus", "falafel", "manakish"],
+    "middle_eastern": ["hummus", "falafel", "shawarma"], "moroccan": ["tagine", "couscous", "mint tea"],
+    "ethiopian": ["injera"], "indonesian": ["nasi goreng", "satay"], "malaysian": ["nasi lemak", "laksa"],
+    "singaporean": ["hainanese chicken rice", "laksa"], "nepalese": ["momo", "dal bhat"], "sri_lankan": ["hoppers", "kottu"],
+    "american": ["burger", "cheesecake"], "burger": ["burger"], "bbq": ["barbecue"], "coffee_shop": ["croissant"],
+    "bakery": ["croissant"], "ice_cream": ["gelato"], "dessert": ["gelato"], "vegetarian": ["falafel", "hummus"],
+    "chinese_restaurant": ["dumplings"], "dumpling": ["dumplings"], "noodle": ["udon"],
 }
 DIET_TO_TAG = {"vegetarian": "veg", "vegan": "vegan", "jain": "jain", "eggetarian": "egg", "non_vegetarian": "nonveg"}
 
@@ -104,11 +154,16 @@ def food_match_component(place: Place, req_categories: list[str], check: DietChe
     else:
         base = 0.65
     bonus = {"confirmed": 0.0, "likely": -0.1, "unverified": -0.25}[check.confidence]
+    if "brand" in place.external_ids:
+        bonus -= 0.1   # chains are fine, but local places fit a trip better
     return max(0.0, min(1.0, base + bonus))
 
 
 def _dish_allowed(dish: str, diets: list[str]) -> bool:
-    tags = DISHES.get(dish, set())
+    """Unknown dishes are allowed only when the user has no strict diet (we cannot verify ingredients)."""
+    from app.providers.open.wikimedia import fold
+
+    tags = DISHES.get(fold(dish), set())
     strict = [DIET_TO_TAG[d] for d in diets if d in DIET_TO_TAG and d != "non_vegetarian"]
     if not strict:
         return True

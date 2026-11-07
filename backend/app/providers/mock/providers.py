@@ -5,17 +5,14 @@ Everything returned here is labelled DataSource.MOCK. Ratings are exposed as
 """
 from __future__ import annotations
 
-import datetime as dt
 import logging
 
 from app.core.errors import LocationNotFoundError, NotFoundError, UnsupportedInMockModeError
-from app.core.geo import haversine_km, interpolate
-from app.engines.fares import MODE_PROFILES, heuristic_duration_min, simulated_traffic_multiplier
-from app.providers.base import CityContext, GeocodeResult, PlaceQuery, RouteResult
+from app.providers.base import CityContext, GeocodeResult, PlaceQuery
+from app.providers.heuristic_routes import HeuristicRoutesProvider
 from app.providers.mock import dataset as ds
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, ExternalRating, OpeningHours, Place, PlaceKind, Review, TimeRange
-from app.schemas.trip import TransportMode
 
 log = logging.getLogger(__name__)
 SRC = DataSource.MOCK
@@ -118,6 +115,7 @@ class MockGeocodingProvider:
 
 class MockPlacesProvider:
     source = SRC
+    supports_text_search = False
 
     def search(self, city: CityContext, query: PlaceQuery) -> list[Place]:
         places = _all_places().values()
@@ -144,42 +142,12 @@ class MockPlacesProvider:
             raise NotFoundError(f"Mock place '{place_id}' not found") from exc
 
 
-def _nearest_station(lat: float, lng: float) -> tuple[str, float]:
-    best = min(ds.MOCK_METRO_STATIONS, key=lambda s: haversine_km(lat, lng, s[1], s[2]))
-    return best[0], haversine_km(lat, lng, best[1], best[2])
+_MOCK_STATIONS = [{"name": n, "lat": la, "lng": lo, "kind": "metro"} for n, la, lo in ds.MOCK_METRO_STATIONS]
 
 
-class MockRoutesProvider:
-    """Heuristic routes: straight-line distance x detour factor, mode speeds and simulated traffic."""
+class MockRoutesProvider(HeuristicRoutesProvider):
+    """Heuristic routes over the demo metro network, with simulated (mock) traffic."""
 
-    source = SRC
-
-    def compute_route(self, origin: LatLng, destination: LatLng, mode: TransportMode,
-                      departure: dt.datetime | None, city: CityContext) -> RouteResult:
-        straight = haversine_km(origin.lat, origin.lng, destination.lat, destination.lng)
-        minute = (departure.hour * 60 + departure.minute) if departure else 11 * 60
-        traffic = simulated_traffic_multiplier(minute)
-        line = [LatLng(lat=a, lng=b) for a, b in interpolate(origin.as_tuple(), destination.as_tuple(), 6)]
-
-        if mode == TransportMode.METRO:
-            s1, d1 = _nearest_station(origin.lat, origin.lng)
-            s2, d2 = _nearest_station(destination.lat, destination.lng)
-            if d1 > 1.5 or d2 > 1.5 or s1 == s2:
-                return RouteResult(mode, straight, 0, None, False, [], SRC, available=False,
-                                   note="No metro station within 1.5 km of both ends (mock metro network)")
-            walk = (d1 + d2) * 1.25 / MODE_PROFILES[TransportMode.WALKING].speed_kmh * 60
-            dist, dur = heuristic_duration_min(mode, straight)
-            return RouteResult(mode, round(dist + d1 + d2, 2), round(dur + walk, 1), None, False, line, SRC,
-                               note=f"Metro {s1} -> {s2} incl. walking to stations (mock estimate)")
-        if mode == TransportMode.TRAIN and straight < 8:
-            return RouteResult(mode, straight, 0, None, False, [], SRC, available=False,
-                               note="Suburban train not useful for short intra-city hops")
-
-        dist, dur = heuristic_duration_min(mode, straight, traffic)
-        _, free_flow = heuristic_duration_min(mode, straight, 1.0)
-        sensitive = MODE_PROFILES[mode].traffic_sensitive
-        return RouteResult(
-            mode, round(dist, 2), round(dur, 1), round(free_flow, 1) if sensitive else None,
-            traffic_aware=sensitive, polyline=line, source=SRC,
-            note=(f"Simulated traffic x{traffic:.2f} (mock)" if sensitive and traffic > 1 else "Mock estimate"),
-        )
+    def __init__(self) -> None:
+        super().__init__(lambda city: _MOCK_STATIONS, SRC, traffic_label="simulated traffic (mock)",
+                         traffic_is_simulated=True)

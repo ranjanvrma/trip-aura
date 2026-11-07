@@ -84,6 +84,7 @@ class Place(BaseModel):
     description: str | None = None
     external_rating: ExternalRating | None = None
     price_level: int | None = Field(default=None, ge=0, le=4)
+    price_level_estimated: bool = False   # True when inferred from the type of place, not reported
     entry_fee: Money | None = None
     avg_cost_per_person: Money | None = None
     typical_visit_minutes: int = 60
@@ -95,4 +96,6 @@ class Place(BaseModel):
     cuisines: list[str] = Field(default_factory=list)
     reviews: list[Review] = Field(default_factory=list)
     google_maps_uri: str | None = None
+    external_ids: dict[str, str] = Field(default_factory=dict)   # e.g. {"osm": "n123", "wikidata": "Q1", "google": "..."}
+    prominence: int | None = None   # Wikipedia language editions covering the place (Wikidata sitelinks)
     source: DataSource

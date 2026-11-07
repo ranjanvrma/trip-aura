@@ -1,6 +1,8 @@
 // Mirrors backend/app/schemas. Keep in sync when the API changes.
 
-export type DataSource = "google" | "mock" | "estimate" | "user";
+export type DataSource =
+  | "google" | "mock" | "estimate" | "user"
+  | "open_data" | "osm" | "overture" | "wikidata" | "wikivoyage";
 export type Pace = "relaxed" | "moderate" | "packed";
 export type TransportMode = "walking" | "metro" | "bus" | "train" | "cab" | "auto" | "personal_vehicle";
 export type ItemType = "start" | "activity" | "meal" | "rest" | "travel" | "end";
@@ -62,6 +64,9 @@ export interface Place {
   cuisines: string[];
   reviews: Review[];
   google_maps_uri?: string | null;
+  external_ids: Record<string, string>;
+  prominence?: number | null;
+  price_level_estimated?: boolean;
   source: DataSource;
 }
 
@@ -114,7 +119,7 @@ export interface DayPlan {
 
 export interface DishSuggestion {
   name: string;
-  status: "popular" | "mentioned" | "suggestion";
+  status: "popular" | "mentioned" | "guide" | "suggestion";
   evidence: string[];
   evidence_source?: DataSource | null;
   mention_count: number;
@@ -171,6 +176,7 @@ export interface Itinerary {
   unscheduled: { place: Place; reason: string }[];
   warnings: string[];
   disclaimers: string[];
+  attributions: string[];
   ai_summary?: string | null;
   ai_status: string;
 }
@@ -180,8 +186,10 @@ export interface TripSummary {
 }
 
 export interface ApiStatus {
-  data_mode: "mock" | "live";
-  google: { configured: boolean; active: boolean; services: Record<string, string> };
+  data_mode: "mock" | "open" | "live";
+  google: { configured: boolean; active: boolean; role: string; services: Record<string, string> };
+  open_data: { sources: string[]; routing: string; city_cache_days: number } | null;
+  worldwide: boolean;
   ai: { enabled: boolean; configured: boolean; model: string };
   mock_city: string | null;
   problems: string[];

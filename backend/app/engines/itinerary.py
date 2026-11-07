@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 from dataclasses import dataclass, field
 
 from app.core.geo import haversine_km
@@ -87,7 +88,8 @@ def rank_attractions(places: list[Place], ctx: ScoringContext, constraints: Plan
         if er and er.rating is not None and er.rating < MIN_EXTERNAL_RATING and (er.review_count or 0) >= 20:
             rejected.append(UnscheduledPlace(place=p, reason=f"Low {er.provider.value} rating ({er.rating})"))
             continue
-        if constraints.max_entry_fee_pp is not None and p.entry_fee and p.entry_fee.amount > constraints.max_entry_fee_pp:
+        if constraints.max_entry_fee_pp is not None and p.entry_fee \
+                and ctx.costs.to_trip_currency(p.entry_fee).amount > constraints.max_entry_fee_pp:
             rejected.append(UnscheduledPlace(place=p, reason="Entry fee above the budget-fit limit"))
             continue
         s = score_attraction(p, ctx)
@@ -96,7 +98,24 @@ def rank_attractions(places: list[Place], ctx: ScoringContext, constraints: Plan
             continue
         ranked.append(Candidate(p, s))
     ranked.sort(key=lambda c: (-c.score.score, c.place.name))
-    return ranked, rejected
+    return _drop_near_duplicates(ranked), rejected
+
+
+def _stems(name: str) -> set[str]:
+    return {w[:5] for w in re.findall(r"[a-z]+", name.lower()) if len(w) >= 5}
+
+
+def _drop_near_duplicates(ranked: list[Candidate], max_m: float = 150) -> list[Candidate]:
+    """Open data can list one sight twice under different spellings ("Lahori Gate" / "Lahore Gate").
+    Keep the better-ranked one when two candidates are this close and share a name stem."""
+    kept: list[Candidate] = []
+    for c in ranked:
+        stems = _stems(c.place.name)
+        if any(haversine_km(c.loc.lat, c.loc.lng, k.loc.lat, k.loc.lng) * 1000 <= max_m and stems & _stems(k.place.name)
+               for k in kept):
+            continue
+        kept.append(c)
+    return kept
 
 
 class ItineraryEngine:
@@ -252,7 +271,7 @@ class ItineraryEngine:
                 pick = self.food.pick(kind, state["loc"], int(state["t"] + 10), weekday, set(), max_km=radius,
                                       max_cost=self.c.max_meal_cost_pp, duration=duration)
             if pick is None:
-                cost = budget_engine.meal_cost(None, kind, self.req)
+                cost = budget_engine.meal_cost(None, kind, self.req, self.ctx.costs)
                 label = "at your accommodation" if state["name"] == self.home.name else f"near {state['name']}"
                 add(ItemType.MEAL, f"{kind.title()} {label}", int(state["t"]), int(state["t"] + duration),
                     meal_type=kind, cost=cost,
@@ -264,7 +283,7 @@ class ItineraryEngine:
             travel_to(cand.place.name, cand.place.location)
             add(ItemType.MEAL, f"{kind.title()} at {cand.place.name}", int(state["t"]), int(state["t"] + duration),
                 place=cand.place, suitability=score, meal_type=kind,
-                cost=budget_engine.meal_cost(cand.place, kind, self.req),
+                cost=budget_engine.meal_cost(cand.place, kind, self.req, self.ctx.costs),
                 notes=[f"Diet info: {cand.check.confidence}"] + (cand.check.reasons[:2]))
             state["t"] += duration
 
@@ -301,7 +320,7 @@ class ItineraryEngine:
             if c.score.discovery:
                 notes.append("Suggested beyond your interests: a well-known sight worth seeing.")
             add(ItemType.ACTIVITY, c.place.name, w[0], w[1], place=c.place, suitability=c.score,
-                cost=budget_engine.entry_cost(c.place, self.req), notes=notes)
+                cost=budget_engine.entry_cost(c.place, self.req, self.ctx.costs), notes=notes)
             state["t"] = w[1]
 
         maybe_lunch(force=True)
@@ -337,7 +356,7 @@ class ItineraryEngine:
             park = min(parks, key=lambda p: haversine_km(state["loc"].lat, state["loc"].lng, p.location.lat, p.location.lng))
             self._used_parks.add(park.id)
             add(ItemType.REST, f"Rest at {park.name}", t, t + dur, place=park,
-                cost=budget_engine.entry_cost(park, self.req), notes=["Relaxed break in a nearby park or garden"])
+                cost=budget_engine.entry_cost(park, self.req, self.ctx.costs), notes=["Relaxed break in a nearby park or garden"])
         else:
             add(ItemType.REST, "Rest break", t, t + dur, notes=["Break after lunch - a cafe or shaded spot nearby"])
         state["t"] = t + dur

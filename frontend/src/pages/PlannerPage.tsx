@@ -50,6 +50,12 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
             )}
           </div>
         )}
+        {submitting && status?.data_mode === "open" && (
+          <div className="banner banner-live">
+            Loading open data for this city... The first trip to a new city can take 1-3 minutes while places are
+            downloaded and cached; later trips there are instant.
+          </div>
+        )}
         {options && status ? <TripForm options={options} status={status} submitting={submitting} onSubmit={submit} />
           : <div className="card">Loading options...</div>}
       </div>

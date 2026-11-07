@@ -12,6 +12,18 @@ def _now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
+class CityDataset(Base):
+    """Open-data places for one city, loaded on first use and refreshed after CITY_CACHE_DAYS."""
+
+    __tablename__ = "city_datasets"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    built_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
 class Trip(Base):
     """A saved trip request and its latest generated itinerary."""
 

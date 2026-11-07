@@ -12,6 +12,11 @@ class DataSource(str, Enum):
     MOCK = "mock"            # bundled demo dataset - not real-world data
     ESTIMATE = "estimate"    # computed by our heuristics (e.g. fare tables)
     USER = "user"            # supplied by the user
+    OPEN = "open_data"       # itinerary built from open datasets (see attributions)
+    OSM = "osm"              # OpenStreetMap contributors (ODbL)
+    OVERTURE = "overture"    # Overture Maps Foundation places (CDLA-Permissive-2.0 / Apache-2.0)
+    WIKIDATA = "wikidata"    # Wikidata (CC0)
+    WIKIVOYAGE = "wikivoyage"  # Wikivoyage travel guide (CC BY-SA 4.0)
 
 
 class LatLng(BaseModel):

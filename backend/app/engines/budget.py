@@ -7,45 +7,46 @@ Verified vs estimated money is tracked separately:
 from __future__ import annotations
 
 from app.core.geo import haversine_km
+from app.engines.costs import CostModel
 from app.schemas.common import DataSource, Money
 from app.schemas.itinerary import (
     BudgetSuggestion, BudgetSummary, CategoryTotals, DayBudget, DayPlan, ItemType, ItineraryItem,
 )
 from app.schemas.place import Place, PlaceKind, SuitabilityScore
-from app.schemas.trip import TransportMode, TripRequest
+from app.schemas.trip import TripRequest
 
-# Typical per-person meal cost by Google price level (0-4), used when no price is published.
-PRICE_LEVEL_MEAL = {
-    "INR": {0: 100, 1: 250, 2: 500, 3: 1200, 4: 2500},
-    "USD": {0: 8, 1: 14, 2: 28, 3: 55, 4: 100},
-    "EUR": {0: 8, 1: 13, 2: 25, 3: 50, 4: 90},
-    "GBP": {0: 7, 1: 12, 2: 22, 3: 45, 4: 80},
-}
-UNKNOWN_ENTRY_FEE = {"INR": 100, "USD": 15, "EUR": 12, "GBP": 12}
 BREAKFAST_FACTOR = 0.6
-CHEAP_MODES = {TransportMode.WALKING, TransportMode.METRO, TransportMode.BUS}
 
 
-def entry_cost(place: Place, req: TripRequest) -> Money:
+def _costs(req: TripRequest, costs: CostModel | None) -> CostModel:
+    return costs or CostModel.build("IN" if req.currency == "INR" else "US", req.currency)
+
+
+def entry_cost(place: Place, req: TripRequest, costs: CostModel | None = None) -> Money:
+    cm = _costs(req, costs)
     if place.entry_fee is not None:
-        fee = place.entry_fee
+        fee = cm.to_trip_currency(place.entry_fee)
         return fee.model_copy(update={"amount": round(fee.amount * req.travelers, 2)})
     if place.kind == PlaceKind.PARK:
         return Money.estimate(0, req.currency, note="Parks are usually free - entry fee not published")
-    return Money.estimate(UNKNOWN_ENTRY_FEE[req.currency] * req.travelers, req.currency,
-                          note="Entry fee not available from the provider - typical value assumed")
+    return Money.estimate(cm.unknown_entry_fee * req.travelers, req.currency,
+                          note=f"Entry fee not available from the data source - typical value assumed ({cm.basis})")
 
 
-def meal_cost(place: Place | None, meal: str, req: TripRequest) -> Money:
+def meal_cost(place: Place | None, meal: str, req: TripRequest, costs: CostModel | None = None) -> Money:
+    cm = _costs(req, costs)
     factor = BREAKFAST_FACTOR if meal == "breakfast" else 1.0
-    if place is not None and place.avg_cost_per_person is not None \
-            and place.avg_cost_per_person.currency == req.currency:
-        m = place.avg_cost_per_person
+    if place is not None and place.avg_cost_per_person is not None:
+        m = cm.to_trip_currency(place.avg_cost_per_person)
         return m.model_copy(update={"amount": round(m.amount * factor * req.travelers, 2)})
-    level = place.price_level if place is not None and place.price_level is not None else 1
-    base = PRICE_LEVEL_MEAL[req.currency][level]
-    who = "restaurant price level" if place is not None and place.price_level is not None else "typical budget meal"
-    return Money.estimate(base * factor * req.travelers, req.currency, note=f"Estimated from {who}")
+    level = place.price_level if place is not None else None
+    if place is not None and level is not None:
+        who = "an estimated price level for this type of place" if place.price_level_estimated \
+            else "the restaurant's price level"
+    else:
+        who = "a typical budget meal"
+    return Money.estimate(cm.meal(level) * factor * req.travelers, req.currency,
+                          note=f"Estimated from {who} ({cm.basis})")
 
 
 def _is_verified(m: Money) -> bool:

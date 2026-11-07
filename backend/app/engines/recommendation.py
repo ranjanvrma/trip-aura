@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.core.geo import haversine_km
+from app.engines.costs import CostModel
 from app.engines.pace import PaceProfile, profile_for
 from app.schemas.common import LatLng
 from app.schemas.place import Place, PlaceKind, SuitabilityScore
@@ -36,11 +37,14 @@ class ScoringContext:
     req: TripRequest
     origin: LatLng
     weekdays: list[int]                      # weekday index (0=Mon) of each trip day
+    costs: CostModel | None = None           # estimates for prices the data source lacks
     pace: PaceProfile = field(init=False)
     daily_budget_pp: float = field(init=False)
 
     def __post_init__(self) -> None:
         self.pace = profile_for(self.req.pace)
+        if self.costs is None:
+            self.costs = CostModel.build("IN" if self.req.currency == "INR" else "US", self.req.currency)
         spendable = self.req.budget - self.req.accommodation_cost_total
         self.daily_budget_pp = spendable / self.req.num_days / self.req.travelers
 
@@ -139,7 +143,7 @@ def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     elif place.is_famous:
         interest = clamp(interest + 0.15)
 
-    fee = place.entry_fee.amount if place.entry_fee else None
+    fee = ctx.costs.to_trip_currency(place.entry_fee).amount if place.entry_fee else None
     comps = {
         "interest": interest,
         "budget": affordability(fee, ctx.attraction_allowance),
@@ -158,10 +162,11 @@ def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     elif req.interests:
         reasons.append("Weak match with your selected interests")
     if fee == 0:
-        reasons.append("Free entry")
+        assumed = place.entry_fee is not None and place.entry_fee.source.value == "estimate"
+        reasons.append("Probably free entry (assumed - no fee data)" if assumed else "Free entry")
     elif fee is not None:
         word = "fits" if comps["budget"] >= 0.99 else "stretches"
-        reasons.append(f"Entry {_fmt_money(fee, place.entry_fee.currency)} pp {word} your daily budget (estimate)")
+        reasons.append(f"Entry {_fmt_money(fee, req.currency)} pp {word} your daily budget (estimate)")
     else:
         reasons.append("Entry fee unknown - check locally")
     reasons.append(f"{km:.1f} km from your accommodation")
@@ -181,7 +186,12 @@ def score_food_place(place: Place, ctx: ScoringContext, food_match: float, diet_
     req = ctx.req
     o = origin or ctx.origin
     km = haversine_km(o.lat, o.lng, place.location.lat, place.location.lng)
-    cost = place.avg_cost_per_person.amount if place.avg_cost_per_person else None
+    if place.avg_cost_per_person is not None:
+        cost = ctx.costs.to_trip_currency(place.avg_cost_per_person).amount
+    elif place.price_level is not None:
+        cost = ctx.costs.meal(place.price_level)
+    else:
+        cost = None
     comps = {
         "interest": food_match,
         "budget": affordability(cost, ctx.meal_allowance),
@@ -196,7 +206,8 @@ def score_food_place(place: Place, ctx: ScoringContext, food_match: float, diet_
         reasons.append("Matches your food preferences: " + ", ".join(c.replace("_", " ") for c in matched_cats))
     if cost is not None:
         word = "within" if comps["budget"] >= 0.99 else "above"
-        reasons.append(f"About {_fmt_money(cost, place.avg_cost_per_person.currency)} pp - {word} your per-meal budget")
+        est = "" if place.avg_cost_per_person is not None else " (estimate)"
+        reasons.append(f"About {_fmt_money(cost, req.currency)} pp{est} - {word} your per-meal budget")
     else:
         reasons.append("Price not published - estimated from price level")
     reasons.append(f"{km:.1f} km away")

@@ -52,8 +52,9 @@ export default function TripForm({ options, status, submitting, onSubmit }: Prop
         <label className="field">
           <span>Destination city</span>
           <input required value={req.destination_city} onChange={(e) => set("destination_city", e.target.value)}
-                 placeholder="e.g. Jaipur" />
-          {mock && <small className="muted">Demo mode supports {status?.mock_city} only.</small>}
+                 placeholder={mock ? "Jaipur" : "Any city, e.g. Lisbon, Tokyo, Delhi"} />
+          {mock ? <small className="muted">Demo mode supports {status?.mock_city} only.</small>
+            : <small className="muted">Works for cities worldwide.</small>}
         </label>
         <label className="field">
           <span>Start date</span>
@@ -98,7 +99,7 @@ export default function TripForm({ options, status, submitting, onSubmit }: Prop
         </label>
         <label className="field"><span>Currency</span>
           <select value={req.currency} onChange={(e) => set("currency", e.target.value)}>
-            {options.currencies.map((c) => <option key={c} disabled={mock && c !== "INR"}>{c}</option>)}
+            {options.currencies.map((c) => <option key={c}>{c}</option>)}
           </select>
         </label>
       </div>
