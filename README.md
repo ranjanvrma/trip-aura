@@ -2,65 +2,169 @@
 
 **AI-powered, day-by-day travel itineraries for any city in the world, built from free open data.**
 
-Tell TripAura where you're staying, where you're going, your budget, interests, diet, transport and pace (or just describe the trip in a sentence). It plans each day: sights in a sensible order with opening hours respected, breakfast, lunch and dinner that fit your diet, rest breaks, transport for every leg, and a budget that separates real prices from estimates.
-
 ![CI](https://github.com/ranjanvrma/trip-aura/actions/workflows/ci.yml/badge.svg)
 
-## Highlights
+Tell TripAura where you're staying, where you're going, your budget, interests, diet, transport and pace (or describe the trip in one sentence). It plans every day:
+- sights in a sensible order, with opening hours respected
+- breakfast, lunch and dinner that fit your diet
+- rest breaks and transport for every leg
+- a budget that separates real prices from estimates
 
-- **Worldwide, no API key:** places from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, loaded on demand and cached per city.
-- **Smart planning:** a personal 0–5 fit score for every place, route ordering that avoids backtracking, real opening hours, and pace-aware days.
+> **Working on this repo (human or AI)?** Read [HANDOFF.md](HANDOFF.md) first. It has the current state, decisions and next steps, and must be updated in every commit.
+
+## Features
+
+- **Any city, no API key:** places from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, loaded on demand and cached for 30 days.
+- **Smart planning:**
+  - a personal 0–5 fit score for every place, with reasons
+  - travel-minimising order (day anchor, then greedy ordering, then 2-opt)
+  - pace-aware days with rest breaks
 - **Food that fits:** vegetarian, vegan, Jain, eggetarian and non-veg filters, plus local dishes backed by review or guidebook evidence.
-- **Honest numbers:** every rating and price says where it came from; estimates are always labelled.
-- **NLP + AI:** city autocomplete, a "describe your trip" box that fills the form, typo-tolerant interests, semantic matching with a local embedding model, and review sentiment.
-- **On the go:** live location with distance to the next stop and better-transport alerts.
+- **Honest numbers:** every rating and price shows its source, estimates are labelled, and the fit score is kept separate from external ratings.
+- **NLP / AI:**
+  - city autocomplete with typo handling
+  - a "describe your trip" box that fills the form
+  - typo-tolerant interests
+  - semantic matching with a local embedding model
+  - review sentiment
+- **Budget and live mode:** savings suggestions and auto "fit to budget"; live location with next-stop distance and better-transport alerts.
 
-## Tech stack
+## Architecture
 
-| Layer | Tech |
+```mermaid
+flowchart LR
+  U([User]) --> FE["Frontend<br/>React + Vite + TS<br/>(Vercel)"]
+  FE -- HTTPS / JSON --> API["Backend API<br/>FastAPI<br/>(Azure Container Apps)"]
+  API --> DB[("Neon Postgres<br/>trips + city cache")]
+  API --> NLP["NLP / DL<br/>city index, parser,<br/>embeddings, sentiment"]
+  API -- "new city: all sources in parallel" --> SRC
+  subgraph SRC [Open data, no keys]
+    OV[Overture Maps<br/>DuckDB over S3]
+    WD[Wikidata]
+    OSM[OpenStreetMap<br/>Overpass]
+    WV[Wikivoyage]
+  end
+  API -. optional .-> G[Google Places<br/>ratings]
+  GH[GitHub Actions] -- "build image -> ghcr.io -> deploy" --> API
+```
+
+**How a trip request flows:**
+1. **Understand.** The form, or the NLP parser for a typed description, gives the city, dates, budget and preferences. The city resolves from an offline index of about 34k cities.
+2. **Load the city.**
+   - **First visit:** Overture, Wikidata, OpenStreetMap (25 s cap) and Wikivoyage are fetched **in parallel**, merged into one list of places, then cached in Postgres for 30 days. This takes about 30–60 s.
+   - **Later visits:** read from the cache in about 1–2 s.
+3. **Score.**
+   - Every place gets a 0–5 suitability score: interests 30%, budget 20%, distance 20%, transport 10%, time 10%, pace 10%.
+   - Typo correction and semantic embeddings help match custom interests.
+4. **Schedule.**
+   - Each day is built around its best sight, ordered to minimise travel, checked against opening hours, and given meals near each stop.
+   - Each stop then gets a transport leg with alternatives.
+5. **Cost and explain.** Fares, meals and fees come from a country price index plus currency conversion. Estimates and verified amounts are kept apart, and over-budget plans get savings suggestions.
+
+| Folder | What lives there |
 |---|---|
-| Frontend | React 18, Vite, TypeScript, Leaflet (Google Maps optional) |
-| Backend | Python, FastAPI, Pydantic, SQLAlchemy |
-| Data | Overture Maps (DuckDB over S3), Wikidata, OpenStreetMap (Overpass), Wikivoyage, GeoNames |
-| NLP / DL | rapidfuzz, fastembed (ONNX `bge-small-en-v1.5`) |
-| Hosting | Vercel (frontend), Modal (backend), Neon Postgres (database) |
+| `backend/app/engines/` | Pure planning logic: itinerary, scoring, food, transport, budget, costs |
+| `backend/app/providers/` | Data sources behind one interface: `open/` (worldwide), `google/` (optional), `mock/` (Jaipur demo) |
+| `backend/app/nlp/` | City index, trip-text parser, interests, embeddings, sentiment |
+| `backend/app/services/` | Orchestration (`itinerary_service.py`), FX, Google enrichment, live location |
+| `backend/app/routers/` | REST API |
+| `frontend/src/` | Pages, components (form, day cards, map, budget), typed API client |
+| `deploy/azure/`, `.github/workflows/` | Cloud setup and CI/CD |
+
+**Tech stack:**
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, TypeScript, Vite, Leaflet |
+| Backend | FastAPI, Pydantic, SQLAlchemy |
+| Data | DuckDB, Overture Maps, Wikidata, OpenStreetMap, Wikivoyage, GeoNames |
+| NLP / ML | rapidfuzz, fastembed (ONNX `bge-small-en-v1.5`) |
+| Infrastructure | Postgres (Neon), Azure Container Apps, Vercel, GitHub Actions |
 
 ## Quick start
 
 ```bash
-# backend (from backend/)
+# backend (in backend/)
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
+.venv/Scripts/pip install -r requirements.txt        # macOS/Linux: .venv/bin/pip
 cp .env.example .env
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
 
-# frontend (from frontend/, in a second terminal)
-npm install
-npm run dev
+# frontend (in frontend/, second terminal)
+npm install && npm run dev
 ```
 
-Open <http://localhost:5173>, type a city (for example "Lisbon"), pick a hotel and generate. The first trip to a new city takes about 30–60 seconds while its data loads; repeat trips take 1–2 seconds. API docs: <http://127.0.0.1:8000/docs>.
+Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
-Tests: `cd backend && .venv/Scripts/python -m pytest -q` (112 tests, all offline). Frontend: `npm run build`.
+**Tests:**
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (112 tests, fully offline)
+- Frontend: `cd frontend && npm run build`
 
-## Deployment
+## Configuration
 
-Frontend on **Vercel**, backend on **Modal** ($30 free credit a month, no card), database on **Neon** (free). Pushing to `main` runs CI and redeploys the backend automatically. Step-by-step setup: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Everything works without keys. The main settings, set in `backend/.env` (full list in `backend/app/core/config.py`):
 
-## Documentation
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATA_MODE` | `open` | `open` (worldwide), `live` (Google only), `mock` (Jaipur demo for tests) |
+| `DATABASE_URL` | local SQLite | Postgres URL in production (Neon `postgres://...` works as-is) |
+| `CORS_ORIGINS` | localhost | Frontend URL(s) allowed to call the API |
+| `OPEN_USER_AGENT` | project URL | Must contain a contact URL, otherwise Wikimedia returns 403 |
+| `GOOGLE_MAPS_API_KEY` | empty | Optional: adds Google ratings to planned places |
+| `SEMANTIC_ENABLED` | `true` | Local embedding model for semantic matching |
 
-| Doc | What's inside |
-|---|---|
-| [HANDOFF.md](HANDOFF.md) | Current state, decisions, open tasks: **read this first to catch up** |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Project structure, data pipeline, planning engines, NLP |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Environment variables, free APIs, optional Google key |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Vercel + Modal + Neon guide, alternatives |
-| [docs/API.md](docs/API.md) | REST endpoints |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Install, run, tests in detail |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to catch up, work and commit (and keep HANDOFF.md current) |
+Frontend: `VITE_API_BASE_URL` is the backend URL in production. Leave it empty locally, where the Vite proxy is used.
+
+## Deployment (free, no credit card)
+
+**Vercel** (frontend) + **Azure Container Apps via Azure for Students** (backend) + **Neon** (Postgres) + **GitHub Container Registry** (image).
+
+How it stays free:
+- Azure's monthly free allowance (180k vCPU-seconds, 360k GiB-seconds) covers about 50 active hours a month.
+- The app scales to zero when idle.
+- The $100 student credit is only a backup, and its spending limit means you can never be billed.
+
+1. **Neon:** create a project in AWS US East 1 and copy the pooled connection string.
+2. **Image:** push to `main`. The *Deploy backend (Azure)* workflow publishes `ghcr.io/ranjanvrma/trip-aura-api`. Then set that package to **Public** (GitHub profile → Packages → Package settings).
+3. **Azure:**
+   - Activate [Azure for Students](https://azure.microsoft.com/free/students) with your college email.
+   - Open **Cloud Shell (Bash)** in the portal and run:
+     ```bash
+     curl -fsSL https://raw.githubusercontent.com/ranjanvrma/trip-aura/main/deploy/azure/setup.sh -o setup.sh && bash setup.sh
+     ```
+   - It asks for the Neon URL and prints the **backend URL** and a JSON credential. If the region is rejected, rerun with `LOCATION=centralindia bash setup.sh`.
+4. **Auto-deploy:** in the GitHub repo, go to **Settings → Secrets and variables → Actions** and add:
+   - secret `AZURE_CREDENTIALS` = the JSON
+   - variable `AZURE_ENABLED` = `true`
+
+   Every push to `backend/` then redeploys.
+5. **Vercel:** import the repo with root directory `frontend` and env `VITE_API_BASE_URL` = the backend URL. Then allow the site:
+   ```bash
+   az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://<your-app>.vercel.app
+   ```
+
+**Alternatives** (configs included): Modal (`backend/modal_app.py`, needs a card), any Linux VPS (`deploy/oracle/`, Docker + Caddy HTTPS), Render paid (`render.yaml`).
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/trips` · `/api/trips/preview` | Generate a trip (saved / not saved) |
+| GET, DELETE | `/api/trips`, `/api/trips/{id}` | List, read, delete saved trips |
+| POST | `/api/trips/{id}/regenerate` · `/api/trips/{id}/live` | Re-plan · live position updates |
+| GET | `/api/geo/cities?q=` · `/api/geo/addresses?q=` | City and hotel autocomplete |
+| POST | `/api/nlp/parse-trip` | Free-text description → form fields |
+| GET | `/api/meta/status` · `/api/health` | Configuration status · health check |
+
+## Contributing
+
+1. **Catch up:** `git pull`, read [HANDOFF.md](HANDOFF.md), and skim `git log --oneline -15`.
+2. **One-time setup per clone:** `git config core.hooksPath .githooks`. This hook blocks commits that don't update `HANDOFF.md`; for trivial commits, bypass with `SKIP_HANDOFF=1 git commit ...`.
+3. **Commit:** every change updates `HANDOFF.md` (status, decisions, change log). Never commit secrets.
+4. **GitHub credit:** commit with the email on your GitHub account so you appear in Contributors.
 
 ## Authors
 
-Built and maintained by **Ranjan Verma** and **Chinmay Dahiya**.
+**Ranjan Verma** and **Chinmay Dahiya**
 
-Data © OpenStreetMap contributors (ODbL), Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Every itinerary shows its sources.
+Data © OpenStreetMap contributors (ODbL), Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Every itinerary lists its sources.

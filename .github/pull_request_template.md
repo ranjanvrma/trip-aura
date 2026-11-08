@@ -8,4 +8,4 @@
 - [ ] Backend tests pass: `cd backend && python -m pytest -q`
 - [ ] Frontend builds: `cd frontend && npm run build`
 - [ ] No secrets or `.env` files committed
-- [ ] Docs updated if behaviour, config or deployment changed
+- [ ] README updated if setup, config or deployment changed
