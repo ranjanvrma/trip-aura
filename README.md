@@ -33,9 +33,9 @@ Tell TripAura where you're staying, where you're going, your budget, interests, 
 
 ```mermaid
 flowchart LR
-  U([User]) --> FE["Frontend<br/>React + Vite + TS<br/>(Vercel)"]
-  FE -- HTTPS / JSON --> API["Backend API<br/>FastAPI<br/>(Azure Container Apps)"]
-  API --> DB[("Neon Postgres<br/>trips + city cache")]
+  U([User]) --> FE["Frontend<br/>React + Vite + TS"]
+  FE -- HTTPS / JSON --> API["Backend API<br/>FastAPI"]
+  API --> DB[("SQLite / Postgres<br/>trips + city cache")]
   API --> NLP["NLP / DL<br/>city index, parser,<br/>embeddings, sentiment"]
   API -- "new city: all sources in parallel" --> SRC
   subgraph SRC [Open data, no keys]
@@ -45,7 +45,6 @@ flowchart LR
     WV[Wikivoyage]
   end
   API -. optional .-> G[Google Places<br/>ratings]
-  GH[GitHub Actions] -- "build image -> ghcr.io -> deploy" --> API
 ```
 
 **How a trip request flows:**
@@ -69,7 +68,7 @@ flowchart LR
 | `backend/app/services/` | Orchestration (`itinerary_service.py`), FX, Google enrichment, live location |
 | `backend/app/routers/` | REST API |
 | `frontend/src/` | Pages, components (form, day cards, map, budget), typed API client |
-| `deploy/azure/`, `.github/workflows/` | Cloud setup and CI/CD |
+| `.github/` | CI (tests + build), Dependabot, PR template |
 
 **Tech stack:**
 
@@ -79,7 +78,7 @@ flowchart LR
 | Backend | FastAPI, Pydantic, SQLAlchemy |
 | Data | DuckDB, Overture Maps, Wikidata, OpenStreetMap, Wikivoyage, GeoNames |
 | NLP / ML | rapidfuzz, fastembed (ONNX `bge-small-en-v1.5`) |
-| Infrastructure | Postgres (Neon), Azure Container Apps, Vercel, GitHub Actions |
+| Infrastructure | SQLite locally, Postgres in production; GitHub Actions CI (hosting planned, see below) |
 
 ## Quick start
 
@@ -115,35 +114,36 @@ Everything works without keys. The main settings, set in `backend/.env` (full li
 
 Frontend: `VITE_API_BASE_URL` is the backend URL in production. Leave it empty locally, where the Vite proxy is used.
 
-## Deployment (free, no credit card)
+## Project status
 
-**Vercel** (frontend) + **Azure Container Apps via Azure for Students** (backend) + **Neon** (Postgres) + **GitHub Container Registry** (image).
+**Done (Nov 2026):**
+- **Planning engines:** itinerary (day anchor, greedy ordering, 2-opt, opening hours, meals, rests), 0–5 suitability scoring, diet-aware food with evidence-based dishes, transport legs with alternatives, budget with savings and fit-to-budget.
+- **Worldwide open data:** Overture, Wikidata, OpenStreetMap and Wikivoyage, loaded in parallel and cached per city. A first trip to a new city takes about 37 s for Rome, down from 245 s; a cached trip takes about 1 s.
+- **NLP / AI:** city autocomplete, address suggestions, "describe your trip" parser, typo-tolerant and semantic interests, review sentiment.
+- **Product features:** live location updates, worldwide cost model with 31 currencies, honest source labels.
+- **Quality:** 112 offline tests, CI on every push, a HANDOFF document kept current by a commit hook.
+- **Deployment trial:** the full stack was deployed and verified once on Azure (health, city search, a real trip saved to Postgres). It was then deliberately torn down, and the cloud resources were deleted, to be redone cleanly later.
 
-How it stays free:
-- Azure's monthly free allowance (180k vCPU-seconds, 360k GiB-seconds) covers about 50 active hours a month.
-- The app scales to zero when idle.
-- The $100 student credit is only a backup, and its spending limit means you can never be billed.
+**Next:** redeploy with the plan below, then a premium animated UI redesign.
 
-1. **Neon:** create a project in AWS US East 1 and copy the pooled connection string.
-2. **Image:** push to `main`. The *Deploy backend (Azure)* workflow publishes `ghcr.io/ranjanvrma/trip-aura-api`. Then set that package to **Public** (GitHub profile → Packages → Package settings).
-3. **Azure:**
-   - Activate [Azure for Students](https://azure.microsoft.com/free/students) with your college email.
-   - Open **Cloud Shell (Bash)** in the portal and run:
-     ```bash
-     curl -fsSL https://raw.githubusercontent.com/ranjanvrma/trip-aura/main/deploy/azure/setup.sh -o setup.sh && bash setup.sh
-     ```
-   - It asks for the Neon URL and prints the **backend URL** and a JSON credential. If the region is rejected, rerun with `LOCATION=centralindia bash setup.sh`.
-4. **Auto-deploy:** in the GitHub repo, go to **Settings → Secrets and variables → Actions** and add:
-   - secret `AZURE_CREDENTIALS` = the JSON
-   - variable `AZURE_ENABLED` = `true`
+## Deployment plan (not deployed yet)
 
-   Every push to `backend/` then redeploys.
-5. **Vercel:** import the repo with root directory `frontend` and env `VITE_API_BASE_URL` = the backend URL. Then allow the site:
-   ```bash
-   az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://<your-app>.vercel.app
-   ```
+The chosen free setup, needing no credit card, was tested end to end once:
 
-**Alternatives** (configs included): Modal (`backend/modal_app.py`, needs a card), any Linux VPS (`deploy/oracle/`, Docker + Caddy HTTPS), Render paid (`render.yaml`).
+| Part | Service | Notes |
+|---|---|---|
+| Frontend | **Vercel** (Hobby, free) | Root directory `frontend`; set `VITE_API_BASE_URL` to the backend URL |
+| Backend | **Azure Container Apps** via **Azure for Students** (college email, no card) | 1 vCPU / 2 GiB, scale to zero, max 1 replica, no paid log workspace. The monthly free allowance covers about 50 active hours; the $100 student credit is only a backup, and the account can't be billed |
+| Image | **GitHub Container Registry** | Built by GitHub Actions; public images are free |
+| Database | **Neon** Postgres (free) | Pooled connection string as `DATABASE_URL` |
+
+What we learned:
+- **Memory:** the backend needs about 750 MB of RAM. Free 512 MB tiers (Render, Koyeb) are too small.
+- **Other hosts:** Hugging Face Docker is now paid; Modal and Oracle need a card.
+- **Regions:** student subscriptions only allow some regions. Ours allowed Central India and East Asia, not East US, so pick from the allowed list.
+- **User-Agent:** `OPEN_USER_AGENT` must contain a contact URL, or Wikimedia returns 403.
+
+The exact steps, and how to restore the tested deployment files from git history, are in [HANDOFF.md](HANDOFF.md#8-deployment-status).
 
 ## API
 

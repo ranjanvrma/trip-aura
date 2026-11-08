@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** backend is LIVE on Azure (Central India); Vercel + GitHub deploy secrets still to do
+**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** deployment trial torn down (all cloud resources deleted) and deployment files removed; plan kept in README + §8
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -29,16 +29,13 @@
 ## 1. TL;DR
 
 - TripAura plans day-by-day trips for **any city worldwide** from **free open data** (no API key). FastAPI backend, React/Vite/TS frontend.
-- **Working locally:**
+- **Done and working locally:**
   - planning engines and the open-data pipeline
   - NLP features: city autocomplete, trip-text parser, semantic matching, sentiment
   - budget and live location
-  - **112 backend tests pass**, and the frontend builds
-- **Backend is LIVE** at `https://trip-aura-api.wittysand-9be93277.centralindia.azurecontainerapps.io` (Azure Container Apps, Central India). Frontend (Vercel) not yet deployed.
-- Deployment plan: Chosen stack: **Vercel** (frontend) + **Azure Container Apps via Azure for Students** (backend, no card) + **GitHub Container Registry** (image) + **Neon** (Postgres).
-  - Neon project exists (created by Ranjan in AWS US East 1).
-  - Still to do: Azure, Vercel, and the GitHub secrets ([§8](#8-deployment-status)).
-- **Next:** finish deployment, then a **premium animated UI redesign** ([§9](#9-open-tasks--next-steps)).
+  - **112 backend tests pass**, the frontend builds, and CI runs on every push
+- **Not deployed.** On 2026-11-08 the full stack was deployed and verified once on Azure, then **deliberately torn down**. All cloud resources were deleted (Azure, Neon, Vercel, GHCR image) and the deployment files were removed from the repo. The tested plan and recovery steps are in [§8](#8-deployment-status).
+- **Next:** redeploy following §8, then a **premium animated UI redesign** ([§9](#9-open-tasks--next-steps)).
 
 ---
 
@@ -49,7 +46,7 @@ git pull
 git log --oneline -15
 git config core.hooksPath .githooks     # once per clone
 ```
-1. Read §8 (what's live) and §9 (what's next).
+1. Read §8 (deployment plan) and §9 (what's next).
 2. Run the app and tests (§6). If a fresh clone fails, fix that first.
 
 ---
@@ -97,7 +94,8 @@ Diagram and request flow: README → *Architecture*. Key files:
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
 | API | `routers/` trips, location (live), geo (autocomplete), nlp (parse-trip), meta (status/options), routes |
 | Frontend | `pages/PlannerPage.tsx` (DescribeTrip + TripForm + saved trips), `pages/TripPage.tsx`, `components/*` (Autocomplete, DayCard, PlaceDetails, map/*, BudgetSummary, LiveLocationPanel...), `services/api.ts`, `types/index.ts` (mirror of backend schemas), `App.tsx` (retries status while backend wakes). Plain CSS in `index.css`, intentionally basic until the redesign |
-| Deploy | `backend/Dockerfile` (py3.12, uid 1000, `scripts/prefetch.py` bakes city index + model + DuckDB httpfs), `.github/workflows/deploy-backend-azure.yml`, `deploy/azure/setup.sh`; alternatives: `backend/modal_app.py`, `deploy/oracle/`, `render.yaml` |
+| Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
+| Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; deployment files removed (see §8 to restore) |
 
 ---
 
@@ -116,11 +114,12 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Suitability never uses external ratings | Brief requirement (tested) |
 | Dish "popular" = ≥2 non-negative review mentions; "guide" = Wikivoyage | Evidence-based; sentiment ignores complaints |
 | Free entry assumed only for squares/parks/monuments/worship, labelled; ticketed types never | No fake "free" claims |
-| Backend host = **Azure Container Apps (Azure for Students)** | Needs ~750 MB RAM. Free 512 MB tiers (Render/Koyeb) are too small, Hugging Face Docker became paid, and Modal and Oracle need a card (Oracle also rejected an Indian debit card). The team declined Google Cloud. Azure for Students needs no card, its monthly free allowance covers ~50 active h, there's a $100/yr backup credit, and a spending limit means it can never bill |
+| Planned backend host = **Azure Container Apps (Azure for Students)** | Needs ~750 MB RAM. Free 512 MB tiers (Render/Koyeb) are too small, Hugging Face Docker became paid, and Modal and Oracle need a card (Oracle also rejected an Indian debit card). The team declined Google Cloud. Azure for Students needs no card, its monthly free allowance covers ~50 active h, there's a $100/yr backup credit, and a spending limit means it can never bill |
 | Image on GHCR (public), not Azure Container Registry | ACR costs money; GHCR is free for public images |
 | Container: 1 vCPU / 2 GiB, min 0 / max 1 replicas, no Log Analytics workspace | Fits the free allowance; logs workspace would cost |
 | Neon Postgres | Container disks are ephemeral; Render free Postgres expires in 30 days |
-| After graduation (Azure for Students ends) | Switch backend to Render free "lite" (`SEMANTIC_ENABLED=false`, `OVERTURE_ENABLED=false`) or a cheap VPS (`deploy/oracle/`); frontend/db unchanged |
+| After graduation (Azure for Students ends) | Switch backend to Render free "lite" (`SEMANTIC_ENABLED=false`, `OVERTURE_ENABLED=false`) or a cheap VPS (Docker Compose + Caddy recipe in commit `8443341`, folder `deploy/oracle/`); frontend/db unchanged |
+| Deployment torn down after one verified trial; files removed from the repo | Owner decision on 2026-11-08: redo deployment cleanly later, following the proven plan |
 | Docs only in README.md + HANDOFF.md | Owner instruction |
 | No AI-tool attribution in repo or commits | Owner instruction |
 
@@ -137,46 +136,61 @@ npm run build
 ```
 - Tests force `DATA_MODE=mock`, `SEMANTIC_ENABLED=false` and `WARMUP_ON_START=false` (`backend/tests/conftest.py`), and use fake cities and a fake GeoNames table.
 - **First real trip to a new city:** takes 30–60 s. The GeoNames index (~4 MB) and model (~65 MB) download into `backend/data/` on first use.
-- **Versions:** Python 3.14 locally; CI, Docker and the cloud use 3.12. Node 22 in CI.
+- **Versions:** Python 3.14 locally; CI uses 3.12 (the planned container too). Node 22 in CI.
 
 ---
 
 ## 7. Configuration and secrets
 
-Settings: `backend/app/core/config.py` (main ones in README → *Configuration*). Frontend: `VITE_API_BASE_URL`, optional `VITE_GOOGLE_MAPS_API_KEY`.
+Settings: `backend/app/core/config.py` (main ones in README → *Configuration*). Frontend: `VITE_API_BASE_URL` (backend URL in production; empty locally), optional `VITE_GOOGLE_MAPS_API_KEY`.
 
-Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`):
-| Secret | Where |
+Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`). **There are no live secrets right now:** all cloud accounts' project resources were deleted. When redeploying, they go to:
+| Secret | Where (planned) |
 |---|---|
-| Neon `DATABASE_URL` | Azure Container App secret `database-url` (created by `deploy/azure/setup.sh`) |
-| `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`, `OPEN_USER_AGENT`, `DATA_MODE` | Container App env vars (`az containerapp update --set-env-vars ...`) |
-| `AZURE_CREDENTIALS` (service principal JSON, scoped to resource group `trip-aura`) | GitHub Actions secret |
-| `AZURE_ENABLED=true` | GitHub Actions variable |
+| Postgres `DATABASE_URL` (Neon, pooled) | Azure Container App secret `database-url` |
+| `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`, `OPEN_USER_AGENT`, `DATA_MODE` | Container App env vars |
+| `AZURE_CREDENTIALS` (service principal JSON, scoped to the resource group) | GitHub Actions secret, plus variable `AZURE_ENABLED=true` |
 | `VITE_API_BASE_URL` | Vercel env var |
-| Google / LLM keys | not used yet (optional; `ANTHROPIC_MODEL` has no default) |
+| Google / LLM keys | optional, unused (`ANTHROPIC_MODEL` has no default) |
+
+Lesson from the trial: **never screenshot or paste connection strings or the service-principal JSON.** Both leaked once and had to be rotated.
 
 ---
 
 ## 8. Deployment status
 
-| Piece | Status | Notes |
-|---|---|---|
-| GitHub repo `ranjanvrma/trip-aura` | ✅ | CI (`ci.yml`): tests + frontend build on push/PR |
-| Neon Postgres | ✅ created (AWS US East 1) | connection string held privately by Ranjan |
-| Backend image on GHCR | ✅ | `ghcr.io/ranjanvrma/trip-aura-api:latest`, public (inherited from the repo); built by `deploy-backend-azure.yml` |
-| Azure for Students | ✅ activated (Ranjan, college account); credit valid until 2027-01-29, renew while a student | |
-| Azure Container App `trip-aura-api` (rg `trip-aura`, env `trip-aura-env`) | ✅ **live** in **centralindia** (allowed regions: centralindia, eastasia, koreacentral, malaysiawest, southeastasia; resource group itself is in eastus) | URL `https://trip-aura-api.wittysand-9be93277.centralindia.azurecontainerapps.io`. Verified 2026-11-08: `/api/health` ok, semantic model loaded, city search ok, new Lisbon trip 35 s (saved to Neon), cached repeat 0.4 s |
-| GitHub auto-deploy (`AZURE_CREDENTIALS` secret, `AZURE_ENABLED` var) | ⏳ | the first service-principal secret was exposed in a screenshot; reset it (rerun `az ad sp create-for-rbac --name trip-aura-github ... --json-auth`) and store only the new JSON in GitHub |
-| Vercel frontend | ⏳ not created | root `frontend`, env `VITE_API_BASE_URL`; then set `CORS_ORIGINS` on the container app |
-| Alternatives | 💤 | Modal (`modal_app.py`, needs card), VPS (`deploy/oracle/`), Render (`render.yaml`, paid) |
+**Current state: nothing deployed.** CI (`ci.yml`) still runs tests + frontend build on every push.
 
-Unverified until first deploy: the GHCR build, the Azure app creation (region policy on student subscriptions; fallback `LOCATION=centralindia`), cold-start time on Azure, Postgres in production, and CORS with the real Vercel URL.
+**What happened on 2026-11-08 (trial):**
+- **Built:** the backend image on GHCR, the Azure Container App (Central India, 1 vCPU / 2 GiB, scale to zero), and a Neon Postgres database.
+- **Verified:** `/api/health` ok, semantic model loaded, city search ok, a new Lisbon trip in 35 s saved to Postgres, and a cached repeat in 0.4 s.
+- **Torn down:** the Azure resource group `trip-aura` and service principal `trip-aura-github`, the GHCR package `trip-aura-api`, the Neon project, and the Vercel project were all deleted by Ranjan.
+
+**Plan for redeploying (free, no card):**
+1. **Restore the tested files from git history:**
+   ```bash
+   git checkout 8443341 -- backend/Dockerfile backend/.dockerignore backend/scripts deploy/azure .github/workflows/deploy-backend-azure.yml frontend/vercel.json
+   ```
+   Also available in that commit: `backend/modal_app.py` + `deploy-backend-modal.yml` (Modal, needs a card), `deploy/oracle/` + `deploy-backend-oracle.yml` (any VPS: Docker Compose + Caddy HTTPS), and `render.yaml` (paid).
+2. **Neon:** create a project and copy the **pooled** connection string.
+3. **Image:** push to `main`. The Azure workflow's image job publishes `ghcr.io/<owner>/trip-aura-api`. It is public automatically for a public repo (check: an anonymous manifest request returns 200).
+4. **Azure for Students** (college email, no card; the credit renews yearly while a student): in Cloud Shell (Bash) run `deploy/azure/setup.sh` from raw GitHub.
+   - It asks for the Neon URL.
+   - It **auto-picks an allowed region**: the trial subscription allowed `centralindia eastasia koreacentral malaysiawest southeastasia`, and East US was rejected.
+   - It creates the environment (`--logs-destination none`) and the app (`--min-replicas 0 --max-replicas 1`), then prints the backend URL and the service-principal JSON.
+5. **GitHub:** secret `AZURE_CREDENTIALS` (that JSON) + variable `AZURE_ENABLED=true`, so later pushes roll out automatically.
+6. **Vercel:** root `frontend`, env `VITE_API_BASE_URL` = backend URL. Then `az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://<site>.vercel.app`.
+
+**Trial gotchas (already fixed in commit `8443341`):**
+- The Dockerfile must `mkdir` + `chown` the app folder as root before `USER user`.
+- `az containerapp revision restart` fails while the app is scaled to zero. To apply a new secret, create a new revision with `az containerapp update ... --set-env-vars SECRET_ROTATED_AT=$(date +%s)`.
+- Delete leftovers with `az group delete -n trip-aura --yes` and `az ad app delete --id <appId>` (the service principal). A hidden `ME_*` resource group may also need deleting.
 
 ---
 
 ## 9. Open tasks / next steps
 
-1. **Finish deployment:** reset + store `AZURE_CREDENTIALS`, set `AZURE_ENABLED=true`, rotate the Neon password (it was exposed in a screenshot) and update the container secret `database-url`, create the Vercel project, then set `CORS_ORIGINS` on the container app.
+1. **Redeploy** following §8 (restore files from `8443341`, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then verify end to end.
 2. **UI redesign** (requested by the owners):
    - premium, product-grade look with animations, transitions, micro-interactions and a responsive layout
    - keep the `types/index.ts` contract and the honesty labels: rating source badges, "estimate" tags, attributions footer
@@ -199,9 +213,8 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 - Travel times are heuristic in open mode (no live traffic).
 - Bumping `DATASET_VERSION` rebuilds every cached city.
 - `opening_hours` parser: the common subset only; seasonal and sunrise rules become "unknown".
-- Azure for Students subscriptions only allow a few regions; `setup.sh` picks one from `az policy assignment list` (override with `LOCATION=...`).
-- Azure scales to zero, so the first request after idle takes ~30–60 s while the image starts (the frontend retries for 2 min).
-- Windows dev: `.gitattributes` forces LF for scripts, Dockerfile, Caddyfile, YAML and hooks.
+- When deployed with scale-to-zero, the first request after idle takes ~30–60 s while the container starts (the frontend already retries for 2 min).
+- Windows dev: `.gitattributes` forces LF for shell scripts, YAML and the git hooks.
 - Mock mode supports Jaipur and INR only (by design).
 
 ---
@@ -219,7 +232,8 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-08 | (this commit) | HANDOFF: backend live on Azure Central India, verification results, remaining deploy steps |
+| 2026-11-08 | (this commit) | Deployment trial torn down: all cloud resources deleted; removed Dockerfile, deploy scripts, deploy workflows, `modal_app.py`, `render.yaml`, `vercel.json` (restore from `8443341`); README gains *Project status* + *Deployment plan*; HANDOFF §8 is now the redeploy plan |
+| 2026-11-08 | `8443341` | HANDOFF: backend live on Azure Central India, verification results (last commit with all deployment files) |
 | 2026-11-08 | `c88cc71` | `deploy/azure/setup.sh`: detect regions allowed by the subscription policy and pick one; reuse an existing resource group |
 | 2026-11-08 | `a528f6d` | Dockerfile: create `data/runtime` and chown the app folder as root before `USER user` (the first GHCR build failed); Dependabot ignores semver-major and groups Actions bumps |
 | 2026-11-08 | `4017c8b` | Backend host → Azure Container Apps (Azure for Students): GHCR build + Azure deploy workflow, `deploy/azure/setup.sh`. Docs consolidated into README (with architecture diagram) + HANDOFF; removed `docs/`, `AGENTS.md`, `CONTRIBUTING.md` |
