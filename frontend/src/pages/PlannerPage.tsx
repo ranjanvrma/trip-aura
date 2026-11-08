@@ -57,7 +57,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
         )}
         {submitting && status?.data_mode === "open" && (
           <div className="banner banner-live">
-            Loading open data for this city... The first trip to a new city can take 1-3 minutes while places are
+            Loading open data for this city... The first trip to a new city can take up to a minute while places are
             downloaded and cached; later trips there are instant.
           </div>
         )}

@@ -61,7 +61,7 @@ class GoogleEnricher:
                 place.external_rating = g.external_rating
                 place.reviews = g.reviews or place.reviews
                 place.google_maps_uri = g.google_maps_uri
-                place.external_ids["google"] = g.id.removeprefix("g:")
+                place.external_ids = {**place.external_ids, "google": g.id.removeprefix("g:")}  # no shared-dict mutation
                 if g.price_level is not None:
                     place.price_level, place.price_level_estimated = g.price_level, False
                 if (place.opening_hours is None or not place.opening_hours.known) and g.opening_hours \

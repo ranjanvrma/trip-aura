@@ -1,0 +1,36 @@
+# Deploys the backend to Modal on every push to main that touches backend/.
+# One-time setup (GitHub repo -> Settings -> Secrets and variables -> Actions):
+#   secret   MODAL_TOKEN_ID      = from `modal token new` or modal.com -> Settings -> API Tokens
+#   secret   MODAL_TOKEN_SECRET  = (same place)
+#   variable MODAL_ENABLED       = true
+name: Deploy backend (Modal)
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/deploy-backend-modal.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-modal
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.MODAL_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "modal>=1.6"
+      - name: Deploy
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy modal_app.py

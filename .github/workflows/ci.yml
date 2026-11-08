@@ -13,6 +13,7 @@ jobs:
         working-directory: backend
     env:
       SEMANTIC_ENABLED: "false"   # tests use a stand-in embedding model
+      WARMUP_ON_START: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

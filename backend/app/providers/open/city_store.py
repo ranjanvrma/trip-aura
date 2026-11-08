@@ -18,6 +18,7 @@ import logging
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from app.core.config import Settings
@@ -225,57 +226,102 @@ class CityDataService:
         from app.engines.food import DISHES
 
         t0 = time.monotonic()
-        radius_km = min(max(city.radius_km, 5.0), 15.0)
-        food_km = min(radius_km, 6.0)
+        radius_km = min(max(city.radius_km, 5.0), 12.0)
+        food_km = min(radius_km, 5.0)
         local = osm.LOCAL_CUISINES.get((city.country_code or "").upper(), set())
         lat, lng = city.center.lat, city.center.lng
         log.info("Building open dataset for %s (r=%.1f km, food r=%.1f km)", city.name, radius_km, food_km)
-        places: list[Place] = []
-        stations: list[dict] = []
         sources: list[str] = []
         warnings: list[str] = []
-        layers_ok = 0
+        timings: dict[str, float] = {}
 
-        # 1) Overture: primary worldwide POI layer
-        if self.settings.overture_enabled:
+        # All sources are fetched IN PARALLEL (they are independent network calls), so a new city
+        # costs roughly the slowest source instead of the sum of all of them. Results are then
+        # merged in a fixed order so the outcome does not depend on which call finished first.
+        def timed(name, fn, *args):
+            def run():
+                t = time.monotonic()
+                try:
+                    return fn(*args)
+                finally:
+                    timings[name] = round(time.monotonic() - t, 1)
+            return run
+
+        def overture_layer():
+            from app.providers.open import overture
+
+            release = self.settings.overture_release or overture.latest_release(self.settings.open_user_agent)
+            places, stations = overture.fetch(lat, lng, radius_km, food_km, release, local,
+                                              self.settings.duckdb_memory_limit, self.settings.duckdb_threads)
+            return release, places, stations
+
+        def wikidata_layer():
+            from app.providers.open.wikimedia import wikidata_notable_places
+
+            return wikidata_notable_places(self.http, lat, lng, radius_km)
+
+        def wikivoyage_layer():
+            from app.providers.open.wikimedia import wikivoyage_dishes
+
+            return wikivoyage_dishes(self.http, city.name.split(",")[0], set(DISHES))
+
+        osm_deadline = time.monotonic() + self.settings.osm_time_budget_seconds
+
+        def osm_layer(query: str):
+            raw = self.http.overpass(query, deadline=osm_deadline)
+            return osm.parse_elements(raw.get("elements", []), local)
+
+        jobs = {}
+        osm_queries = osm.build_queries(lat, lng, radius_km, food_km)
+        with ThreadPoolExecutor(max_workers=7, thread_name_prefix="city-load") as pool:
+            if self.settings.overture_enabled:
+                jobs["overture"] = pool.submit(timed("overture", overture_layer))
+            jobs["wikidata"] = pool.submit(timed("wikidata", wikidata_layer))
+            if self.settings.wikivoyage_enabled:
+                jobs["wikivoyage"] = pool.submit(timed("wikivoyage", wikivoyage_layer))
+            for name, query in osm_queries.items():
+                jobs[f"osm_{name}"] = pool.submit(timed(f"osm_{name}", osm_layer, query))
+        results = {}
+        for name, fut in jobs.items():
             try:
-                from app.providers.open import overture
-
-                release = self.settings.overture_release or overture.latest_release(self.settings.open_user_agent)
-                places, stations = overture.fetch(lat, lng, radius_km, food_km, release, local,
-                                                  self.settings.duckdb_memory_limit, self.settings.duckdb_threads)
-                sources.append(f"Overture Maps ({release})")
-                layers_ok += 1
+                results[name] = fut.result()
             except ImportError:
                 warnings.append("Overture layer skipped: the optional 'duckdb' package is not installed.")
             except Exception as exc:
-                log.warning("Overture query failed: %s", exc)
-                warnings.append("Overture Maps was unavailable; place coverage is reduced.")
+                log.warning("%s layer failed: %s", name, exc)
+                results[name] = exc
+
+        places: list[Place] = []
+        stations: list[dict] = []
+        layers_ok = 0
+
+        # 1) Overture: primary worldwide POI layer
+        ov = results.get("overture")
+        if isinstance(ov, tuple):
+            release, places, stations = ov
+            sources.append(f"Overture Maps ({release})")
+            layers_ok += 1
+        elif isinstance(ov, Exception):
+            warnings.append("Overture Maps was unavailable; place coverage is reduced.")
 
         # 2) Wikidata: notable sights with prominence (drives 'famous')
-        try:
-            from app.providers.open.wikimedia import wikidata_notable_places
-
-            notable = wikidata_notable_places(self.http, lat, lng, radius_km)
-            places = merge_places(places, notable, max_m=300)
+        wd = results.get("wikidata")
+        if isinstance(wd, list):
+            places = merge_places(places, wd, max_m=300)
             sources.append("Wikidata")
             layers_ok += 1
-        except Exception as exc:
-            log.warning("Wikidata query failed: %s", exc)
+        else:
             warnings.append("Wikidata was unavailable, so 'famous place' detection is limited.")
 
         # 3) OpenStreetMap: opening hours, fees, diet tags, stations (best effort, time-boxed)
-        deadline = time.monotonic() + self.settings.osm_time_budget_seconds
         osm_hits = 0
-        for name, query in osm.build_queries(lat, lng, radius_km, food_km).items():
-            try:
-                raw = self.http.overpass(query, deadline=deadline)
-            except Exception as exc:
-                log.warning("OSM %s layer failed: %s", name, exc)
+        for name in osm_queries:
+            res = results.get(f"osm_{name}")
+            if not isinstance(res, tuple):
                 warnings.append(f"OpenStreetMap {name} data was unavailable (public servers busy); "
                                 "opening hours, fees or diet tags may be missing.")
                 continue
-            osm_places, osm_stations = osm.parse_elements(raw.get("elements", []), local)
+            osm_places, osm_stations = res
             places = merge_places(places, osm_places, max_m=150 if name == "food" else 300)
             if osm_stations:  # OSM distinguishes metro from mainline; prefer it over Overture's generic rail stops
                 stations = osm_stations
@@ -295,16 +341,14 @@ class CityDataService:
         # 4) Wikivoyage dishes
         dishes: list[DishSuggestion] = []
         wv_title = None
-        if self.settings.wikivoyage_enabled:
-            try:
-                from app.providers.open.wikimedia import wikivoyage_dishes
-
-                dishes, wv_title = wikivoyage_dishes(self.http, city.name.split(",")[0], set(DISHES))
-                if wv_title:
-                    sources.append(f"Wikivoyage ({wv_title})")
-            except Exception as exc:
-                log.warning("Wikivoyage lookup failed: %s", exc)
-                warnings.append("Wikivoyage was unavailable; no guidebook dish suggestions.")
+        wv = results.get("wikivoyage")
+        if isinstance(wv, tuple):
+            dishes, wv_title = wv
+            if wv_title:
+                sources.append(f"Wikivoyage ({wv_title})")
+        elif isinstance(wv, Exception):
+            warnings.append("Wikivoyage was unavailable; no guidebook dish suggestions.")
+        log.info("City sources for %s fetched in parallel: %s", city.name, timings)
 
         n_food = sum(1 for p in places if p.kind in (PlaceKind.RESTAURANT, PlaceKind.CAFE))
         log.info("Dataset %s: %d attractions/parks, %d food, %d stations from %s in %.0fs", city.name,

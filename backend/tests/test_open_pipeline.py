@@ -227,3 +227,40 @@ def test_google_enrichment_only_on_close_name_match():
     assert enricher.enrich(museum, CITY) is True
     assert museum.external_rating.provider == DataSource.GOOGLE and museum.external_rating.rating == 4.7
     assert enricher.enrich(park, CITY) is False and park.external_rating is None
+
+
+def test_city_resolves_offline_from_index():
+    from tests.test_nlp import make_index
+
+    settings = Settings(data_mode="open")
+    http = OpenHttp(settings, transport=httpx.MockTransport(lambda r: (_ for _ in ()).throw(AssertionError("no network"))))
+    geo = OpenGeocodingProvider(http, make_index())
+    lisbon = geo.resolve_city("Lisboa")
+    assert lisbon.name == "Lisbon, Portugal" and lisbon.country_code == "PT" and lisbon.radius_km == 7.0
+    assert geo.resolve_city("Paris, United States").country_code == "US"
+    assert geo.resolve_city("New York City").radius_km == 15.0
+
+
+def test_parallel_build_survives_failing_sources(monkeypatch):
+    from app.providers.open import overture, wikimedia
+
+    settings = Settings(data_mode="open", wikivoyage_enabled=False, osm_time_budget_seconds=1)
+    svc = CityDataService(settings, OpenHttp(settings))
+    data = fake_city_data()
+    monkeypatch.setattr(overture, "latest_release", lambda ua: "2026-10-21.0")
+    monkeypatch.setattr(overture, "fetch", lambda *a, **k: (data.places, data.stations))
+    monkeypatch.setattr(wikimedia, "wikidata_notable_places", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down")))
+    monkeypatch.setattr(svc.http, "overpass", lambda q, deadline=None: (_ for _ in ()).throw(RuntimeError("busy")))
+    built = svc.build(CITY)
+    assert len(built.places) == len(data.places) and built.stations == data.stations
+    assert any("Wikidata was unavailable" in w for w in built.warnings)
+    assert sum("OpenStreetMap" in w for w in built.warnings) == 3
+    assert built.sources == ["Overture Maps (2026-10-21.0)"]
+
+
+def test_trip_does_not_mutate_cached_city(open_service):
+    cached = open_service.providers.extras["cities"].get(CITY)
+    before = [(p.id, list(p.categories), dict(p.external_ids), p.external_rating) for p in cached.places]
+    open_service.generate(request(interests=["museums", "history buff"]))
+    after = [(p.id, list(p.categories), dict(p.external_ids), p.external_rating) for p in cached.places]
+    assert before == after

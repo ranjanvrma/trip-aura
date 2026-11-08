@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -27,7 +29,25 @@ async def lifespan(app: FastAPI):
              settings.data_mode.value, settings.google_configured, settings.ai_available)
     if settings.data_mode.value == "live" and not settings.google_configured:
         log.error("DATA_MODE=live but GOOGLE_MAPS_API_KEY is empty: itinerary requests will return 503.")
+    if settings.warmup_on_start:
+        threading.Thread(target=_warm_up, name="warm-up", daemon=True).start()
     yield
+
+
+def _warm_up() -> None:
+    """Load the city index, embedding model and providers in the background at startup, so the
+    first user request doesn't pay for them (a few seconds each)."""
+    t = time.monotonic()
+    try:
+        from app.nlp.registry import get_city_index, get_semantic
+        from app.routers.deps import get_itinerary_service
+
+        get_city_index().load()
+        _ = get_semantic().available
+        get_itinerary_service()
+        log.info("Warm-up finished in %.1fs", time.monotonic() - t)
+    except Exception as exc:  # warm-up is an optimisation only
+        log.warning("Warm-up skipped: %s", exc)
 
 
 app = FastAPI(title="TripAura API", version="0.2.0", lifespan=lifespan,

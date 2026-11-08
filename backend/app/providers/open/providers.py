@@ -5,12 +5,15 @@ import datetime as dt
 import logging
 import math
 
+from rapidfuzz import fuzz
+
 from app.core.errors import LocationNotFoundError, NotFoundError
 from app.core.geo import haversine_km
 from app.providers.base import CityContext, GeocodeResult, PlaceQuery, RouteResult
 from app.providers.heuristic_routes import HeuristicRoutesProvider
 from app.providers.open.city_store import CityDataService
 from app.providers.open.http import OpenHttp
+from app.providers.open.wikimedia import fold
 from app.schemas.common import DataSource, LatLng
 from app.schemas.place import Place, PlaceKind
 from app.schemas.trip import TransportMode
@@ -23,10 +26,44 @@ CITY_TYPES = {"city", "town", "village", "municipality", "borough", "county", "s
 class OpenGeocodingProvider:
     source = DataSource.OSM
 
-    def __init__(self, http: OpenHttp):
+    def __init__(self, http: OpenHttp, city_index=None):
         self.http = http
+        self.city_index = city_index      # offline GeoNames index: resolves most cities with no network call
+
+    @staticmethod
+    def radius_for_population(pop: int) -> float:
+        """Search radius (km) that covers a city's sights, by population."""
+        if pop >= 5_000_000:
+            return 15.0
+        if pop >= 1_000_000:
+            return 10.0
+        if pop >= 300_000:
+            return 7.0
+        return 5.0
+
+    def _from_index(self, city_name: str) -> CityContext | None:
+        if self.city_index is None:
+            return None
+        try:
+            head = city_name.split(",")[0].strip()
+            c = self.city_index.exact(head)
+            if c is None or ("," in city_name and fold(city_name.split(",", 1)[1].strip())
+                             not in (fold(c.country), fold(c.region), fold(c.country_code))):
+                hits = self.city_index.search(city_name, 1)
+                c = hits[0] if hits and fuzz.ratio(fold(head), fold(hits[0].name)) >= 85 else c
+        except Exception as exc:  # index unavailable -> use Nominatim
+            log.warning("City index lookup failed: %s", exc)
+            return None
+        if c is None:
+            return None
+        return CityContext(name=f"{c.name}, {c.country}", center=LatLng(lat=c.lat, lng=c.lng),
+                           country_code=c.country_code, radius_km=self.radius_for_population(c.population),
+                           has_metro=None, source=DataSource.OSM, utc_offset_minutes=None)
 
     def resolve_city(self, city_name: str) -> CityContext:
+        hit = self._from_index(city_name)
+        if hit is not None:
+            return hit
         results = self.http.nominatim("search", {"q": city_name, "limit": 5, "addressdetails": 1,
                                                  "accept-language": "en"})
         if not results:

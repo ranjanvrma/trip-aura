@@ -36,7 +36,7 @@ def _bbox(lat: float, lng: float, radius_km: float) -> str:
 
 def build_queries(lat: float, lng: float, radius_km: float, food_radius_km: float) -> dict[str, str]:
     """Three small bbox queries (bbox filters are much cheaper than `around` on public servers)."""
-    head = "[out:json][timeout:55][bbox:{bb}];"
+    head = "[out:json][timeout:25][bbox:{bb}];"
     big, small = _bbox(lat, lng, radius_km), _bbox(lat, lng, food_radius_km)
     return {
         "attractions": head.format(bb=big) + "(" + "".join(f"{f};" for f in ATTRACTION_FILTERS) + ");out center tags qt 3000;",

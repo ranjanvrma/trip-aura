@@ -58,7 +58,7 @@ def build_providers(settings: Settings) -> ProviderBundle:
             extras["google_places"] = GooglePlacesProvider(_google_client(settings))
             extras["enricher_factory"] = lambda: GoogleEnricher(extras["google_places"])
         return ProviderBundle(DataMode.OPEN, DataSource.OPEN, OpenPlacesProvider(cities), routes,
-                              OpenGeocodingProvider(http), extras)
+                              OpenGeocodingProvider(http, _city_index()), extras)
 
     from app.providers.mock.providers import MockGeocodingProvider, MockPlacesProvider, MockRoutesProvider
 
@@ -74,3 +74,10 @@ def _cached(mode: str, key_present: bool) -> ProviderBundle:
 def get_providers() -> ProviderBundle:
     s = get_settings()
     return _cached(s.data_mode.value, s.google_configured)
+
+
+def _city_index():
+    """Offline GeoNames index (lets the open geocoder skip Nominatim for city names)."""
+    from app.nlp.registry import get_city_index
+
+    return get_city_index()

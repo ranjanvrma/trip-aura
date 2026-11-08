@@ -46,7 +46,8 @@ trip-aura/
 │   │   └── routers/                /api/meta, /api/trips, /api/trips/{id}/live, /api/routes
 │   ├── tests/                      pytest suite (107 tests)
 │   ├── scripts/prefetch.py         Pre-downloads city index, AI model and DuckDB extension (used in Docker build)
-│   ├── Dockerfile                  Backend image (Oracle VM / Render / any Docker host)
+│   ├── modal_app.py                Modal deployment (serverless backend)
+│   ├── Dockerfile                  Backend image (VPS / Render / any Docker host)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -61,15 +62,15 @@ trip-aura/
 │   ├── vite.config.ts              Dev proxy /api -> 127.0.0.1:8000
 │   └── .env.example
 ├── frontend/vercel.json            Vercel build + SPA routing
-├── deploy/oracle/                  Oracle Cloud VM deployment: docker-compose, Caddyfile, setup.sh, update.sh
-├── .github/workflows/              ci.yml (tests + build), deploy-backend-oracle.yml (backend -> Oracle VM)
+├── deploy/oracle/                  Self-hosted VPS deployment (Oracle Cloud or any Ubuntu server): compose, Caddy, scripts
+├── .github/workflows/              ci.yml (tests + build), deploy-backend-modal.yml (main), deploy-backend-oracle.yml (VPS)
 ├── render.yaml                     Render Blueprint (paid alternative backend host)
 └── .claude/launch.json             Dev-server definitions (backend, frontend)
 ```
 
 ## Worldwide data (open mode)
 
-Nothing is scraped. Each city loads on demand the first time someone plans a trip there, then it's cached in SQLite for `CITY_CACHE_DAYS` (default 30). The first trip to a new city takes about 1–3 minutes; later trips there take seconds.
+Nothing is scraped. Each city loads on demand the first time someone plans a trip there, then it's cached in the database for `CITY_CACHE_DAYS` (default 30). All sources are fetched in parallel, so the first trip to a new city takes about 30–60 seconds (Rome: 37 s); later trips there take 1–2 seconds.
 
 | Step | Source | What it gives | If it fails |
 |---|---|---|---|
@@ -204,7 +205,8 @@ Things to check when you connect:
 | `OPEN_USER_AGENT` | `TripAura/0.1 (+https://github.com/ranjanvrma/trip-aura)` | Identifies the app to OSM/Wikimedia. Must include a contact URL or email, or Wikimedia returns HTTP 403 |
 | `NOMINATIM_URL` | public Nominatim | Geocoding server (self-host for production) |
 | `OVERPASS_URLS` | 3 public mirrors | Comma-separated Overpass endpoints, tried in order |
-| `OSM_TIME_BUDGET_SECONDS` | `90` | Total time allowed for the best-effort OSM layer per city |
+| `OSM_TIME_BUDGET_SECONDS` | `25` | Time box for the best-effort OSM layer. Its 3 queries run in parallel with Overture, Wikidata and Wikivoyage |
+| `WARMUP_ON_START` | `true` | Preload the city index and AI model in the background when the server starts |
 | `OVERTURE_ENABLED` / `OVERTURE_RELEASE` | `true` / latest | Overture places layer. The release is auto-detected from the STAC catalog |
 | `WIKIVOYAGE_ENABLED` | `true` | Guidebook dish suggestions |
 | `CITY_CACHE_DAYS` | `30` | How long a loaded city is reused before refreshing |
@@ -268,7 +270,7 @@ npm run dev
 - API: http://127.0.0.1:8000
 - Interactive API docs: http://127.0.0.1:8000/docs
 
-In the default open mode, enter any city and a hotel name or address (for example "Lisbon" with "Rossio, Lisbon"). The first trip to a city takes 1–3 minutes while its data loads.
+In the default open mode, enter any city and a hotel name or address (for example "Lisbon" with "Rossio, Lisbon"). The first trip to a city takes about 30–60 seconds while its data loads.
 
 With `DATA_MODE=mock`, use **Jaipur** and an address such as "Hotel on MI Road". Mock localities include MI Road, C-Scheme, Bani Park, Civil Lines, Amer, Old City, Malviya Nagar and Raja Park. You can also give exact coordinates.
 
@@ -331,88 +333,70 @@ The frontend type-checks and builds with `npm run build`.
 
 ## Deployment
 
-The recommended free setup:
+The recommended free setup (no credit card anywhere):
 
 | Part | Host | Why |
 |---|---|---|
 | Frontend (React/Vite) | **Vercel**, Hobby plan (free) | Static site, global CDN, redeploys automatically from GitHub |
-| Backend (FastAPI) | **Oracle Cloud Always Free**: one Ampere A1 ARM VM (2 OCPU, 12 GB RAM) running Docker + Caddy | The backend peaks at ~750 MB RAM (Overture query + AI model + city index), which rules out 512 MB free tiers (Render, Koyeb). Hugging Face Docker Spaces are now paid. The VM is always on, so there are no cold starts |
-| Database | **Neon** Postgres, free plan (1 GB) | Managed and durable. Pick the same area as the VM (both US East: Neon `us-east-1`, Oracle Ashburn) |
-| HTTPS | **Caddy** + Let's Encrypt on a free `sslip.io` hostname (e.g. `129-146-10-20.sslip.io`) | Vercel serves the site over HTTPS, so the API must be HTTPS too. No domain purchase needed |
+| Backend (FastAPI) | **Modal** (serverless containers, $30 free credit every month) | Enough memory for the backend (~750 MB peak measured). Scales to zero when idle, so credit is only used while requests run (a 2 GB / 1 CPU container is roughly $0.06 per active hour). Free hosts with 512 MB (Render, Koyeb) are too small, and Hugging Face Docker is now paid |
+| Database | **Neon** Postgres, free plan (1 GB) | Durable storage for saved trips and cached cities. Modal containers have no permanent disk |
 
-Files: `deploy/oracle/` (docker-compose, Caddyfile, `.env.example`, `setup.sh`, `update.sh`) and `.github/workflows/deploy-backend-oracle.yml` (auto-deploy over SSH).
+How fast it is:
+- **First trip to a brand-new city:** about 35–40 s (measured locally for Rome). All sources load in parallel, and OpenStreetMap is capped at 25 s.
+- **Every later trip there:** about 1–2 s.
+- **After idle time:** the backend sleeps 5 minutes after the last request. The next request waits a few seconds while a container starts; the site shows "Connecting to the TripAura server…" during that time.
+- **Request limit:** Modal cuts any web request off at 150 s, which the loading above stays well inside.
+
+Files: `backend/modal_app.py` (Modal app definition) and `.github/workflows/deploy-backend-modal.yml` (auto-deploy).
 
 ### 1. Database (Neon)
-Create a project (region **AWS US East 1**), click **Connect**, turn on **connection pooling**, and copy the connection string. That's your `DATABASE_URL`. Tables are created automatically on first start.
+Create a project (region **AWS US East 1**), click **Connect**, turn on **connection pooling**, and copy the connection string. That's your `DATABASE_URL`.
 
-### 2. Oracle Cloud account
-1. Sign up at [oracle.com/cloud/free](https://www.oracle.com/cloud/free/). Oracle asks for a card for identity verification; Always Free resources are not charged.
-2. **Home region:** choose **US East (Ashburn)**, close to the Neon database. You can't change it later, and Always Free VMs can only run in the home region.
-3. Optional, recommended once the account is active: **upgrade to Pay As You Go** (Billing → Upgrade). Always Free resources stay free. Without the upgrade, Oracle may reclaim VMs it considers idle (CPU, network and memory under 20% for 7 days), which a small project can trigger.
+### 2. Modal account and settings (~5 minutes)
+1. Sign up at [modal.com](https://modal.com) with GitHub. The Starter plan is free and includes $30 of compute credit each month.
+2. Create the app's settings: **Secrets → Create new secret → Custom**. Name it exactly **`trip-aura-env`** and add:
 
-### 3. Create the VM
-1. Go to **Compute → Instances → Create instance**:
-   - Name: `trip-aura`
-   - Image: **Canonical Ubuntu 24.04** (click *Change image*)
-   - Shape: **Ampere → VM.Standard.A1.Flex** with **2 OCPU, 12 GB memory** (shows "Always Free-eligible")
-   - Networking: create a new VCN with a public subnet, and **assign a public IPv4 address**
-   - SSH keys: **Generate a key pair for me**, then **download the private key**. Keep it safe; it's how you and GitHub log in
-   - Boot volume: default (50 GB)
-2. Click **Create**. If you get "Out of capacity", try another availability domain or try again later; Ashburn A1 capacity fluctuates.
-3. Open ports 80/443 in the cloud firewall: instance page → **Subnet** → **Security list** → **Add ingress rules**: source `0.0.0.0/0`, TCP, destination ports `80,443`.
-4. Note the instance's **public IP**.
+   | Key | Value |
+   |---|---|
+   | `DATABASE_URL` | your Neon connection string |
+   | `CORS_ORIGINS` | your Vercel URL, e.g. `https://trip-aura.vercel.app` (use `http://localhost:5173` until you have it) |
+   | `CORS_ORIGIN_REGEX` | `https://trip-aura-.*\.vercel\.app` (optional; allows Vercel preview links) |
+   | `OPEN_USER_AGENT` | `TripAura/1.0 (+https://github.com/ranjanvrma/trip-aura)` |
 
-### 4. Install the backend (one command on the VM)
-From your PC (PowerShell or Git Bash), log in:
-```bash
-ssh -i path/to/ssh-key.key ubuntu@<PUBLIC_IP>
-```
-On the VM:
-```bash
-curl -fsSL https://raw.githubusercontent.com/ranjanvrma/trip-aura/main/deploy/oracle/setup.sh -o setup.sh && bash setup.sh
-```
-The script installs Docker and opens the VM's own firewall. It then asks for three things:
-- **API domain:** press Enter to accept the suggested `<ip-with-dashes>.sslip.io`
-- **Neon `DATABASE_URL`:** paste it
-- **Your Vercel URL:** enter it now if you have it, or press Enter and update it after step 6
+3. Create an API token: **Settings → API Tokens → New token**. Copy the **Token ID** (`ak-...`) and **Token Secret** (`as-...`).
 
-The first build takes about 5–10 minutes. It ends by printing `Backend is live: https://<ip>.sslip.io`. Check `https://<ip>.sslip.io/api/health` (expect `{"status":"ok"}`) and `/docs`.
+### 3. Deploy from GitHub
+1. In the GitHub repo, go to **Settings → Secrets and variables → Actions** and add:
+   - **Secret** `MODAL_TOKEN_ID`
+   - **Secret** `MODAL_TOKEN_SECRET`
+   - **Variable** `MODAL_ENABLED` = `true`
+2. Go to **Actions → "Deploy backend (Modal)" → Run workflow**. The first build takes about 5–8 minutes because it bakes the city list and AI model into the image. Later deploys reuse cached layers.
+3. The log ends with the URL: `https://<your-modal-username>--trip-aura-api.modal.run`. It's also shown under **Apps → trip-aura-api** in the Modal dashboard.
+4. Check it: `<url>/api/health` should return `{"status":"ok"}`, and `<url>/docs` shows the API.
 
-Settings live in `~/trip-aura/deploy/oracle/.env` on the VM. After editing it, run `bash ~/trip-aura/deploy/oracle/update.sh`.
+From then on, every push to `main` that changes `backend/` redeploys automatically.
 
-### 5. Auto-deploy from GitHub
-In the repo, go to **Settings → Secrets and variables → Actions** and add:
-- **Secret** `ORACLE_SSH_KEY`: the full contents of the private key file from step 3
-- **Variable** `ORACLE_HOST`: the VM's public IP
-- **Variable** `ORACLE_USER`: `ubuntu`
+To deploy from your PC instead: `pip install modal`, run `modal token new` (it opens a browser login), then from the `backend/` folder run `modal deploy modal_app.py`.
 
-From then on, every push to `main` that touches `backend/` or `deploy/oracle/` SSHes into the VM and runs `update.sh` (pull + rebuild). To deploy by hand: **Actions → "Deploy backend (Oracle Cloud)" → Run workflow**.
-
-### 6. Frontend (Vercel)
+### 4. Frontend (Vercel)
 1. **Add New → Project**, import the repo, and set **Root Directory** to `frontend`. Framework: Vite.
-2. Add the environment variable `VITE_API_BASE_URL` = `https://<ip-with-dashes>.sslip.io` (no trailing slash).
-3. **Deploy**, then put the Vercel URL into `CORS_ORIGINS` in the VM's `.env` and run `update.sh`.
+2. Add the environment variable `VITE_API_BASE_URL` = your Modal URL (no trailing slash).
+3. **Deploy**. Then set `CORS_ORIGINS` in the Modal secret to the Vercel URL and redeploy the backend (**Actions → Deploy backend (Modal) → Run workflow**). Secrets are read when a container starts.
 
-### 7. Check it end to end
+### 5. Check it end to end
 - Open the Vercel URL. You should see the "Worldwide open data" banner.
 - Type "Lis" in the city box; Lisbon should appear.
-- Generate a 2-day trip. The first trip to a new city takes 1–3 minutes.
-- If the site can't reach the backend, check `VITE_API_BASE_URL`, `CORS_ORIGINS` (exact URL, no trailing slash), and that ports 80/443 are open (security list).
+- Generate a 2-day trip.
+- If the site can't reach the backend, check `VITE_API_BASE_URL`, `CORS_ORIGINS` (exact URL, no trailing slash), and the app's logs in the Modal dashboard.
 
-Useful commands on the VM:
-```bash
-cd ~/trip-aura/deploy/oracle
-sudo docker compose ps              # status
-sudo docker compose logs -f api     # backend logs
-sudo docker compose restart api     # restart after editing .env
-```
+**Cost control:** usage is shown under Modal's **Usage** page. The app runs at most one container (`max_containers=1`) and sleeps after 5 idle minutes, so a project like this uses a small fraction of the $30 monthly credit. If the credit ever runs out, the backend pauses until the next month; nothing is charged on the free plan.
 
 ### Alternatives
-- **Render (paid):** `render.yaml` deploys the same Docker image on the Standard plan (2 GB). Free and Starter (512 MB) are too small.
-- **Any Linux server or VPS:** `deploy/oracle/setup.sh` works on any Ubuntu machine with ports 80/443 reachable.
+- **Any Linux server or VPS** (Oracle Cloud Always Free, a home server, etc.): `deploy/oracle/` has a Docker Compose setup with Caddy for automatic HTTPS. `setup.sh` installs everything on Ubuntu, and `.github/workflows/deploy-backend-oracle.yml` redeploys over SSH. Oracle's sign-up needs a credit card, and often rejects Indian debit cards.
+- **Render (paid):** `render.yaml` deploys the Docker image on the Standard plan (2 GB). The free and Starter plans (512 MB) are too small.
 
 ### Continuous integration
-`.github/workflows/ci.yml` runs the backend tests (Python 3.12) and the frontend build on every push and pull request. The Oracle deploy workflow only runs once `ORACLE_HOST` is set.
+`.github/workflows/ci.yml` runs the backend tests (Python 3.12) and the frontend build on every push and pull request. Each deploy workflow runs only after it has been configured (`MODAL_ENABLED` or `ORACLE_HOST`).
 
 ## Authors
 

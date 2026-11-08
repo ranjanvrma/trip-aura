@@ -47,7 +47,8 @@ class Settings(BaseSettings):
     duckdb_memory_limit: str = "256MB"   # cap for the Overture query (small hosting plans)
     duckdb_threads: int = 2
     city_cache_days: int = Field(default=30, ge=1, le=365)
-    osm_time_budget_seconds: float = 90.0   # total time allowed for the best-effort OSM layer per city
+    # time box for the best-effort OSM layer; its 3 queries run in parallel with the other sources
+    osm_time_budget_seconds: float = 25.0
     open_http_timeout_seconds: float = 90.0
     fx_url: str = "https://api.frankfurter.dev/v1/latest"
 
@@ -76,6 +77,7 @@ class Settings(BaseSettings):
     # optional regex for extra allowed origins, e.g. Vercel preview URLs: https://trip-aura-.*\.vercel\.app
     cors_origin_regex: str = ""
     log_level: str = "INFO"
+    warmup_on_start: bool = True   # preload city index + AI model in the background at startup
 
     # Engine tuning (not secrets; overridable for experiments)
     max_candidate_places: int = Field(default=150, ge=10, le=500)

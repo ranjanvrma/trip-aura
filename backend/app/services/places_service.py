@@ -47,12 +47,15 @@ class PlacesService:
                     continue
                 existing = seen.get(place.id)
                 if existing:
-                    for tag in place.categories:
-                        if tag not in existing.categories:
-                            existing.categories.append(tag)
+                    extra = [t for t in place.categories if t not in existing.categories]
+                    if extra:  # reassign (never mutate): lists may be shared with the city cache
+                        existing.categories = existing.categories + extra
                     existing.is_famous = existing.is_famous or place.is_famous
                 else:
-                    seen[place.id] = place.model_copy(deep=True)
+                    # Shallow copy: per-trip changes only reassign fields (never mutate shared lists or
+                    # dicts in place), so the cached city data stays untouched. A deep copy of ~1,000
+                    # places cost ~0.7 s per trip.
+                    seen[place.id] = place.model_copy()
         return list(seen.values())
 
     @property
