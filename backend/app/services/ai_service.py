@@ -55,6 +55,8 @@ def summarize(it: Itinerary, settings: Settings) -> tuple[str | None, str]:
         return None, "disabled"
     if not settings.anthropic_api_key.strip():
         return None, "not_configured: AI_ENABLED=true but ANTHROPIC_API_KEY is empty"
+    if not settings.anthropic_model.strip():
+        return None, "not_configured: AI_ENABLED=true but ANTHROPIC_MODEL is empty"
     try:
         import anthropic
     except ImportError:

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Requires HANDOFF.md to be updated in every commit that changes files.
+# Enable once per clone:   git config core.hooksPath .githooks
+# Bypass for trivial commits:   SKIP_HANDOFF=1 git commit ...
+[ "$SKIP_HANDOFF" = "1" ] && exit 0
+
+staged=$(git diff --cached --name-only)
+[ -z "$staged" ] && exit 0
+echo "$staged" | grep -qx "HANDOFF.md" && exit 0
+
+cat >&2 <<'MSG'
+pre-commit: HANDOFF.md is not part of this commit.
+  Update HANDOFF.md (header, affected sections, change-log row), then `git add HANDOFF.md`.
+  For a trivial commit (typo, formatting) bypass with:  SKIP_HANDOFF=1 git commit ...
+MSG
+exit 1

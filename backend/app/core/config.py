@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # ---- AI -----------------------------------------------------------------
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-opus-5-5"
+    anthropic_model: str = ""   # model id from the provider's docs; required when AI_ENABLED=true
     ai_enabled: bool = False
 
     # ---- app ----------------------------------------------------------------

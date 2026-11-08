@@ -1,33 +1,27 @@
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
 *.egg-info/
 
-# Env / secrets
-.env
-.env.local
-backend/.env
-frontend/.env
-frontend/.env.local
-
-# Data
-*.db
-backend/data/*.db
-
-# Node
+# --- Node / frontend ---
 node_modules/
 frontend/dist/
+*.tsbuildinfo
 
-# OS / IDE
+# --- Secrets (only the *.example files are committed) ---
+.env
+.env.*
+!.env.example
+
+# --- Local data ---
+*.db
+# downloaded GeoNames index + embedding model (re-created on demand)
+backend/data/
+
+# --- OS / editors / assistants ---
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-
-# Downloaded data (GeoNames index, embedding models)
-backend/data/
-
-# TypeScript incremental build info
-*.tsbuildinfo
