@@ -8,4 +8,5 @@ anthropic>=2.0
 duckdb>=1.1          # Overture Maps places layer (open mode)
 rapidfuzz>=3.0       # typo-tolerant matching (city search, interests, trip parser)
 fastembed>=0.4       # local ONNX sentence embeddings (semantic interests, review sentiment)
+psycopg[binary]>=3.2 # Postgres driver (Neon / Render / Supabase); SQLite is used when DATABASE_URL is unset
 pytest>=8.0

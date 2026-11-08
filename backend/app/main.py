@@ -30,9 +30,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="TripAura API", version="0.1.0", lifespan=lifespan,
-              description="Personalised day-wise travel itineraries. Mock and Google Maps Platform data sources.")
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=False,
+app = FastAPI(title="TripAura API", version="0.2.0", lifespan=lifespan,
+              description="Personalised day-wise travel itineraries for any city (open data, optional Google).")
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
+                   allow_origin_regex=settings.cors_origin_regex or None, allow_credentials=False,
                    allow_methods=["*"], allow_headers=["*"])
 
 

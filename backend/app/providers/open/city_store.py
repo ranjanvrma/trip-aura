@@ -242,7 +242,8 @@ class CityDataService:
                 from app.providers.open import overture
 
                 release = self.settings.overture_release or overture.latest_release(self.settings.open_user_agent)
-                places, stations = overture.fetch(lat, lng, radius_km, food_km, release, local)
+                places, stations = overture.fetch(lat, lng, radius_km, food_km, release, local,
+                                                  self.settings.duckdb_memory_limit, self.settings.duckdb_threads)
                 sources.append(f"Overture Maps ({release})")
                 layers_ok += 1
             except ImportError:

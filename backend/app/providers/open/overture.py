@@ -122,7 +122,7 @@ def row_to_place(row: tuple, local_cuisines: set[str]) -> Place | dict | None:
 
 
 def fetch(lat: float, lng: float, radius_km: float, food_radius_km: float, release: str,
-          local_cuisines: set[str]) -> tuple[list[Place], list[dict]]:
+          local_cuisines: set[str], memory_limit: str = "256MB", threads: int = 2) -> tuple[list[Place], list[dict]]:
     import duckdb  # optional dependency
 
     xmin, xmax, ymin, ymax = bbox(lat, lng, radius_km)
@@ -131,6 +131,8 @@ def fetch(lat: float, lng: float, radius_km: float, food_radius_km: float, relea
     other = ",".join(f"'{c}'" for c in sorted(set(ATTRACTIONS) | STATIONS))
     con = duckdb.connect()
     try:
+        # memory/thread caps keep the process inside small hosting plans (e.g. 512 MB)
+        con.execute(f"SET memory_limit='{memory_limit}'; SET threads={int(threads)};")
         con.execute("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2'; SET enable_progress_bar=false;")
         rows = con.execute(f"""
             SELECT id, names.primary, basic_category, taxonomy.primary, taxonomy.hierarchy, confidence,

@@ -77,3 +77,11 @@ def test_live_mode_without_key_fails_loudly(monkeypatch, base_request):
 
     with pytest.raises(ProviderNotConfiguredError):
         build_providers(Settings(data_mode="live", google_maps_api_key=""))
+
+
+def test_hosted_postgres_urls_get_a_driver():
+    from app.db.database import normalise_url
+
+    assert normalise_url("postgres://u:p@host/db") == "postgresql+psycopg://u:p@host/db"
+    assert normalise_url("postgresql://u:p@host/db?sslmode=require") == "postgresql+psycopg://u:p@host/db?sslmode=require"
+    assert normalise_url("sqlite:///tripaura.db") == "sqlite:///tripaura.db"

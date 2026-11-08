@@ -13,10 +13,13 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const [prefill, setPrefill] = useState<{ parsed: ParsedTrip; version: number } | null>(null);
   const [error, setError] = useState<{ message: string; details?: unknown } | null>(null);
 
+  // load once the backend has answered /status (it may be waking up on free hosting)
+  const ready = status !== null;
   useEffect(() => {
+    if (!ready) return;
     api.options().then(setOptions).catch((e: ApiError) => setError({ message: e.message }));
     api.listTrips().then(setTrips).catch(() => undefined);
-  }, []);
+  }, [ready]);
 
   const submit = async (req: TripRequest) => {
     setSubmitting(true);

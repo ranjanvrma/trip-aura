@@ -1,0 +1,39 @@
+# Deploys backend/ to a Hugging Face Space (Docker SDK) on every push to main.
+# One-time setup (GitHub repo -> Settings -> Secrets and variables -> Actions):
+#   secret   HF_TOKEN  = Hugging Face access token with "write" permission
+#   variable HF_SPACE  = <hf-username>/<space-name>, e.g. ranjanvrma/trip-aura-api
+name: Deploy backend (Hugging Face Space)
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "deploy/hf-space/**", ".github/workflows/deploy-backend-hf.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.HF_SPACE != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push backend to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          set -euo pipefail
+          git clone "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" space
+          rsync -a --delete --exclude .git --exclude tests --exclude .venv --exclude data --exclude '*.db' backend/ space/
+          cp deploy/hf-space/README.md space/README.md
+          cd space
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing to deploy"; exit 0; fi
+          git commit -m "Deploy ${GITHUB_SHA::7} from GitHub"
+          git push

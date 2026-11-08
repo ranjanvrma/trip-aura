@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     overture_enabled: bool = True
     overture_release: str = ""          # empty = discover the latest release from the STAC catalog
     wikivoyage_enabled: bool = True
+    duckdb_memory_limit: str = "256MB"   # cap for the Overture query (small hosting plans)
+    duckdb_threads: int = 2
     city_cache_days: int = Field(default=30, ge=1, le=365)
     osm_time_budget_seconds: float = 90.0   # total time allowed for the best-effort OSM layer per city
     open_http_timeout_seconds: float = 90.0
@@ -70,6 +72,8 @@ class Settings(BaseSettings):
     # ---- app ----------------------------------------------------------------
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'tripaura.db').as_posix()}"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # optional regex for extra allowed origins, e.g. Vercel preview URLs: https://trip-aura-.*\.vercel\.app
+    cors_origin_regex: str = ""
     log_level: str = "INFO"
 
     # Engine tuning (not secrets; overridable for experiments)

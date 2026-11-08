@@ -2,7 +2,9 @@
 
 You enter where you're staying, the destination, days, budget, interests, food preferences, transport and pace. TripAura returns a day-wise itinerary with timed activities, meals, rest breaks, transport legs, two separate ratings per place, food and dish recommendations, a budget breakdown and live-location updates.
 
-- **Backend:** Python, FastAPI, SQLAlchemy (SQLite), Pydantic
+**Authors:** Ranjan Verma and Chinmay Dahiya. See [Authors](#authors).
+
+- **Backend:** Python, FastAPI, SQLAlchemy (SQLite locally, Postgres in production), Pydantic
 - **Frontend:** React, Vite, TypeScript (Leaflet/OSM map now; Google Maps JS renderer turns on with a key)
 - **Data sources** (`DATA_MODE`):
   - `open` (default): any city worldwide from open data, with no API key. Sources are Overture Maps, Wikidata, OpenStreetMap, Wikivoyage, Nominatim and ECB exchange rates. Google ratings are added on top when a key is set.
@@ -43,6 +45,8 @@ trip-aura/
 │   │   │   └── pace.py             Relaxed / moderate / packed profiles
 │   │   └── routers/                /api/meta, /api/trips, /api/trips/{id}/live, /api/routes
 │   ├── tests/                      pytest suite (107 tests)
+│   ├── scripts/prefetch.py         Pre-downloads city index, AI model and DuckDB extension (used in Docker build)
+│   ├── Dockerfile                  Backend image (Hugging Face Spaces / Render / any Docker host)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -56,6 +60,10 @@ trip-aura/
 │   │   └── types/index.ts          Types mirroring the backend schemas
 │   ├── vite.config.ts              Dev proxy /api -> 127.0.0.1:8000
 │   └── .env.example
+├── frontend/vercel.json            Vercel build + SPA routing
+├── deploy/hf-space/README.md       Hugging Face Space card (copied on deploy)
+├── .github/workflows/              ci.yml (tests + build), deploy-backend-hf.yml (backend -> HF Space)
+├── render.yaml                     Render Blueprint (paid alternative backend host)
 └── .claude/launch.json             Dev-server definitions (backend, frontend)
 ```
 
@@ -210,8 +218,11 @@ Things to check when you connect:
 | `AI_ENABLED` | `false` | Turns on the optional AI overview |
 | `ANTHROPIC_API_KEY` | empty | Needed when `AI_ENABLED=true` |
 | `ANTHROPIC_MODEL` | `claude-opus-5-5` | Model for the overview (uses server-side refusal fallback) |
-| `DATABASE_URL` | `sqlite:///backend/tripaura.db` | SQLAlchemy URL |
-| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed frontend origins |
+| `DATABASE_URL` | `sqlite:///backend/tripaura.db` | SQLite or Postgres. Hosted `postgres://` URLs (Neon, Render, Supabase) work as-is |
+| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed frontend origins (comma-separated; your Vercel URL in production) |
+| `CORS_ORIGIN_REGEX` | empty | Extra allowed origins as a regex, e.g. `https://trip-aura-.*\.vercel\.app` for preview deployments |
+| `PORT` | `7860` in Docker | Port the container listens on (Render/Railway/Fly set this themselves) |
+| `DUCKDB_MEMORY_LIMIT` / `DUCKDB_THREADS` | `256MB` / `2` | Limits for the Overture query |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 `frontend/.env` (optional, copy from `frontend/.env.example`):
@@ -297,3 +308,90 @@ The frontend type-checks and builds with `npm run build`.
 | GET | `/api/geo/cities?q=` | City autocomplete (2+ letters) |
 | GET | `/api/geo/addresses?q=&lat=&lng=` | Address/hotel suggestions near a city |
 | POST | `/api/nlp/parse-trip` | Free-text trip description → form fields |
+
+## Free APIs: what you need to sign up for
+
+**Nothing is required.** In the default `open` mode, every data source is free and needs no key or account:
+
+| Service | Used for | Key? | Usage rule to respect |
+|---|---|---|---|
+| Overture Maps (public S3 files) | Places worldwide | No | Free, open licence |
+| Wikidata query service | Famous sights | No | User-Agent must include a contact URL or email (`OPEN_USER_AGENT`) |
+| OpenStreetMap Overpass | Opening hours, fees, diet tags, stations | No | Light use; cached for 30 days per city |
+| Wikivoyage | Local dishes | No | Same User-Agent rule as Wikidata |
+| Nominatim | City and hotel geocoding | No | At most 1 request/second (the app enforces it) |
+| Photon (komoot) | Address autocomplete | No | Fair use |
+| GeoNames dump | City autocomplete (downloaded once, at build time) | No | CC BY 4.0 attribution (shown in the dropdown) |
+| Frankfurter (ECB rates) | Currency conversion | No | Free |
+| OpenStreetMap tiles | Map background (Leaflet) | No | Attribution shown; fine for low traffic |
+
+**Optional extras (not free, or free only up to a quota):**
+- **Google Maps Platform** (`GOOGLE_MAPS_API_KEY`) adds real Google ratings and reviews to the places in each plan. Google gives a free monthly quota per API, but you need a billing account with a card. Check Google's current pricing before enabling it, and restrict the key to the Places API.
+- **Anthropic** (`ANTHROPIC_API_KEY`, `AI_ENABLED=true`) adds an AI-written trip overview. It's paid per use, and the app works fully without it.
+
+## Deployment
+
+The recommended free setup:
+
+| Part | Host | Why |
+|---|---|---|
+| Frontend (React/Vite) | **Vercel**, Hobby plan (free) | Static site, global CDN, deploys automatically from GitHub |
+| Backend (FastAPI) | **Hugging Face Spaces**, Docker, CPU Basic (free: 2 vCPU, 16 GB RAM) | The backend measured ~750 MB peak memory (Overture query + AI model + city index). Render's free tier has 512 MB, and Vercel functions have no persistent disk. Spaces sleep only after 48 h without visits |
+| Database | **Neon** Postgres, free plan (1 GB) | Keeps saved trips and cached cities across restarts. Spaces and Render free disks are wiped on restart, and Render's free Postgres expires after 30 days |
+
+A free Space sleeps after 48 hours without visits. The first visit afterwards takes about a minute while it wakes; the site shows a "Waking up the server" message and retries automatically. The first trip to a new city takes 1–3 minutes, and later trips there take seconds.
+
+### 1. Database (Neon, ~3 minutes)
+1. Sign up at [neon.com](https://neon.com) (free, no card) and create a project, for example `trip-aura`. Pick the region closest to your users.
+2. Copy the **connection string** (`postgresql://...neon.tech/neondb?sslmode=require`). That's your `DATABASE_URL`. Tables are created automatically on first start.
+
+### 2. Backend (Hugging Face Space, ~10 minutes)
+1. Sign up at [huggingface.co](https://huggingface.co), then **New Space**:
+   - Name: `trip-aura-api`
+   - SDK: **Docker**, template **Blank**
+   - Hardware: **CPU basic (free)**
+   - Visibility: **Public** (the frontend must be able to reach it)
+2. In the Space, go to **Settings → Variables and secrets** and add:
+   - **Secret** `DATABASE_URL`: the Neon connection string
+   - **Variable** `CORS_ORIGINS`: your Vercel URL from step 3, e.g. `https://trip-aura.vercel.app` (you can update it later)
+   - **Variable** `CORS_ORIGIN_REGEX` (optional): `https://trip-aura-.*\.vercel\.app`, which allows Vercel preview deployments
+   - **Variable** `OPEN_USER_AGENT`: `TripAura/1.0 (+https://github.com/ranjanvrma/trip-aura)`
+   - **Secret** `GOOGLE_MAPS_API_KEY` (optional)
+3. Create a Hugging Face **access token** with *write* permission (Settings → Access Tokens).
+4. In the GitHub repo, go to **Settings → Secrets and variables → Actions** and add:
+   - **Secret** `HF_TOKEN`: the token from the previous step
+   - **Variable** `HF_SPACE`: `<your-hf-username>/trip-aura-api`
+5. Push to `main`, or run **Actions → "Deploy backend (Hugging Face Space)" → Run workflow**. The workflow copies `backend/` and `deploy/hf-space/README.md` into the Space. Hugging Face then builds the Docker image, which takes about 5–8 minutes the first time because it pre-downloads the city list and AI model.
+6. Check that it's running: `https://<your-hf-username>-trip-aura-api.hf.space/api/health` should return `{"status":"ok"}`, and `/docs` shows the API.
+
+### 3. Frontend (Vercel, ~5 minutes)
+1. At [vercel.com](https://vercel.com), go to **Add New → Project** and import the GitHub repo.
+2. Set **Root Directory** to `frontend`. Vercel detects Vite; `frontend/vercel.json` already sets the build and SPA routing.
+3. Under **Environment Variables**, add `VITE_API_BASE_URL` = `https://<your-hf-username>-trip-aura-api.hf.space` (no trailing slash).
+4. Click **Deploy**. Then put the final URL into the Space's `CORS_ORIGINS` and restart the Space (Settings → Factory reboot, or push again).
+
+### 4. Check it end to end
+- Open the Vercel URL. The banner should say "Worldwide open data".
+- Type "Lis" in the city box; Lisbon should appear in the dropdown.
+- Generate a 2-day trip. The first trip to a new city takes 1–3 minutes.
+- If the page reports it can't reach the backend, check that `VITE_API_BASE_URL` is right and that `CORS_ORIGINS` contains the exact Vercel URL (no trailing slash).
+
+### Alternative: Render (paid)
+`render.yaml` is a Render Blueprint for the same Docker image. It uses the **Standard** plan (2 GB, paid), because the free and Starter plans have 512 MB, which is too little for this backend. The settings are the same as for the Space. To trim memory instead (not recommended), set `SEMANTIC_ENABLED=false` and `OVERTURE_ENABLED=false`. Places then come only from Wikidata and the often-busy public OSM servers.
+
+### Continuous integration
+`.github/workflows/ci.yml` runs the backend tests (Python 3.12) and the frontend build on every push and pull request. The backend deploy workflow only runs when `HF_SPACE` is set.
+
+## Authors
+
+| | |
+|---|---|
+| **Ranjan Verma** | Co-author |
+| **Chinmay Dahiya** | Co-author |
+
+TripAura is built and maintained jointly by both authors.
+
+**Appearing in GitHub's contributors list:** GitHub lists a person as a contributor when commits in the repository are authored with an email address linked to their GitHub account. Ways to make sure both authors appear:
+1. Each author commits from their own machine with `git config user.email` set to the email on their GitHub account (or their `ID+username@users.noreply.github.com` address). Add the second author as a collaborator under **Settings → Collaborators**.
+2. For work done together, add a co-author line at the end of the commit message:
+   `Co-authored-by: Chinmay Dahiya <his-github-email>`. GitHub shows both avatars on the commit and credits both profiles.

@@ -1,0 +1,28 @@
+# Render Blueprint (alternative backend host). Render's free and Starter plans have 512 MB RAM,
+# which is not enough for the Overture query plus the embedding model (~750 MB peak measured),
+# so this uses the Standard plan (2 GB, paid). For a free backend use the Hugging Face Space
+# workflow in .github/workflows/deploy-backend-hf.yml instead. See README -> Deployment.
+services:
+  - type: web
+    name: trip-aura-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATA_MODE
+        value: open
+      - key: PORT
+        value: "7860"
+      - key: DATABASE_URL          # Neon (or other) Postgres URL - set in the dashboard
+        sync: false
+      - key: CORS_ORIGINS          # e.g. https://trip-aura.vercel.app
+        sync: false
+      - key: CORS_ORIGIN_REGEX     # e.g. https://trip-aura-.*\.vercel\.app
+        sync: false
+      - key: OPEN_USER_AGENT       # TripAura/0.1 (+https://github.com/<you>/trip-aura)
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY   # optional
+        sync: false
