@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** Azure setup script auto-picks a region allowed by the student subscription
+**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** backend is LIVE on Azure (Central India); Vercel + GitHub deploy secrets still to do
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -34,7 +34,8 @@
   - NLP features: city autocomplete, trip-text parser, semantic matching, sentiment
   - budget and live location
   - **112 backend tests pass**, and the frontend builds
-- **Deployment is configured but NOT live yet.** Chosen stack: **Vercel** (frontend) + **Azure Container Apps via Azure for Students** (backend, no card) + **GitHub Container Registry** (image) + **Neon** (Postgres).
+- **Backend is LIVE** at `https://trip-aura-api.wittysand-9be93277.centralindia.azurecontainerapps.io` (Azure Container Apps, Central India). Frontend (Vercel) not yet deployed.
+- Deployment plan: Chosen stack: **Vercel** (frontend) + **Azure Container Apps via Azure for Students** (backend, no card) + **GitHub Container Registry** (image) + **Neon** (Postgres).
   - Neon project exists (created by Ranjan in AWS US East 1).
   - Still to do: Azure, Vercel, and the GitHub secrets ([§8](#8-deployment-status)).
 - **Next:** finish deployment, then a **premium animated UI redesign** ([§9](#9-open-tasks--next-steps)).
@@ -164,7 +165,8 @@ Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`)
 | Neon Postgres | ✅ created (AWS US East 1) | connection string held privately by Ranjan |
 | Backend image on GHCR | ✅ | `ghcr.io/ranjanvrma/trip-aura-api:latest`, public (inherited from the repo); built by `deploy-backend-azure.yml` |
 | Azure for Students | ✅ activated (Ranjan, college account); credit valid until 2027-01-29, renew while a student | |
-| Azure Container App `trip-aura-api` (rg `trip-aura`) | ⏳ not created | first `setup.sh` run: East US rejected by the student region policy (`RequestDisallowedByAzure`); an empty `trip-aura` group exists in eastus. The script now reads the allowed regions from policy and picks one (prefers US, then India); rerun it. Then add `AZURE_CREDENTIALS` + `AZURE_ENABLED` |
+| Azure Container App `trip-aura-api` (rg `trip-aura`, env `trip-aura-env`) | ✅ **live** in **centralindia** (allowed regions: centralindia, eastasia, koreacentral, malaysiawest, southeastasia; resource group itself is in eastus) | URL `https://trip-aura-api.wittysand-9be93277.centralindia.azurecontainerapps.io`. Verified 2026-11-08: `/api/health` ok, semantic model loaded, city search ok, new Lisbon trip 35 s (saved to Neon), cached repeat 0.4 s |
+| GitHub auto-deploy (`AZURE_CREDENTIALS` secret, `AZURE_ENABLED` var) | ⏳ | the first service-principal secret was exposed in a screenshot; reset it (rerun `az ad sp create-for-rbac --name trip-aura-github ... --json-auth`) and store only the new JSON in GitHub |
 | Vercel frontend | ⏳ not created | root `frontend`, env `VITE_API_BASE_URL`; then set `CORS_ORIGINS` on the container app |
 | Alternatives | 💤 | Modal (`modal_app.py`, needs card), VPS (`deploy/oracle/`), Render (`render.yaml`, paid) |
 
@@ -174,7 +176,7 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 
 ## 9. Open tasks / next steps
 
-1. **Finish deployment** (§8), then verify end to end: health check, city autocomplete, a fresh-city trip.
+1. **Finish deployment:** reset + store `AZURE_CREDENTIALS`, set `AZURE_ENABLED=true`, rotate the Neon password (it was exposed in a screenshot) and update the container secret `database-url`, create the Vercel project, then set `CORS_ORIGINS` on the container app.
 2. **UI redesign** (requested by the owners):
    - premium, product-grade look with animations, transitions, micro-interactions and a responsive layout
    - keep the `types/index.ts` contract and the honesty labels: rating source badges, "estimate" tags, attributions footer
@@ -217,7 +219,8 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-08 | (this commit) | `deploy/azure/setup.sh`: detect regions allowed by the subscription policy and pick one; reuse an existing resource group |
+| 2026-11-08 | (this commit) | HANDOFF: backend live on Azure Central India, verification results, remaining deploy steps |
+| 2026-11-08 | `c88cc71` | `deploy/azure/setup.sh`: detect regions allowed by the subscription policy and pick one; reuse an existing resource group |
 | 2026-11-08 | `a528f6d` | Dockerfile: create `data/runtime` and chown the app folder as root before `USER user` (the first GHCR build failed); Dependabot ignores semver-major and groups Actions bumps |
 | 2026-11-08 | `4017c8b` | Backend host → Azure Container Apps (Azure for Students): GHCR build + Azure deploy workflow, `deploy/azure/setup.sh`. Docs consolidated into README (with architecture diagram) + HANDOFF; removed `docs/`, `AGENTS.md`, `CONTRIBUTING.md` |
 | 2026-11-08 | `c4c6eb4` | HANDOFF.md, short README + docs, pre-commit handoff hook, PR template, Dependabot, `.editorconfig`, AI-tool naming removed, tidier `.gitignore` |
