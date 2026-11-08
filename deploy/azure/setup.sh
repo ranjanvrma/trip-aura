@@ -32,8 +32,31 @@ az provider register --namespace Microsoft.App --wait
 az provider register --namespace Microsoft.OperationalInsights --wait
 az extension add --name containerapp --upgrade --only-show-errors
 
-say "Creating resource group $RG in $LOCATION"
-az group create --name "$RG" --location "$LOCATION" --output none
+# Azure for Students subscriptions only allow a few regions ("RequestDisallowedByAzure").
+# Read the allowed list from the subscription's policy and pick one if LOCATION isn't allowed.
+ALLOWED="$(az policy assignment list --disable-scope-strict-match \
+  --query "[].parameters.listOfAllowedLocations.value[]" --output tsv 2>/dev/null | sort -u | tr '\n' ' ')"
+if [ -n "$ALLOWED" ]; then
+  echo "Regions allowed for this subscription: $ALLOWED"
+  if ! printf ' %s ' "$ALLOWED" | grep -q " ${LOCATION} "; then
+    for pref in eastus eastus2 centralus westus2 northcentralus southcentralus canadacentral \
+                centralindia southindia westindia uksouth westeurope northeurope \
+                southeastasia eastasia koreacentral japaneast australiaeast; do
+      if printf ' %s ' "$ALLOWED" | grep -q " ${pref} "; then LOCATION="$pref"; break; fi
+    done
+    if ! printf ' %s ' "$ALLOWED" | grep -q " ${LOCATION} "; then
+      LOCATION="$(printf '%s' "$ALLOWED" | awk '{print $1}')"
+    fi
+  fi
+fi
+echo "Using region: $LOCATION"
+
+if az group show --name "$RG" --output none 2>/dev/null; then
+  say "Using existing resource group $RG"   # its own location doesn't matter for the resources inside
+else
+  say "Creating resource group $RG in $LOCATION"
+  az group create --name "$RG" --location "$LOCATION" --output none
+fi
 
 say "Creating Container Apps environment (logs to console only, no paid workspace)"
 az containerapp env create --name "$ENV_NAME" --resource-group "$RG" --location "$LOCATION" \

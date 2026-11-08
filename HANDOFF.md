@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** fixed the backend Docker build (data folder permissions); Dependabot skips major versions
+**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** Azure setup script auto-picks a region allowed by the student subscription
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -162,8 +162,9 @@ Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`)
 |---|---|---|
 | GitHub repo `ranjanvrma/trip-aura` | ✅ | CI (`ci.yml`): tests + frontend build on push/PR |
 | Neon Postgres | ✅ created (AWS US East 1) | connection string held privately by Ranjan |
-| Backend image on GHCR | ⏳ | first run (`4017c8b`) failed: `mkdir data/runtime` as non-root user. Fixed in the Dockerfile (create + chown as root); re-runs on the next push. Then set package **Public** |
-| Azure Container App `trip-aura-api` (rg `trip-aura`, East US) | ⏳ not created | run `deploy/azure/setup.sh` in Azure Cloud Shell after activating Azure for Students (college email); then add `AZURE_CREDENTIALS` + `AZURE_ENABLED` |
+| Backend image on GHCR | ✅ | `ghcr.io/ranjanvrma/trip-aura-api:latest`, public (inherited from the repo); built by `deploy-backend-azure.yml` |
+| Azure for Students | ✅ activated (Ranjan, college account); credit valid until 2027-01-29, renew while a student | |
+| Azure Container App `trip-aura-api` (rg `trip-aura`) | ⏳ not created | first `setup.sh` run: East US rejected by the student region policy (`RequestDisallowedByAzure`); an empty `trip-aura` group exists in eastus. The script now reads the allowed regions from policy and picks one (prefers US, then India); rerun it. Then add `AZURE_CREDENTIALS` + `AZURE_ENABLED` |
 | Vercel frontend | ⏳ not created | root `frontend`, env `VITE_API_BASE_URL`; then set `CORS_ORIGINS` on the container app |
 | Alternatives | 💤 | Modal (`modal_app.py`, needs card), VPS (`deploy/oracle/`), Render (`render.yaml`, paid) |
 
@@ -196,6 +197,7 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 - Travel times are heuristic in open mode (no live traffic).
 - Bumping `DATASET_VERSION` rebuilds every cached city.
 - `opening_hours` parser: the common subset only; seasonal and sunrise rules become "unknown".
+- Azure for Students subscriptions only allow a few regions; `setup.sh` picks one from `az policy assignment list` (override with `LOCATION=...`).
 - Azure scales to zero, so the first request after idle takes ~30–60 s while the image starts (the frontend retries for 2 min).
 - Windows dev: `.gitattributes` forces LF for scripts, Dockerfile, Caddyfile, YAML and hooks.
 - Mock mode supports Jaipur and INR only (by design).
@@ -215,7 +217,8 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-08 | (this commit) | Dockerfile: create `data/runtime` and chown the app folder as root before `USER user` (the first GHCR build failed); Dependabot ignores semver-major and groups Actions bumps |
+| 2026-11-08 | (this commit) | `deploy/azure/setup.sh`: detect regions allowed by the subscription policy and pick one; reuse an existing resource group |
+| 2026-11-08 | `a528f6d` | Dockerfile: create `data/runtime` and chown the app folder as root before `USER user` (the first GHCR build failed); Dependabot ignores semver-major and groups Actions bumps |
 | 2026-11-08 | `4017c8b` | Backend host → Azure Container Apps (Azure for Students): GHCR build + Azure deploy workflow, `deploy/azure/setup.sh`. Docs consolidated into README (with architecture diagram) + HANDOFF; removed `docs/`, `AGENTS.md`, `CONTRIBUTING.md` |
 | 2026-11-08 | `c4c6eb4` | HANDOFF.md, short README + docs, pre-commit handoff hook, PR template, Dependabot, `.editorconfig`, AI-tool naming removed, tidier `.gitignore` |
 | 2026-11-08 | `16ca811` | Modal deployment; parallel city loading (245 s → 37 s); OSM 25 s cap; slim Overture + shared DuckDB; offline city resolution; shallow copies; startup warm-up; 112 tests |
