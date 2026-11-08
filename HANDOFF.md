@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** backend host switched to Azure for Students; docs merged into README + HANDOFF only
+**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** fixed the backend Docker build (data folder permissions); Dependabot skips major versions
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -162,7 +162,7 @@ Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`)
 |---|---|---|
 | GitHub repo `ranjanvrma/trip-aura` | ✅ | CI (`ci.yml`): tests + frontend build on push/PR |
 | Neon Postgres | ✅ created (AWS US East 1) | connection string held privately by Ranjan |
-| Backend image on GHCR | ⏳ | built by `deploy-backend-azure.yml` on the next push touching `backend/`; then set package **Public** |
+| Backend image on GHCR | ⏳ | first run (`4017c8b`) failed: `mkdir data/runtime` as non-root user. Fixed in the Dockerfile (create + chown as root); re-runs on the next push. Then set package **Public** |
 | Azure Container App `trip-aura-api` (rg `trip-aura`, East US) | ⏳ not created | run `deploy/azure/setup.sh` in Azure Cloud Shell after activating Azure for Students (college email); then add `AZURE_CREDENTIALS` + `AZURE_ENABLED` |
 | Vercel frontend | ⏳ not created | root `frontend`, env `VITE_API_BASE_URL`; then set `CORS_ORIGINS` on the container app |
 | Alternatives | 💤 | Modal (`modal_app.py`, needs card), VPS (`deploy/oracle/`), Render (`render.yaml`, paid) |
@@ -179,7 +179,8 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
    - keep the `types/index.ts` contract and the honesty labels: rating source badges, "estimate" tags, attributions footer
    - add a progress indicator for first-time city loading
 3. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email, or commits carry `Co-authored-by: Chinmay Dahiya <github-email>` (his email is still unknown).
-4. **Nice to have:**
+4. **Dependabot PRs:** merge the green ones (#1–#3 GitHub Actions bumps, #5/#7/#9 backend minimums). Close #4 (React 19), #6 (react-leaflet 5) and #8 (Vite plugin 6): those are major upgrades that break the frontend, so do them during the UI redesign. Majors are now ignored by `dependabot.yml`.
+5. **Nice to have:**
    - async city loading with progress polling
    - real routing (`ROUTING_ENGINE=osrm` exists; it uses public demo servers)
    - GTFS transit
@@ -214,7 +215,8 @@ Unverified until first deploy: the GHCR build, the Azure app creation (region po
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-08 | (this commit) | Backend host → Azure Container Apps (Azure for Students): GHCR build + Azure deploy workflow, `deploy/azure/setup.sh`. Docs consolidated into README (with architecture diagram) + HANDOFF; removed `docs/`, `AGENTS.md`, `CONTRIBUTING.md` |
+| 2026-11-08 | (this commit) | Dockerfile: create `data/runtime` and chown the app folder as root before `USER user` (the first GHCR build failed); Dependabot ignores semver-major and groups Actions bumps |
+| 2026-11-08 | `4017c8b` | Backend host → Azure Container Apps (Azure for Students): GHCR build + Azure deploy workflow, `deploy/azure/setup.sh`. Docs consolidated into README (with architecture diagram) + HANDOFF; removed `docs/`, `AGENTS.md`, `CONTRIBUTING.md` |
 | 2026-11-08 | `c4c6eb4` | HANDOFF.md, short README + docs, pre-commit handoff hook, PR template, Dependabot, `.editorconfig`, AI-tool naming removed, tidier `.gitignore` |
 | 2026-11-08 | `16ca811` | Modal deployment; parallel city loading (245 s → 37 s); OSM 25 s cap; slim Overture + shared DuckDB; offline city resolution; shallow copies; startup warm-up; 112 tests |
 | 2026-11-08 | `c767eec` | Oracle Cloud VPS deployment (compose + Caddy HTTPS, scripts, SSH deploy); Hugging Face removed |

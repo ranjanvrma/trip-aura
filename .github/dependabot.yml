@@ -1,4 +1,5 @@
 # Weekly dependency updates, grouped so minor/patch bumps arrive as one PR per ecosystem.
+# Major versions are skipped (they need code changes, e.g. React 19); upgrade those deliberately.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -8,6 +9,9 @@ updates:
     groups:
       python-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -16,7 +20,13 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: monthly }
+    groups:
+      actions:
+        patterns: ["*"]

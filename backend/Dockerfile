@@ -1,4 +1,4 @@
-# TripAura backend - works on Hugging Face Spaces (Docker), Render, Railway, Fly.io or any Docker host.
+# TripAura backend image - Azure Container Apps, a VPS (deploy/oracle), Render or any Docker host.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/home/user/app/data \
     HOME=/home/user
 
-# Hugging Face Spaces runs containers as uid 1000; using the same user works everywhere.
+# Non-root user (uid 1000) for safety.
 RUN useradd --create-home --uid 1000 user
 WORKDIR /home/user/app
 
@@ -16,14 +16,15 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY --chown=user app ./app
 COPY --chown=user scripts ./scripts
+# WORKDIR is created by root: create the data folders (downloads, SQLite fallback volume) and
+# hand the whole app folder to the runtime user before switching to it.
+RUN mkdir -p data/runtime && chown -R user:user /home/user/app
 USER user
-# writable folder for a mounted volume (SQLite fallback, runtime files)
-RUN mkdir -p data/runtime
 
 # Bake the city index, embedding model and DuckDB extension into the image (fast, offline-safe start).
 RUN python scripts/prefetch.py
 
-# Hugging Face Spaces expects 7860; Render/Railway/Fly inject $PORT.
+# The container listens on $PORT (7860 by default; Azure targets 7860, Render/Railway inject their own).
 ENV PORT=7860
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"7860\")}/api/health')"
