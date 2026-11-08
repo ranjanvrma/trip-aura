@@ -122,13 +122,13 @@ Frontend: `VITE_API_BASE_URL` is the backend URL in production. Leave it empty l
 - **NLP / AI:** city autocomplete, address suggestions, "describe your trip" parser, typo-tolerant and semantic interests, review sentiment.
 - **Product features:** live location updates, worldwide cost model with 31 currencies, honest source labels.
 - **Quality:** 112 offline tests, CI on every push, a HANDOFF document kept current by a commit hook.
-- **Deployment trial:** the full stack was deployed and verified once on Azure (health, city search, a real trip saved to Postgres). It was then deliberately torn down, and the cloud resources were deleted, to be redone cleanly later.
+- **Deployment method worked out:** a trial run proved the free setup below works end to end. It was then removed on purpose so the real deployment starts clean.
 
-**Next:** redeploy with the plan below, then a premium animated UI redesign.
+**Next:** deploy with the plan below, re-running every test on deploy day, then a premium animated UI redesign.
 
 ## Deployment plan (not deployed yet)
 
-The chosen free setup, needing no credit card, was tested end to end once:
+We now know how to deploy. This free setup needs no credit card and has been proven in a trial run:
 
 | Part | Service | Notes |
 |---|---|---|
@@ -143,7 +143,7 @@ What we learned:
 - **Regions:** student subscriptions only allow some regions. Ours allowed Central India and East Asia, not East US, so pick from the allowed list.
 - **User-Agent:** `OPEN_USER_AGENT` must contain a contact URL, or Wikimedia returns 403.
 
-The exact steps, and how to restore the tested deployment files from git history, are in [HANDOFF.md](HANDOFF.md#8-deployment-status).
+The exact steps, how to restore the deployment files from git history, and the full test checklist for deploy day are in [HANDOFF.md](HANDOFF.md#8-deployment-status).
 
 ## API
 

@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** deployment trial torn down (all cloud resources deleted) and deployment files removed; plan kept in README + §8
+**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** docs say the deployment method is known and proven; deploy-day full re-test checklist added (§8 step 7)
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -34,8 +34,8 @@
   - NLP features: city autocomplete, trip-text parser, semantic matching, sentiment
   - budget and live location
   - **112 backend tests pass**, the frontend builds, and CI runs on every push
-- **Not deployed.** On 2026-11-08 the full stack was deployed and verified once on Azure, then **deliberately torn down**. All cloud resources were deleted (Azure, Neon, Vercel, GHCR image) and the deployment files were removed from the repo. The tested plan and recovery steps are in [§8](#8-deployment-status).
-- **Next:** redeploy following §8, then a **premium animated UI redesign** ([§9](#9-open-tasks--next-steps)).
+- **Not deployed yet, but we know exactly how.** On 2026-11-08 a trial run proved the whole free setup works (Vercel + Azure for Students + GHCR + Neon). It was then **deliberately removed** (cloud resources deleted, deployment files taken out of the repo) so the real deployment starts clean. The method is in [§8](#8-deployment-status).
+- **Next:** deploy following §8 and **re-run every test and check on deploy day** (the trial results are not a substitute), then a **premium animated UI redesign** ([§9](#9-open-tasks--next-steps)).
 
 ---
 
@@ -159,14 +159,14 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 8. Deployment status
 
-**Current state: nothing deployed.** CI (`ci.yml`) still runs tests + frontend build on every push.
+**Current state: not deployed. The method is known and proven; the real deployment is the next step.** CI (`ci.yml`) still runs tests + frontend build on every push.
 
-**What happened on 2026-11-08 (trial):**
+**How we learned it (trial on 2026-11-08):**
 - **Built:** the backend image on GHCR, the Azure Container App (Central India, 1 vCPU / 2 GiB, scale to zero), and a Neon Postgres database.
 - **Verified:** `/api/health` ok, semantic model loaded, city search ok, a new Lisbon trip in 35 s saved to Postgres, and a cached repeat in 0.4 s.
 - **Torn down:** the Azure resource group `trip-aura` and service principal `trip-aura-github`, the GHCR package `trip-aura-api`, the Neon project, and the Vercel project were all deleted by Ranjan.
 
-**Plan for redeploying (free, no card):**
+**How to deploy (free, no card):**
 1. **Restore the tested files from git history:**
    ```bash
    git checkout 8443341 -- backend/Dockerfile backend/.dockerignore backend/scripts deploy/azure .github/workflows/deploy-backend-azure.yml frontend/vercel.json
@@ -181,7 +181,16 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 5. **GitHub:** secret `AZURE_CREDENTIALS` (that JSON) + variable `AZURE_ENABLED=true`, so later pushes roll out automatically.
 6. **Vercel:** root `frontend`, env `VITE_API_BASE_URL` = backend URL. Then `az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://<site>.vercel.app`.
 
-**Trial gotchas (already fixed in commit `8443341`):**
+7. **Re-test everything on deploy day.** Treat it as a fresh deployment and do every check again:
+   - locally first: `pytest -q` (all tests pass) and `npm run build`
+   - GitHub Actions: CI green, and the image job green
+   - backend: `GET /api/health` is ok; `GET /api/meta/status` shows the data mode and semantic model; `GET /api/geo/cities?q=lis` returns cities
+   - a new trip for an uncached city (about 30–60 s) is saved to Postgres; repeating it is fast (cache hit)
+   - frontend on Vercel: autocomplete, "describe your trip", generate, map, budget and saved trips all work; no CORS errors in the browser console
+   - cold start: after the app scales to zero, the first request wakes it and the frontend's retry message clears
+   - secrets: nothing secret is committed, and none is pasted into chats or screenshots
+
+**Gotchas from the trial (already fixed in commit `8443341`):**
 - The Dockerfile must `mkdir` + `chown` the app folder as root before `USER user`.
 - `az containerapp revision restart` fails while the app is scaled to zero. To apply a new secret, create a new revision with `az containerapp update ... --set-env-vars SECRET_ROTATED_AT=$(date +%s)`.
 - Delete leftovers with `az group delete -n trip-aura --yes` and `az ad app delete --id <appId>` (the service principal). A hidden `ME_*` resource group may also need deleting.
@@ -190,7 +199,7 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 9. Open tasks / next steps
 
-1. **Redeploy** following §8 (restore files from `8443341`, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then verify end to end.
+1. **Deploy** following §8 (restore files from `8443341`, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then run the full deploy-day test list (§8 step 7).
 2. **UI redesign** (requested by the owners):
    - premium, product-grade look with animations, transitions, micro-interactions and a responsive layout
    - keep the `types/index.ts` contract and the honesty labels: rating source badges, "estimate" tags, attributions footer
@@ -232,7 +241,8 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-08 | (this commit) | Deployment trial torn down: all cloud resources deleted; removed Dockerfile, deploy scripts, deploy workflows, `modal_app.py`, `render.yaml`, `vercel.json` (restore from `8443341`); README gains *Project status* + *Deployment plan*; HANDOFF §8 is now the redeploy plan |
+| 2026-11-08 | (this commit) | Docs: deployment method is known and proven; added deploy-day full re-test checklist (§8 step 7) |
+| 2026-11-08 | `665e0ba` | Deployment trial torn down: all cloud resources deleted; removed Dockerfile, deploy scripts, deploy workflows, `modal_app.py`, `render.yaml`, `vercel.json` (restore from `8443341`); README gains *Project status* + *Deployment plan*; HANDOFF §8 is now the redeploy plan |
 | 2026-11-08 | `8443341` | HANDOFF: backend live on Azure Central India, verification results (last commit with all deployment files) |
 | 2026-11-08 | `c88cc71` | `deploy/azure/setup.sh`: detect regions allowed by the subscription policy and pick one; reuse an existing resource group |
 | 2026-11-08 | `a528f6d` | Dockerfile: create `data/runtime` and chown the app folder as root before `USER user` (the first GHCR build failed); Dependabot ignores semver-major and groups Actions bumps |
