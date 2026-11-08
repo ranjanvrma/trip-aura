@@ -5,10 +5,11 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_DATABASE_URL = f"sqlite:///{(BACKEND_DIR / 'tripaura.db').as_posix()}"
 
 
 class DataMode(str, Enum):
@@ -70,7 +71,7 @@ class Settings(BaseSettings):
     ai_enabled: bool = False
 
     # ---- app ----------------------------------------------------------------
-    database_url: str = f"sqlite:///{(BACKEND_DIR / 'tripaura.db').as_posix()}"
+    database_url: str = DEFAULT_DATABASE_URL
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     # optional regex for extra allowed origins, e.g. Vercel preview URLs: https://trip-aura-.*\.vercel\.app
     cors_origin_regex: str = ""
@@ -79,6 +80,12 @@ class Settings(BaseSettings):
     # Engine tuning (not secrets; overridable for experiments)
     max_candidate_places: int = Field(default=150, ge=10, le=500)
     max_food_candidates: int = Field(default=800, ge=10, le=3000)
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _blank_db_means_default(cls, v):
+        # `DATABASE_URL=` (empty) in an env file means "use the default SQLite file"
+        return v if isinstance(v, str) and v.strip() else DEFAULT_DATABASE_URL
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -46,7 +46,7 @@ trip-aura/
 │   │   └── routers/                /api/meta, /api/trips, /api/trips/{id}/live, /api/routes
 │   ├── tests/                      pytest suite (107 tests)
 │   ├── scripts/prefetch.py         Pre-downloads city index, AI model and DuckDB extension (used in Docker build)
-│   ├── Dockerfile                  Backend image (Hugging Face Spaces / Render / any Docker host)
+│   ├── Dockerfile                  Backend image (Oracle VM / Render / any Docker host)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -61,8 +61,8 @@ trip-aura/
 │   ├── vite.config.ts              Dev proxy /api -> 127.0.0.1:8000
 │   └── .env.example
 ├── frontend/vercel.json            Vercel build + SPA routing
-├── deploy/hf-space/README.md       Hugging Face Space card (copied on deploy)
-├── .github/workflows/              ci.yml (tests + build), deploy-backend-hf.yml (backend -> HF Space)
+├── deploy/oracle/                  Oracle Cloud VM deployment: docker-compose, Caddyfile, setup.sh, update.sh
+├── .github/workflows/              ci.yml (tests + build), deploy-backend-oracle.yml (backend -> Oracle VM)
 ├── render.yaml                     Render Blueprint (paid alternative backend host)
 └── .claude/launch.json             Dev-server definitions (backend, frontend)
 ```
@@ -335,52 +335,84 @@ The recommended free setup:
 
 | Part | Host | Why |
 |---|---|---|
-| Frontend (React/Vite) | **Vercel**, Hobby plan (free) | Static site, global CDN, deploys automatically from GitHub |
-| Backend (FastAPI) | **Hugging Face Spaces**, Docker, CPU Basic (free: 2 vCPU, 16 GB RAM) | The backend measured ~750 MB peak memory (Overture query + AI model + city index). Render's free tier has 512 MB, and Vercel functions have no persistent disk. Spaces sleep only after 48 h without visits |
-| Database | **Neon** Postgres, free plan (1 GB) | Keeps saved trips and cached cities across restarts. Spaces and Render free disks are wiped on restart, and Render's free Postgres expires after 30 days |
+| Frontend (React/Vite) | **Vercel**, Hobby plan (free) | Static site, global CDN, redeploys automatically from GitHub |
+| Backend (FastAPI) | **Oracle Cloud Always Free**: one Ampere A1 ARM VM (2 OCPU, 12 GB RAM) running Docker + Caddy | The backend peaks at ~750 MB RAM (Overture query + AI model + city index), which rules out 512 MB free tiers (Render, Koyeb). Hugging Face Docker Spaces are now paid. The VM is always on, so there are no cold starts |
+| Database | **Neon** Postgres, free plan (1 GB) | Managed and durable. Pick the same area as the VM (both US East: Neon `us-east-1`, Oracle Ashburn) |
+| HTTPS | **Caddy** + Let's Encrypt on a free `sslip.io` hostname (e.g. `129-146-10-20.sslip.io`) | Vercel serves the site over HTTPS, so the API must be HTTPS too. No domain purchase needed |
 
-A free Space sleeps after 48 hours without visits. The first visit afterwards takes about a minute while it wakes; the site shows a "Waking up the server" message and retries automatically. The first trip to a new city takes 1–3 minutes, and later trips there take seconds.
+Files: `deploy/oracle/` (docker-compose, Caddyfile, `.env.example`, `setup.sh`, `update.sh`) and `.github/workflows/deploy-backend-oracle.yml` (auto-deploy over SSH).
 
-### 1. Database (Neon, ~3 minutes)
-1. Sign up at [neon.com](https://neon.com) (free, no card) and create a project, for example `trip-aura`. Pick the region closest to your users.
-2. Copy the **connection string** (`postgresql://...neon.tech/neondb?sslmode=require`). That's your `DATABASE_URL`. Tables are created automatically on first start.
+### 1. Database (Neon)
+Create a project (region **AWS US East 1**), click **Connect**, turn on **connection pooling**, and copy the connection string. That's your `DATABASE_URL`. Tables are created automatically on first start.
 
-### 2. Backend (Hugging Face Space, ~10 minutes)
-1. Sign up at [huggingface.co](https://huggingface.co), then **New Space**:
-   - Name: `trip-aura-api`
-   - SDK: **Docker**, template **Blank**
-   - Hardware: **CPU basic (free)**
-   - Visibility: **Public** (the frontend must be able to reach it)
-2. In the Space, go to **Settings → Variables and secrets** and add:
-   - **Secret** `DATABASE_URL`: the Neon connection string
-   - **Variable** `CORS_ORIGINS`: your Vercel URL from step 3, e.g. `https://trip-aura.vercel.app` (you can update it later)
-   - **Variable** `CORS_ORIGIN_REGEX` (optional): `https://trip-aura-.*\.vercel\.app`, which allows Vercel preview deployments
-   - **Variable** `OPEN_USER_AGENT`: `TripAura/1.0 (+https://github.com/ranjanvrma/trip-aura)`
-   - **Secret** `GOOGLE_MAPS_API_KEY` (optional)
-3. Create a Hugging Face **access token** with *write* permission (Settings → Access Tokens).
-4. In the GitHub repo, go to **Settings → Secrets and variables → Actions** and add:
-   - **Secret** `HF_TOKEN`: the token from the previous step
-   - **Variable** `HF_SPACE`: `<your-hf-username>/trip-aura-api`
-5. Push to `main`, or run **Actions → "Deploy backend (Hugging Face Space)" → Run workflow**. The workflow copies `backend/` and `deploy/hf-space/README.md` into the Space. Hugging Face then builds the Docker image, which takes about 5–8 minutes the first time because it pre-downloads the city list and AI model.
-6. Check that it's running: `https://<your-hf-username>-trip-aura-api.hf.space/api/health` should return `{"status":"ok"}`, and `/docs` shows the API.
+### 2. Oracle Cloud account
+1. Sign up at [oracle.com/cloud/free](https://www.oracle.com/cloud/free/). Oracle asks for a card for identity verification; Always Free resources are not charged.
+2. **Home region:** choose **US East (Ashburn)**, close to the Neon database. You can't change it later, and Always Free VMs can only run in the home region.
+3. Optional, recommended once the account is active: **upgrade to Pay As You Go** (Billing → Upgrade). Always Free resources stay free. Without the upgrade, Oracle may reclaim VMs it considers idle (CPU, network and memory under 20% for 7 days), which a small project can trigger.
 
-### 3. Frontend (Vercel, ~5 minutes)
-1. At [vercel.com](https://vercel.com), go to **Add New → Project** and import the GitHub repo.
-2. Set **Root Directory** to `frontend`. Vercel detects Vite; `frontend/vercel.json` already sets the build and SPA routing.
-3. Under **Environment Variables**, add `VITE_API_BASE_URL` = `https://<your-hf-username>-trip-aura-api.hf.space` (no trailing slash).
-4. Click **Deploy**. Then put the final URL into the Space's `CORS_ORIGINS` and restart the Space (Settings → Factory reboot, or push again).
+### 3. Create the VM
+1. Go to **Compute → Instances → Create instance**:
+   - Name: `trip-aura`
+   - Image: **Canonical Ubuntu 24.04** (click *Change image*)
+   - Shape: **Ampere → VM.Standard.A1.Flex** with **2 OCPU, 12 GB memory** (shows "Always Free-eligible")
+   - Networking: create a new VCN with a public subnet, and **assign a public IPv4 address**
+   - SSH keys: **Generate a key pair for me**, then **download the private key**. Keep it safe; it's how you and GitHub log in
+   - Boot volume: default (50 GB)
+2. Click **Create**. If you get "Out of capacity", try another availability domain or try again later; Ashburn A1 capacity fluctuates.
+3. Open ports 80/443 in the cloud firewall: instance page → **Subnet** → **Security list** → **Add ingress rules**: source `0.0.0.0/0`, TCP, destination ports `80,443`.
+4. Note the instance's **public IP**.
 
-### 4. Check it end to end
-- Open the Vercel URL. The banner should say "Worldwide open data".
-- Type "Lis" in the city box; Lisbon should appear in the dropdown.
+### 4. Install the backend (one command on the VM)
+From your PC (PowerShell or Git Bash), log in:
+```bash
+ssh -i path/to/ssh-key.key ubuntu@<PUBLIC_IP>
+```
+On the VM:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ranjanvrma/trip-aura/main/deploy/oracle/setup.sh -o setup.sh && bash setup.sh
+```
+The script installs Docker and opens the VM's own firewall. It then asks for three things:
+- **API domain:** press Enter to accept the suggested `<ip-with-dashes>.sslip.io`
+- **Neon `DATABASE_URL`:** paste it
+- **Your Vercel URL:** enter it now if you have it, or press Enter and update it after step 6
+
+The first build takes about 5–10 minutes. It ends by printing `Backend is live: https://<ip>.sslip.io`. Check `https://<ip>.sslip.io/api/health` (expect `{"status":"ok"}`) and `/docs`.
+
+Settings live in `~/trip-aura/deploy/oracle/.env` on the VM. After editing it, run `bash ~/trip-aura/deploy/oracle/update.sh`.
+
+### 5. Auto-deploy from GitHub
+In the repo, go to **Settings → Secrets and variables → Actions** and add:
+- **Secret** `ORACLE_SSH_KEY`: the full contents of the private key file from step 3
+- **Variable** `ORACLE_HOST`: the VM's public IP
+- **Variable** `ORACLE_USER`: `ubuntu`
+
+From then on, every push to `main` that touches `backend/` or `deploy/oracle/` SSHes into the VM and runs `update.sh` (pull + rebuild). To deploy by hand: **Actions → "Deploy backend (Oracle Cloud)" → Run workflow**.
+
+### 6. Frontend (Vercel)
+1. **Add New → Project**, import the repo, and set **Root Directory** to `frontend`. Framework: Vite.
+2. Add the environment variable `VITE_API_BASE_URL` = `https://<ip-with-dashes>.sslip.io` (no trailing slash).
+3. **Deploy**, then put the Vercel URL into `CORS_ORIGINS` in the VM's `.env` and run `update.sh`.
+
+### 7. Check it end to end
+- Open the Vercel URL. You should see the "Worldwide open data" banner.
+- Type "Lis" in the city box; Lisbon should appear.
 - Generate a 2-day trip. The first trip to a new city takes 1–3 minutes.
-- If the page reports it can't reach the backend, check that `VITE_API_BASE_URL` is right and that `CORS_ORIGINS` contains the exact Vercel URL (no trailing slash).
+- If the site can't reach the backend, check `VITE_API_BASE_URL`, `CORS_ORIGINS` (exact URL, no trailing slash), and that ports 80/443 are open (security list).
 
-### Alternative: Render (paid)
-`render.yaml` is a Render Blueprint for the same Docker image. It uses the **Standard** plan (2 GB, paid), because the free and Starter plans have 512 MB, which is too little for this backend. The settings are the same as for the Space. To trim memory instead (not recommended), set `SEMANTIC_ENABLED=false` and `OVERTURE_ENABLED=false`. Places then come only from Wikidata and the often-busy public OSM servers.
+Useful commands on the VM:
+```bash
+cd ~/trip-aura/deploy/oracle
+sudo docker compose ps              # status
+sudo docker compose logs -f api     # backend logs
+sudo docker compose restart api     # restart after editing .env
+```
+
+### Alternatives
+- **Render (paid):** `render.yaml` deploys the same Docker image on the Standard plan (2 GB). Free and Starter (512 MB) are too small.
+- **Any Linux server or VPS:** `deploy/oracle/setup.sh` works on any Ubuntu machine with ports 80/443 reachable.
 
 ### Continuous integration
-`.github/workflows/ci.yml` runs the backend tests (Python 3.12) and the frontend build on every push and pull request. The backend deploy workflow only runs when `HF_SPACE` is set.
+`.github/workflows/ci.yml` runs the backend tests (Python 3.12) and the frontend build on every push and pull request. The Oracle deploy workflow only runs once `ORACLE_HOST` is set.
 
 ## Authors
 

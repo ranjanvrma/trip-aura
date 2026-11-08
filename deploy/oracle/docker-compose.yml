@@ -1,0 +1,46 @@
+# TripAura backend on a single VM (Oracle Cloud Always Free ARM, or any Docker host).
+#   api   - FastAPI backend (built from ../../backend)
+#   caddy - reverse proxy with automatic HTTPS (Let's Encrypt) for $API_DOMAIN
+# Usage (on the VM, from this folder):  docker compose up -d --build
+name: trip-aura
+
+services:
+  api:
+    build:
+      context: ../../backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "7860"
+      # Neon URL from .env; falls back to SQLite on the persistent volume when left empty
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////home/user/app/data/runtime/tripaura.db}
+    expose:
+      - "7860"
+    volumes:
+      - api-data:/home/user/app/data/runtime   # survives rebuilds (SQLite fallback if DATABASE_URL is empty)
+    mem_limit: 6g
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in deploy/oracle/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  api-data:
+  caddy-data:
+  caddy-config:

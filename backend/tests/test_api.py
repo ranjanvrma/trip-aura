@@ -85,3 +85,10 @@ def test_hosted_postgres_urls_get_a_driver():
     assert normalise_url("postgres://u:p@host/db") == "postgresql+psycopg://u:p@host/db"
     assert normalise_url("postgresql://u:p@host/db?sslmode=require") == "postgresql+psycopg://u:p@host/db?sslmode=require"
     assert normalise_url("sqlite:///tripaura.db") == "sqlite:///tripaura.db"
+
+
+def test_blank_database_url_uses_default_sqlite():
+    from app.core.config import DEFAULT_DATABASE_URL, Settings
+
+    assert Settings(database_url="").database_url == DEFAULT_DATABASE_URL
+    assert Settings(database_url="postgres://u:p@h/db").database_url == "postgres://u:p@h/db"

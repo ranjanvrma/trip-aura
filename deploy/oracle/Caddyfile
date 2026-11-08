@@ -1,0 +1,11 @@
+# Caddy obtains and renews a Let's Encrypt certificate for API_DOMAIN automatically.
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy api:7860 {
+		# the first trip to a new city can take 1-3 minutes
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+}

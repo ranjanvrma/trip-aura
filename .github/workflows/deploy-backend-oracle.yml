@@ -1,0 +1,35 @@
+# Redeploys the backend on the Oracle Cloud VM over SSH after every push to main.
+# One-time setup (GitHub repo -> Settings -> Secrets and variables -> Actions):
+#   secret   ORACLE_SSH_KEY = private key that can SSH into the VM (contents of the .key file)
+#   variable ORACLE_HOST    = VM public IP
+#   variable ORACLE_USER    = ubuntu (default user on Oracle's Ubuntu images)
+name: Deploy backend (Oracle Cloud)
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "deploy/oracle/**", ".github/workflows/deploy-backend-oracle.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.ORACLE_HOST != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          HOST: ${{ vars.ORACLE_HOST }}
+          USER_NAME: ${{ vars.ORACLE_USER || 'ubuntu' }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null key
+          printf '%s\n' "$SSH_KEY" > key
+          ssh -i key -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 \
+            "${USER_NAME}@${HOST}" 'bash ~/trip-aura/deploy/oracle/update.sh'
+          rm -f key

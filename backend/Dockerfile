@@ -17,6 +17,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY --chown=user app ./app
 COPY --chown=user scripts ./scripts
 USER user
+# writable folder for a mounted volume (SQLite fallback, runtime files)
+RUN mkdir -p data/runtime
 
 # Bake the city index, embedding model and DuckDB extension into the image (fast, offline-safe start).
 RUN python scripts/prefetch.py

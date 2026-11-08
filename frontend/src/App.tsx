@@ -6,7 +6,7 @@ import TripPage from "./pages/TripPage";
 import { api, ApiError } from "./services/api";
 import type { ApiStatus } from "./types";
 
-const WAKE_ATTEMPTS = 24;      // ~2 minutes: free hosts (Hugging Face Spaces, Render) sleep when idle
+const WAKE_ATTEMPTS = 24;      // ~2 minutes: covers restarts/redeploys and hosts that sleep when idle
 const WAKE_DELAY_MS = 5000;
 
 export default function App() {
@@ -43,7 +43,7 @@ export default function App() {
       </header>
       {waking > 0 && !status && (
         <div className="banner banner-mock">
-          Waking up the TripAura server - free hosting sleeps when nobody has used it for a while.
+          Connecting to the TripAura server - it may be starting up or updating.
           This can take up to a minute (attempt {waking} of {WAKE_ATTEMPTS})...
         </div>
       )}

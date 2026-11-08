@@ -1,7 +1,7 @@
 # Render Blueprint (alternative backend host). Render's free and Starter plans have 512 MB RAM,
 # which is not enough for the Overture query plus the embedding model (~750 MB peak measured),
-# so this uses the Standard plan (2 GB, paid). For a free backend use the Hugging Face Space
-# workflow in .github/workflows/deploy-backend-hf.yml instead. See README -> Deployment.
+# so this uses the Standard plan (2 GB, paid). For a free backend use the Oracle Cloud VM setup
+# in deploy/oracle/ instead. See README -> Deployment.
 services:
   - type: web
     name: trip-aura-api
