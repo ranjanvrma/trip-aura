@@ -240,6 +240,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
+| 2026-11-10 | `27450b2` | Add same-origin Vercel API rewrite; document blank `VITE_API_BASE_URL` and email provider setup |
 | 2026-11-10 | `146b756` | Update the Vercel domain to `trip-aura-cr.vercel.app`; document Azure CORS and domain verification steps |
 | 2026-11-10 | `d65f949` | README and HANDOFF: document the live deployment, verified health/connectivity, and remaining production sign-in setup |
 | 2026-11-10 | `368143f` | Production CSP allows Google Maps hosts; records the live deployment check |
