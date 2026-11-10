@@ -9,15 +9,16 @@ import react from "@vitejs/plugin-react";
  */
 function contentSecurityPolicy(apiBase: string, googleKey: boolean): Plugin {
   const api = apiBase ? new URL(apiBase).origin : "";
-  const google = googleKey ? " https://maps.googleapis.com https://maps.gstatic.com" : "";
+  // Hosts the Maps JavaScript API needs (Google's CSP guide for Maps JS): scripts, tiles, controls and their fonts.
+  const g = (list: string) => (googleKey ? " " + list : "");
   const csp = [
     "default-src 'self'",
-    `script-src 'self'${google}`,
+    `script-src 'self'${g("https://*.googleapis.com https://*.gstatic.com https://*.google.com")}`,
     // react-leaflet, motion and the map pins set inline style attributes
-    "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https://*.tile.openstreetmap.org${google}`,
-    "font-src 'self'",
-    `connect-src 'self'${api ? " " + api : ""}${google}`,
+    `style-src 'self' 'unsafe-inline'${g("https://fonts.googleapis.com")}`,
+    `img-src 'self' data: blob: https://*.tile.openstreetmap.org${g("https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googleusercontent.com")}`,
+    `font-src 'self'${g("https://fonts.gstatic.com")}`,
+    `connect-src 'self'${api ? " " + api : ""}${g("https://*.googleapis.com https://*.google.com https://*.gstatic.com")}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",

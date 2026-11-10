@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** UI redesign (bento, light mode), email-code sign-in with per-user trips, security hardening; deployer actions in §8 "Sign-in changes"
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** production CSP allows Google Maps; live deployment checked, backend still on the old image (see §8 \"Live check 2026-11-10\")
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -164,7 +164,18 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 8. Deployment status
 
-**Current state: not deployed.** The tested Azure deployment files from `8443341` have been restored. No cloud resources have been recreated. Commit and push the restored files to `main` to build and publish the GHCR image; then continue with Neon, Azure, GitHub secrets, and Vercel below. CI (`ci.yml`) still runs tests + frontend build on every push.
+**Current state: partly deployed (checked 2026-11-10 by Ranjan's session).**
+- Frontend: Vercel at `https://trip-aura-il6q.vercel.app` (note `-il6q.vercel.app`, not `.il6q.vercel.com`), running the redesign (`c55f12c`).
+- Backend: Azure Container App in **Korea Central**, `https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io`. `/api/health` is ok, but it runs the **old image** (no `auth` block in `/api/meta/status`, no security headers, `google.configured: false`).
+
+**Live check 2026-11-10: what's broken and how to fix it (deployer):**
+1. **The site hangs on "Connecting to the TripAura server".** The new frontend sends requests with cookies (`credentials: "include"`), and the old backend doesn't answer with `Access-Control-Allow-Credentials`, so the browser blocks every reply. Deploying the new backend image fixes it.
+2. **New image never rolled out.** In GitHub Actions, *Deploy backend (Azure)* built and pushed `ghcr.io/ranjanvrma/trip-aura-api:c55f12c...` fine, but the `deploy` job was **skipped** on the push (variable `AZURE_ENABLED` not `true` yet) and **failed at `azure/login`** on the manual re-run (secret `AZURE_CREDENTIALS` missing or not the JSON printed by `setup.sh`). Fix the secret and re-run, or roll out by hand in Cloud Shell: `az containerapp update -n trip-aura-api -g trip-aura --image ghcr.io/ranjanvrma/trip-aura-api:latest`.
+3. **Set the sign-in env vars before or with that rollout** (see "Sign-in changes" below). Important: `APP_ENV=production` without `SECRET_KEY` stops the app at startup on purpose.
+4. **Cookies need same-origin.** Vercel currently has `VITE_API_BASE_URL` set to the Azure URL, so the browser talks to Azure directly (cross-site), and the `SameSite=Lax` session cookie won't be sent. Add the `/api` rewrite to `frontend/vercel.json` (snippet below, destination = the Azure URL above), **remove** `VITE_API_BASE_URL` in Vercel, and redeploy.
+5. **Google:** add the server key on Azure (secret, env `GOOGLE_MAPS_API_KEY=secretref:...`), and `VITE_GOOGLE_MAPS_API_KEY` (the browser key) in Vercel, then redeploy. Add `https://trip-aura-il6q.vercel.app/*` to the browser key's website list in Google Cloud. The production CSP for Google Maps was tested locally with a production build (map, tiles, controls, fonts, ratings all load).
+
+CI (`ci.yml`) runs tests and the frontend build on every push.
 
 **How we learned it (trial on 2026-11-08):**
 - **Built:** the backend image on GHCR, the Azure Container App (Central India, 1 vCPU / 2 GiB, scale to zero), and a Neon Postgres database.
@@ -278,7 +289,8 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-10 | (this commit) | UI redesign (light-mode bento, globe, command menu, sheets, toasts with undo, legal and 404 pages, favicons, per-route heads, CSP); email-code sign-in, per-user trips, account deletion; CSRF, idempotency keys, rate limits, security headers, input limits, injection audit; React Router 7.18.5 |
+| 2026-11-10 | (this commit) | Production CSP: allow the Maps JavaScript API hosts (fonts, tiles, scripts) when a Google browser key is set; HANDOFF §8 records the live check (backend still on the old image, deploy job failing at Azure login, cookie/rewrite fixes) |
+| 2026-11-10 | `c55f12c` | UI redesign (light-mode bento, globe, command menu, sheets, toasts with undo, legal and 404 pages, favicons, per-route heads, CSP); email-code sign-in, per-user trips, account deletion; CSRF, idempotency keys, rate limits, security headers, input limits, injection audit; React Router 7.18.5 |
 | 2026-11-10 | `2bf9321` | Restore the tested Azure deployment files and resume the deployment plan |
 | 2026-11-10 | `b9ffe2b` | README: link author names to their GitHub profiles |
 | 2026-11-10 | `6da2943` | README: fix backend/frontend startup working directories and clarify local-only commits |
