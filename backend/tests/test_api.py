@@ -6,42 +6,42 @@ def test_health_and_status(client):
     assert "museums" in opts["interests"] and "jain" in opts["food_preferences"]
 
 
-def test_create_get_list_delete(client, base_request):
-    r = client.post("/api/trips", json=base_request)
+def test_create_get_list_delete(auth_client, base_request):
+    r = auth_client.post("/api/trips", json=base_request)
     assert r.status_code == 201, r.text
     data = r.json()
     tid = data["trip_id"]
     assert data["data_source"] == "mock" and len(data["days"]) == 2
-    assert client.get(f"/api/trips/{tid}").json()["trip_id"] == tid
-    assert any(t["id"] == tid for t in client.get("/api/trips").json())
-    assert client.post(f"/api/trips/{tid}/regenerate").status_code == 200
-    assert client.delete(f"/api/trips/{tid}").status_code == 204
-    assert client.get(f"/api/trips/{tid}").status_code == 404
+    assert auth_client.get(f"/api/trips/{tid}").json()["trip_id"] == tid
+    assert any(t["id"] == tid for t in auth_client.get("/api/trips").json())
+    assert auth_client.post(f"/api/trips/{tid}/regenerate").status_code == 200
+    assert auth_client.delete(f"/api/trips/{tid}").status_code == 204
+    assert auth_client.get(f"/api/trips/{tid}").status_code == 404
 
 
-def test_validation_errors(client, base_request):
+def test_validation_errors(auth_client, base_request):
     bad = {**base_request, "num_days": 0, "budget": -5}
-    r = client.post("/api/trips", json=bad)
+    r = auth_client.post("/api/trips", json=bad)
     assert r.status_code == 422
     fields = {d["field"] for d in r.json()["error"]["details"]}
     assert {"num_days", "budget"} <= fields
 
 
-def test_unsupported_city_in_mock_mode(client, base_request):
-    r = client.post("/api/trips/preview", json={**base_request, "destination_city": "Paris"})
+def test_unsupported_city_in_mock_mode(auth_client, base_request):
+    r = auth_client.post("/api/trips/preview", json={**base_request, "destination_city": "Paris"})
     assert r.status_code == 422 and r.json()["error"]["code"] == "unsupported_in_mock_mode"
 
 
-def test_custom_inputs_accepted(client, base_request):
+def test_custom_inputs_accepted(auth_client, base_request):
     body = {**base_request, "interests": ["Street Art", "museums"], "food_preferences": ["vegetarian", "no garlic"]}
-    r = client.post("/api/trips/preview", json=body)
+    r = auth_client.post("/api/trips/preview", json=body)
     assert r.status_code == 200
     assert r.json()["request"]["interests"] == ["street_art", "museums"]
 
 
-def test_live_progress_alerts(client, base_request):
-    tid = client.post("/api/trips", json=base_request).json()["trip_id"]
-    r = client.post(f"/api/trips/{tid}/live", json={
+def test_live_progress_alerts(auth_client, base_request):
+    tid = auth_client.post("/api/trips", json=base_request).json()["trip_id"]
+    r = auth_client.post(f"/api/trips/{tid}/live", json={
         "current": {"lat": 26.95, "lng": 75.80}, "day_number": 1, "client_time": "09:45",
         "planned_mode": "walking", "previous_duration_min": 5, "accuracy_m": 500})
     assert r.status_code == 200, r.text
@@ -51,11 +51,11 @@ def test_live_progress_alerts(client, base_request):
     assert "low_accuracy" in kinds and "traffic_change" in kinds and "better_alternative" in kinds
 
 
-def test_live_progress_arrived(client, base_request):
-    trip = client.post("/api/trips", json=base_request).json()
+def test_live_progress_arrived(auth_client, base_request):
+    trip = auth_client.post("/api/trips", json=base_request).json()
     first = next(i for i in trip["days"][0]["items"] if i["type"] == "activity")
     loc = first["place"]["location"]
-    r = client.post(f"/api/trips/{trip['trip_id']}/live",
+    r = auth_client.post(f"/api/trips/{trip['trip_id']}/live",
                     json={"current": loc, "day_number": 1, "next_item_id": first["id"]})
     assert any(a["kind"] == "arrived" for a in r.json()["alerts"])
 

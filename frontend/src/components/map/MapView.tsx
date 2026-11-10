@@ -10,8 +10,8 @@ export default function MapView(props: MapViewProps) {
     <div className="map-wrap">
       {GOOGLE_KEY ? <GoogleMap {...props} apiKey={GOOGLE_KEY} /> : <LeafletMap {...props} />}
       <div className="map-caption">
-        {GOOGLE_KEY ? "Google Maps (traffic layer on)" : "OpenStreetMap preview - set VITE_GOOGLE_MAPS_API_KEY for Google Maps"}
-        {" · "}Solid lines: vehicle / transit, dashed: walking. Mock routes are straight-line approximations.
+        {GOOGLE_KEY ? "Google Maps with traffic" : "Map tiles © OpenStreetMap contributors"}
+        {" · "}Solid line: vehicle or transit. Dashed: walking.
       </div>
     </div>
   );

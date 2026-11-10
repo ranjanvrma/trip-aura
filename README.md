@@ -101,7 +101,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (112 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (159 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration
@@ -116,8 +116,10 @@ Everything works without keys. The main settings, set in `backend/.env` (full li
 | `OPEN_USER_AGENT` | project URL | Must contain a contact URL, otherwise Wikimedia returns 403 |
 | `GOOGLE_MAPS_API_KEY` | empty | Optional: adds Google ratings to planned places |
 | `SEMANTIC_ENABLED` | `true` | Local embedding model for semantic matching |
+| `APP_ENV` | `development` | `production` requires `SECRET_KEY` and turns off API docs |
+| `RESEND_API_KEY` | empty | Sends sign-in codes. Empty in development: codes are printed in the backend console |
 
-Frontend: `VITE_API_BASE_URL` is the backend URL in production. Leave it empty locally, where the Vite proxy is used.
+Frontend: leave `VITE_API_BASE_URL` empty. Locally the Vite proxy forwards `/api`; in production a Vercel rewrite does, so the sign-in cookie stays first-party.
 
 ## Project status
 
@@ -126,10 +128,12 @@ Frontend: `VITE_API_BASE_URL` is the backend URL in production. Leave it empty l
 - **Worldwide open data:** Overture, Wikidata, OpenStreetMap and Wikivoyage, loaded in parallel and cached per city. A first trip to a new city takes about 37 s for Rome, down from 245 s; a cached trip takes about 1 s.
 - **NLP / AI:** city autocomplete, address suggestions, "describe your trip" parser, typo-tolerant and semantic interests, review sentiment.
 - **Product features:** live location updates, worldwide cost model with 31 currencies, honest source labels.
-- **Quality:** 112 offline tests, CI on every push, a HANDOFF document kept current by a commit hook.
+- **Accounts and security:** email one-time-code sign-in, private trips, account deletion, CSRF protection, rate limits, idempotency keys and security headers.
+- **Interface:** light-mode bento layout with a 3D globe, command menu (`Ctrl/Cmd+K`), swipe-down sheets, undo toasts, Terms, Privacy and 404 pages.
+- **Quality:** 159 offline tests, CI on every push, a HANDOFF document kept current by a commit hook.
 - **Deployment method worked out:** a trial run proved the free setup below works end to end. It was then removed on purpose so the real deployment starts clean.
 
-**Next:** deploy with the plan below, re-running every test on deploy day, then a premium animated UI redesign.
+**Next:** deploy with the plan below, re-running every test on deploy day. Sign-in needs a few extra settings (Resend key, secret key, a Vercel `/api` rewrite), listed in HANDOFF §8.
 
 ## Deployment plan (not deployed yet)
 
@@ -160,6 +164,8 @@ The exact steps, how to restore the deployment files from git history, and the f
 | GET | `/api/geo/cities?q=` · `/api/geo/addresses?q=` | City and hotel autocomplete |
 | POST | `/api/nlp/parse-trip` | Free-text description → form fields |
 | GET | `/api/meta/status` · `/api/health` | Configuration status · health check |
+| POST | `/api/auth/request-code` · `/api/auth/verify` · `/api/auth/logout` | Email-code sign-in (trip endpoints need a session) |
+| GET, DELETE | `/api/auth/me` · `/api/auth/account` | Current user · delete account and all trips |
 
 ## Contributing
 

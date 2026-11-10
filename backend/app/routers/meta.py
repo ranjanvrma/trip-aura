@@ -43,6 +43,8 @@ def status() -> dict:
         } if mode == DataMode.OPEN else None,
         "nlp": _nlp_status(),
         "ai": {"enabled": s.ai_enabled, "configured": bool(s.anthropic_api_key.strip()), "model": s.anthropic_model},
+        "auth": {"email_configured": s.email_configured,
+                 "dev_codes_in_console": not s.email_configured and not s.is_production},
         "mock_city": "Jaipur" if mode == DataMode.MOCK else None,
         "worldwide": mode != DataMode.MOCK,
         "problems": problems,

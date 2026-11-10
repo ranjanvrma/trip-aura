@@ -9,13 +9,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
 from app.core.errors import TripAuraError
 from app.core.logging_config import configure_logging
+from app.core.security import error_response, request_guard, security_headers
 from app.db.database import init_engine
-from app.routers import geo, location, meta, nlp, routes, trips
+from app.routers import auth, geo, location, meta, nlp, routes, trips
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -24,9 +27,12 @@ log = logging.getLogger("tripaura")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+    settings.check_startup()   # e.g. APP_ENV=production without SECRET_KEY stops here
     init_engine()
-    log.info("TripAura started: DATA_MODE=%s, google_configured=%s, ai=%s",
-             settings.data_mode.value, settings.google_configured, settings.ai_available)
+    log.info("TripAura started: APP_ENV=%s, DATA_MODE=%s, google_configured=%s, ai=%s, email=%s",
+             settings.app_env, settings.data_mode.value, settings.google_configured, settings.ai_available,
+             "resend" if settings.email_configured else "dev log")
     if settings.data_mode.value == "live" and not settings.google_configured:
         log.error("DATA_MODE=live but GOOGLE_MAPS_API_KEY is empty: itinerary requests will return 503.")
     if settings.warmup_on_start:
@@ -50,18 +56,25 @@ def _warm_up() -> None:
         log.warning("Warm-up skipped: %s", exc)
 
 
-app = FastAPI(title="TripAura API", version="0.2.0", lifespan=lifespan,
+# Docs routes are registered below so DOCS_ENABLED is checked per request.
+app = FastAPI(title="TripAura API", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None,
+              openapi_url=None,
               description="Personalised day-wise travel itineraries for any city (open data, optional Google).")
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
-                   allow_origin_regex=settings.cors_origin_regex or None, allow_credentials=False,
-                   allow_methods=["*"], allow_headers=["*"])
+# Middleware: the last one added runs first. Order of execution:
+# security headers -> CORS (answers preflights) -> origin check + per-IP rate limit -> routes.
+app.add_middleware(BaseHTTPMiddleware, dispatch=request_guard)
+app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins,
+                   allow_origin_regex=settings.cors_origin_regex or None, allow_credentials=True,
+                   allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+                   allow_headers=["Content-Type", "X-CSRF-Token", "X-Idempotency-Key"],
+                   expose_headers=["Retry-After", "Idempotent-Replayed"])
+app.add_middleware(BaseHTTPMiddleware, dispatch=security_headers)
 
 
 @app.exception_handler(TripAuraError)
 async def tripaura_error(_: Request, exc: TripAuraError) -> JSONResponse:
     log.warning("%s: %s", exc.code, exc.message)
-    return JSONResponse(status_code=exc.status_code,
-                        content={"error": {"code": exc.code, "message": exc.message, "details": exc.details}})
+    return error_response(exc.status_code, exc.code, exc.message, exc.details, exc.headers or None)
 
 
 @app.exception_handler(RequestValidationError)
@@ -83,6 +96,28 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _docs_off() -> JSONResponse | None:
+    if get_settings().docs_on:
+        return None
+    return error_response(404, "not_found", "Not found")
+
+
+@app.get("/openapi.json", include_in_schema=False)
+def openapi_schema():
+    return _docs_off() or JSONResponse(app.openapi())
+
+
+@app.get("/docs", include_in_schema=False)
+def swagger_docs() -> HTMLResponse:
+    return _docs_off() or get_swagger_ui_html(openapi_url="/openapi.json", title="TripAura API - docs")
+
+
+@app.get("/redoc", include_in_schema=False)
+def redoc_docs() -> HTMLResponse:
+    return _docs_off() or get_redoc_html(openapi_url="/openapi.json", title="TripAura API - ReDoc")
+
+
+app.include_router(auth.router)
 app.include_router(meta.router)
 app.include_router(trips.router)
 app.include_router(location.router)

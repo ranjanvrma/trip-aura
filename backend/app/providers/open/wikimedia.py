@@ -6,8 +6,10 @@ short quoted snippet and an attribution link.
 from __future__ import annotations
 
 import logging
+import math
 import re
 
+from app.core.urls import wikidata_qid
 from app.providers.open.http import OpenHttp
 from app.schemas.common import DataSource
 from app.schemas.itinerary import DishSuggestion
@@ -20,7 +22,7 @@ WIKIVOYAGE_API = "https://en.wikivoyage.org/w/api.php"
 def wikidata_details(http: OpenHttp, qids: list[str]) -> dict[str, dict]:
     """{qid: {"sitelinks": int (Wikipedia editions), "description": str|None, "label": str|None}}"""
     out: dict[str, dict] = {}
-    unique = list(dict.fromkeys(q for q in qids if q.startswith("Q")))
+    unique = list(dict.fromkeys(q for q in (wikidata_qid(x) for x in qids) if q))
     for i in range(0, len(unique), 50):
         batch = unique[i:i + 50]
         data = http.get_json(WIKIDATA_API, {"action": "wbgetentities", "ids": "|".join(batch), "format": "json",
@@ -94,6 +96,11 @@ def wikidata_notable_places(http: OpenHttp, lat: float, lng: float, radius_km: f
     from app.schemas.common import LatLng, Money
     from app.schemas.place import OpeningHours, Place, PlaceKind
 
+    # Only validated numbers are interpolated into the SPARQL text; nothing user-typed reaches it.
+    lat, lng, radius_km = float(lat), float(lng), float(radius_km)
+    if not all(math.isfinite(v) for v in (lat, lng, radius_km)):
+        raise ValueError("non-finite coordinate")
+    min_links, limit = int(min_links), int(limit)
     query = f"""
 SELECT ?item ?itemLabel ?desc ?lat ?lon ?links (GROUP_CONCAT(DISTINCT ?typeLabel; separator="|") AS ?types) WHERE {{
   SERVICE wikibase:around {{ ?item wdt:P625 ?loc . bd:serviceParam wikibase:center "Point({lng} {lat})"^^geo:wktLiteral .
@@ -108,9 +115,9 @@ SELECT ?item ?itemLabel ?desc ?lat ?lon ?links (GROUP_CONCAT(DISTINCT ?typeLabel
     out: list[Place] = []
     seen: set[str] = set()
     for b in (data.get("results") or {}).get("bindings", []):
-        qid = b["item"]["value"].rsplit("/", 1)[-1]
+        qid = wikidata_qid(b["item"]["value"].rsplit("/", 1)[-1])
         name = b.get("itemLabel", {}).get("value", "")
-        if qid in seen or not name or name == qid:
+        if not qid or qid in seen or not name or name == qid:
             continue
         seen.add(qid)
         cls = _classify(b.get("types", {}).get("value", "").split("|"))

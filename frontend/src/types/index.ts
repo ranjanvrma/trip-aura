@@ -193,7 +193,11 @@ export interface ApiStatus {
   ai: { enabled: boolean; configured: boolean; model: string };
   mock_city: string | null;
   problems: string[];
+  auth?: { email_configured: boolean; dev_codes_in_console: boolean };
 }
+
+export interface AuthUser { id: number; email: string; role: "user" | "admin" }
+export interface AuthSession { user: AuthUser; csrf_token: string }
 
 export interface ApiOptions {
   interests: string[]; food_preferences: string[]; food_categories: string[]; transport_modes: TransportMode[];

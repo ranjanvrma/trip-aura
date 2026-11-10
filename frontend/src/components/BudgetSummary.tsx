@@ -9,8 +9,8 @@ export default function BudgetSummary({ b }: { b: Budget }) {
     ["Attractions", b.by_category.attractions], ["Accommodation", b.by_category.accommodation],
   ];
   return (
-    <section className="card">
-      <h3>Budget</h3>
+    <section className="tile">
+      <h2 className="tile-title">Budget</h2>
       <div className="budget-top">
         <div><div className="small muted">Planned</div><strong>{f(b.planned_total)}</strong></div>
         <div><div className="small muted">Budget</div><strong>{f(b.total_budget)}</strong></div>

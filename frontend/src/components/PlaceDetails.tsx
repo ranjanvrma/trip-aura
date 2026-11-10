@@ -1,3 +1,5 @@
+import { ExternalLink, X } from "lucide-react";
+import { safeExternalUrl } from "../lib/safeUrl";
 import type { ItineraryItem } from "../types";
 import { moneyLabel, pretty } from "../utils";
 import { ExternalRatingBadge, ScoreBreakdown, SuitabilityBadge } from "./RatingBadges";
@@ -9,16 +11,21 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 const OSM_TYPE: Record<string, string> = { n: "node", w: "way", r: "relation" };
 
-export default function PlaceDetails({ item, onClose }: { item: ItineraryItem; onClose: () => void }) {
+export default function PlaceDetails({ item, onClose, embedded = false }: { item: ItineraryItem; onClose: () => void; embedded?: boolean }) {
   const p = item.place;
   if (!p) return null;
   const fee = item.type === "meal" ? p.avg_cost_per_person : p.entry_fee;
+  const maps = safeExternalUrl(p.google_maps_uri);
+  const wikidata = p.external_ids?.wikidata && /^Q\d+$/.test(p.external_ids.wikidata) ? p.external_ids.wikidata : null;
+  const osm = p.external_ids?.osm && /^[nwr]\d+$/.test(p.external_ids.osm) ? p.external_ids.osm : null;
   return (
-    <aside className="card details">
-      <div className="row between">
-        <h3>{p.name}</h3>
-        <button className="btn btn-light" onClick={onClose} aria-label="Close details">{"✕"}</button>
-      </div>
+    <aside className={embedded ? "details" : "tile details"} aria-label={`Details for ${p.name}`}>
+      {!embedded && (
+        <div className="tile-head">
+          <h2 className="h3 balance">{p.name}</h2>
+          <button className="icon-btn hit" onClick={onClose} aria-label="Close details"><X size={18} aria-hidden /></button>
+        </div>
+      )}
       {p.description && <p>{p.description}</p>}
       {p.address && <p className="small muted">{p.address}</p>}
 
@@ -77,13 +84,13 @@ export default function PlaceDetails({ item, onClose }: { item: ItineraryItem; o
         {p.prominence ? " · covered by " + p.prominence + " Wikipedia editions" : ""}
       </p>
       <div className="row gap-m wrap small">
-        {p.google_maps_uri && <a href={p.google_maps_uri} target="_blank" rel="noreferrer">Open in Google Maps</a>}
-        {p.external_ids?.wikidata && (
-          <a href={"https://www.wikidata.org/wiki/" + p.external_ids.wikidata} target="_blank" rel="noreferrer">Wikidata</a>
+        {maps && <a href={maps} target="_blank" rel="noopener noreferrer">Google Maps <ExternalLink size={12} aria-hidden /></a>}
+        {wikidata && (
+          <a href={`https://www.wikidata.org/wiki/${wikidata}`} target="_blank" rel="noopener noreferrer">Wikidata <ExternalLink size={12} aria-hidden /></a>
         )}
-        {p.external_ids?.osm && (
-          <a href={"https://www.openstreetmap.org/" + OSM_TYPE[p.external_ids.osm[0]] + "/" + p.external_ids.osm.slice(1)}
-             target="_blank" rel="noreferrer">OpenStreetMap</a>
+        {osm && (
+          <a href={`https://www.openstreetmap.org/${OSM_TYPE[osm[0]]}/${osm.slice(1)}`}
+             target="_blank" rel="noopener noreferrer">OpenStreetMap <ExternalLink size={12} aria-hidden /></a>
         )}
       </div>
     </aside>

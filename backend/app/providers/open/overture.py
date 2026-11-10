@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import threading
 
 import httpx
 
+from app.core.urls import safe_http_url
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, OpeningHours, Place, PlaceKind
 
@@ -53,6 +55,26 @@ STATIONS = {"train_station", "metro_station", "subway_station", "light_rail_stat
 _LATEST: dict[str, str] = {}
 
 
+# The release name and memory limit are interpolated into the DuckDB SQL text (table-function path and
+# SET statement), so both are validated against strict patterns; coordinates are bound parameters
+# and the category lists are module constants checked below.
+_RELEASE = re.compile(r"^\d{4}-\d{2}-\d{2}(\.\d{1,3})?$")
+_MEMORY = re.compile(r"^\d{1,6}(\.\d{1,2})?\s?(KB|MB|GB|KiB|MiB|GiB)$", re.I)
+_CATEGORY = re.compile(r"^[a-z_]+$")
+
+
+def safe_release(release: str) -> str:
+    if not isinstance(release, str) or not _RELEASE.match(release):
+        raise ValueError(f"unexpected Overture release name {release!r}")
+    return release
+
+
+def safe_memory_limit(value: str) -> str:
+    if not isinstance(value, str) or not _MEMORY.match(value.strip()):
+        raise ValueError(f"unexpected DUCKDB_MEMORY_LIMIT {value!r}")
+    return value.strip()
+
+
 def latest_release(user_agent: str) -> str:
     if "v" not in _LATEST:
         r = httpx.get(STAC_CATALOG, timeout=20, headers={"User-Agent": user_agent})
@@ -62,7 +84,7 @@ def latest_release(user_agent: str) -> str:
         if not latest:
             titles = [l["href"].rstrip("/").split("/")[-2] for l in data.get("links", []) if l.get("rel") == "child"]
             latest = sorted(titles)[-1]
-        _LATEST["v"] = latest
+        _LATEST["v"] = safe_release(latest)   # comes from a remote catalog: never trusted as SQL text
     return _LATEST["v"]
 
 
@@ -101,7 +123,7 @@ def row_to_place(row: tuple, local_cuisines: set[str]) -> Place | dict | None:
         veg = "vegetarian" in cuisines or "vegan" in cuisines
         return Place(
             id=f"ovt:{pid}", name=name, kind=PlaceKind.CAFE if is_cafe else PlaceKind.RESTAURANT,
-            categories=["food"] + cats, location=LatLng(lat=lat, lng=lng), description=website,
+            categories=["food"] + cats, location=LatLng(lat=lat, lng=lng), description=safe_http_url(website),
             price_level=1 if is_cafe or basic in STREET else 2, price_level_estimated=True,
             opening_hours=OpeningHours(known=False, weekly={}, source=SRC),
             best_time=["breakfast", "lunch"] if is_cafe else ["lunch", "dinner"],
@@ -113,7 +135,7 @@ def row_to_place(row: tuple, local_cuisines: set[str]) -> Place | dict | None:
         tags, minutes, kind = ATTRACTIONS[basic]
         return Place(
             id=f"ovt:{pid}", name=name, kind=kind, categories=list(tags), location=LatLng(lat=lat, lng=lng),
-            description=website, typical_visit_minutes=minutes,
+            description=safe_http_url(website), typical_visit_minutes=minutes,
             entry_fee=(Money(amount=0, currency="USD", source=DataSource.ESTIMATE, note="Usually free for this type of place (no fee data) - assumption")
                        if basic in USUALLY_FREE else None),
             opening_hours=OpeningHours(known=False, weekly={}, source=SRC),
@@ -135,7 +157,7 @@ def _database(memory_limit: str, threads: int):
             import duckdb  # optional dependency
 
             db = duckdb.connect()
-            db.execute(f"SET memory_limit='{memory_limit}'; SET threads={int(threads)};")
+            db.execute(f"SET memory_limit='{safe_memory_limit(memory_limit)}'; SET threads={int(threads)};")
             db.execute("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2'; SET enable_progress_bar=false; "
                        "SET enable_http_metadata_cache=true; SET enable_object_cache=true;")
             _DB = db
@@ -146,8 +168,13 @@ def fetch(lat: float, lng: float, radius_km: float, food_radius_km: float, relea
           local_cuisines: set[str], memory_limit: str = "256MB", threads: int = 2) -> tuple[list[Place], list[dict]]:
     xmin, xmax, ymin, ymax = bbox(lat, lng, radius_km)
     fx0, fx1, fy0, fy1 = bbox(lat, lng, food_radius_km)
+    release = safe_release(release)
+    categories = sorted(FOOD) + sorted(set(ATTRACTIONS) | STATIONS)
+    if not all(_CATEGORY.match(c) for c in categories):   # constants, but they become SQL literals
+        raise ValueError("invalid Overture category constant")
     food = ",".join(f"'{c}'" for c in sorted(FOOD))
     other = ",".join(f"'{c}'" for c in sorted(set(ATTRACTIONS) | STATIONS))
+    xmin, xmax, ymin, ymax, fx0, fx1, fy0, fy1 = (float(v) for v in (xmin, xmax, ymin, ymax, fx0, fx1, fy0, fy1))
     con = _database(memory_limit, threads).cursor()   # cursor = own connection, shared caches
     try:
         # Only light columns are read: websites, sources and the full taxonomy tree made the

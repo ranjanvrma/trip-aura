@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.engines.transport import choose
 from app.routers.deps import get_itinerary_service
@@ -16,11 +16,12 @@ router = APIRouter(prefix="/api/routes", tags=["routes"])
 
 
 class RouteRequest(BaseModel):
-    city: str
+    model_config = ConfigDict(extra="forbid")
+    city: str = Field(min_length=2, max_length=120)
     origin: LatLng
     destination: LatLng
-    modes: list[TransportMode] = Field(default_factory=list)
-    currency: str = "INR"
+    modes: list[TransportMode] = Field(default_factory=list, max_length=len(TransportMode))
+    currency: str = Field(default="INR", max_length=10)
     travelers: int = Field(default=1, ge=1, le=20)
     departure: dt.datetime | None = None
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 
+from app.core.errors import NotFoundError
 from app.providers.base import CityContext, PlaceQuery
 from app.providers.google.client import GoogleClient
 from app.schemas.common import DataSource, LatLng, Money
@@ -198,5 +199,7 @@ class GooglePlacesProvider:
 
     def get_place(self, place_id: str) -> Place:
         gid = place_id.removeprefix("g:")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,300}", gid):   # becomes part of the URL path
+            raise NotFoundError(f"Place '{place_id}' not found")
         raw = self._c.get(DETAILS_URL.format(id=gid), {}, field_mask=DETAILS_MASK)
         return to_place(raw)

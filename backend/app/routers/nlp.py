@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.errors import ProviderRequestError
 from app.nlp.registry import get_city_index
@@ -11,6 +11,8 @@ router = APIRouter(prefix="/api/nlp", tags=["nlp"])
 
 
 class ParseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # a free-text trip description (a short paragraph), longer than the 500-char form fields
     text: str = Field(min_length=3, max_length=2000)
 
 

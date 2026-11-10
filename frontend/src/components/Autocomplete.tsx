@@ -12,11 +12,14 @@ interface Props<T> {
   required?: boolean;
   footer?: string;
   className?: string;
+  inputId?: string;
+  /** Keyboard shortcut shown inside the field, e.g. "/". */
+  hint?: string;
 }
 
 /** Accessible combobox: debounced search, arrow keys / Enter / Escape, mouse selection. */
 export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems, renderItem, itemKey, minChars = 2,
-                                         placeholder, required, footer, className }: Props<T>) {
+                                         placeholder, required, footer, className, inputId, hint }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -66,7 +69,7 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
   return (
     <div className={`ac ${className ?? ""}`}>
       <input
-        value={value} placeholder={placeholder} required={required} autoComplete="off"
+        id={inputId} value={value} maxLength={120} placeholder={placeholder} required={required} autoComplete="off"
         role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
         onChange={(e) => { typed.current = true; onChange(e.target.value); }}
@@ -74,7 +77,8 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
         onFocus={() => items.length && setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
       />
-      {loading && <span className="ac-spin" aria-hidden>...</span>}
+      {loading ? <span className="spinner ac-spin" aria-hidden />
+        : hint && !value && <kbd className="kbd ac-hint" aria-hidden>{hint}</kbd>}
       {open && (items.length > 0 || error) && (
         <ul className="ac-list" id={listId} role="listbox">
           {error && <li className="ac-empty">{error}</li>}

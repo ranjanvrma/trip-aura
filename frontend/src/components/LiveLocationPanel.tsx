@@ -19,9 +19,9 @@ interface Props {
 export default function LiveLocationPanel(p: Props) {
   const askNotify = () => { if ("Notification" in window) void Notification.requestPermission(); };
   return (
-    <section className="card">
+    <section className="tile">
       <div className="row between wrap gap-s">
-        <h3>Live location</h3>
+        <h2 className="tile-title">Live location</h2>
         <label className="switch">
           <input type="checkbox" checked={p.enabled} onChange={(e) => p.onToggle(e.target.checked)} />
           <span>{p.enabled ? "On" : "Off"}</span>
@@ -73,11 +73,11 @@ export default function LiveLocationPanel(p: Props) {
             </div>
           )}
           <div className="row gap-s wrap">
-            <button className="btn btn-light" onClick={p.onRefresh} disabled={p.loading || !p.geo.position}>
+            <button className="btn btn-ghost" onClick={p.onRefresh} disabled={p.loading || !p.geo.position}>
               {p.loading ? "Refreshing..." : "Refresh estimates"}
             </button>
             {"Notification" in window && Notification.permission === "default" && (
-              <button className="btn btn-light" onClick={askNotify}>Enable notifications</button>
+              <button className="btn btn-ghost" onClick={askNotify}>Enable notifications</button>
             )}
           </div>
           {p.error && <p className="warn small">{p.error}</p>}

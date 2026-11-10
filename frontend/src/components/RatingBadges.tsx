@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import type { ExternalRating, SuitabilityScore } from "../types";
 
 /** External (Google or demo) rating. Always shown separately from our suitability score. */
@@ -12,7 +13,7 @@ export function ExternalRatingBadge({ rating }: { rating?: ExternalRating | null
   const google = rating.provider === "google" && rating.verified;
   return (
     <span className={`badge ${google ? "badge-google" : "badge-mock"}`} title={rating.label}>
-      {google ? "Google" : "Demo"} {"★"} {rating.rating.toFixed(1)}
+      {google ? "Google" : "Demo"} <Star size={11} aria-hidden className="star" /> <span className="num">{rating.rating.toFixed(1)}</span>
       {rating.review_count != null && <span className="muted"> ({rating.review_count.toLocaleString()})</span>}
     </span>
   );

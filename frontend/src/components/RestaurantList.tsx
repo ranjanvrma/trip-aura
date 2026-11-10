@@ -15,8 +15,8 @@ function Dish({ d }: { d: DishSuggestion }) {
 
 export default function RestaurantList({ recs, popular }: { recs: FoodRecommendation[]; popular: DishSuggestion[] }) {
   return (
-    <section className="card">
-      <h3>Food recommendations</h3>
+    <section className="tile">
+      <h2 className="tile-title">Food recommendations</h2>
       {popular.length > 0 && (
         <div className="mb-m">
           <h4>Local dishes</h4>

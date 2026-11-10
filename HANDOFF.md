@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** restored the tested Azure deployment files from commit `8443341`
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** UI redesign (bento, light mode), email-code sign-in with per-user trips, security hardening; deployer actions in §8 "Sign-in changes"
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -33,9 +33,11 @@
   - planning engines and the open-data pipeline
   - NLP features: city autocomplete, trip-text parser, semantic matching, sentiment
   - budget and live location
-  - **112 backend tests pass**, the frontend builds, and CI runs on every push
+  - **email one-time-code sign-in** (Resend), private per-user trips, account deletion, security hardening (CSRF, rate limits, idempotency keys, security headers, input limits)
+  - **redesigned frontend**: light-mode bento layout, 3D globe, command menu, sheets, toasts with undo, Terms/Privacy/404 pages
+  - **159 backend tests pass**, the frontend builds, and CI runs on every push
 - **Not deployed yet, but we know exactly how.** On 2026-11-08 a trial run proved the whole free setup works (Vercel + Azure for Students + GHCR + Neon). It was then **deliberately removed** (cloud resources deleted, deployment files taken out of the repo) so the real deployment starts clean. The method is in [§8](#8-deployment-status).
-- **Next:** deploy following §8 and **re-run every test and check on deploy day** (the trial results are not a substitute), then a **premium animated UI redesign** ([§9](#9-open-tasks--next-steps)).
+- **Next:** deploy following §8 and **re-run every test and check on deploy day** (the trial results are not a substitute), including the new sign-in settings in §8 ("Sign-in changes").
 
 ---
 
@@ -92,8 +94,9 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Sources | `providers/open/overture.py` (slim columns, shared DuckDB with HTTP/object caches), `open/wikimedia.py` (SPARQL notable places, Wikivoyage dishes), `open/osm.py` (tags, `opening_hours` parser, fees, diet), `open/providers.py` (geocoder uses GeoNames index first, Nominatim fallback), `heuristic_routes.py` |
 | Engines | `engines/itinerary.py` (anchor + greedy + 2-opt, opening windows, meals, rests, near-duplicate removal), `recommendation.py` (weights 0.3/0.2/0.2/0.1/0.1/0.1, semantic boost), `food.py` (diet checks, dish lexicon, sentiment-gated evidence), `transport.py`, `budget.py`, `costs.py` (country price index + ECB FX; curated India table), `pace.py`, `fares.py` |
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
-| API | `routers/` trips, location (live), geo (autocomplete), nlp (parse-trip), meta (status/options), routes |
-| Frontend | `pages/PlannerPage.tsx` (DescribeTrip + TripForm + saved trips), `pages/TripPage.tsx`, `components/*` (Autocomplete, DayCard, PlaceDetails, map/*, BudgetSummary, LiveLocationPanel...), `services/api.ts`, `types/index.ts` (mirror of backend schemas), `App.tsx` (retries status while backend wakes). Plain CSS in `index.css`, intentionally basic until the redesign |
+| API | `routers/` trips, location (live), geo (autocomplete), nlp (parse-trip), meta (status/options), routes, auth |
+| Auth and security | `routers/auth.py` (request-code, verify, me, logout, `DELETE /api/auth/account`), `services/auth_service.py` (HMAC-hashed 6-digit codes: 10 min, 5 attempts, single use; sessions = SHA-256 of a random cookie token + CSRF token, 7 days), `services/email_service.py` (Resend; dev mode prints codes to the console), `services/idempotency.py` (`X-Idempotency-Key` on create/regenerate, 24 h), `core/security.py` (security headers, Origin check, per-IP limits), `core/ratelimit.py` (in-memory token buckets; client IP counted from the right of `X-Forwarded-For`), `core/urls.py` (http(s)-only URLs, QID checks), `routers/deps.py` (`require_auth` + CSRF). Trips are owner-only (others get 404); admins (`ADMIN_EMAILS`) can read/list/delete any |
+| Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (Layout: header, mobile menu sheet, footer, scroll progress, route chunk preloading; AccountMenu with a safe-triangle submenu), `pages/` (Planner bento, Trip, Trips, SignIn, LegalPages, NotFound), `components/` (CommandMenu `Ctrl/Cmd+K`, `globe/` three.js lazy chunk, `ui/Sheet` swipe-to-dismiss, `ui/Skeleton` + Kbd, TripForm, DayCard, PlaceDetails, map/*...), `lib/` (auth context, toast with undo, `swr.ts` stale-while-revalidate cache, `meta.ts` page titles/descriptions, `useBackToClose` predictive back, `useScrollMotion` GSAP reveals/parallax, `trips.ts` optimistic delete + undo, `safeUrl.ts`), `services/api.ts` (cookies, CSRF header, idempotency keys), `index.css` (design tokens, light mode only). `vite.config.ts` adds a production CSP meta tag and pre-renders per-route `<head>` files (`dist/terms/index.html`, `404.html`...) |
 | Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
 | Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; deployment files removed (see §8 to restore) |
 
@@ -153,6 +156,8 @@ Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`)
 | `VITE_API_BASE_URL` | Vercel env var |
 | Google / LLM keys | optional, unused (`ANTHROPIC_MODEL` has no default) |
 
+New for sign-in (all backend, see `backend/.env.example`): `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters, required in production), `RESEND_API_KEY` (secret), `EMAIL_FROM` (address on a domain verified in Resend), `ADMIN_EMAILS`, `COOKIE_SECURE`/`COOKIE_SAMESITE` (defaults true/lax are right), `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_COUNT`, `RATE_LIMIT_ENABLED`, `DOCS_ENABLED` (off in production by default), `SESSION_DAYS`.
+
 Lesson from the trial: **never screenshot or paste connection strings or the service-principal JSON.** Both leaked once and had to be rotated.
 
 ---
@@ -190,6 +195,34 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
    - cold start: after the app scales to zero, the first request wakes it and the frontend's retry message clears
    - secrets: nothing secret is committed, and none is pasted into chats or screenshots
 
+**Sign-in changes (new after the trial, for the deployer):** the session cookie must be first-party, so the frontend calls the API **same-origin through a Vercel rewrite** instead of calling the Azure URL directly.
+- `frontend/vercel.json` needs the `/api` rewrite **before** the SPA fallback, plus the page security headers (CSP `frame-ancestors`, HSTS and X-Frame-Options can't be set from HTML). Static files win over rewrites, so the pre-rendered `/terms`, `/privacy`, `/signin`, `/trips` heads and `404.html` keep working:
+  ```json
+  {
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "framework": "vite",
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+    "rewrites": [
+      { "source": "/api/:path*", "destination": "https://<backend-host>/api/:path*" },
+      { "source": "/((?!api/).*)", "destination": "/index.html" }
+    ],
+    "headers": [{ "source": "/(.*)", "headers": [
+      { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+      { "key": "X-Frame-Options", "value": "DENY" },
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+      { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(self)" },
+      { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" }
+    ]}]
+  }
+  ```
+- Vercel env: leave **`VITE_API_BASE_URL` empty** (same-origin). Keep `geolocation=(self)` or live location breaks.
+- Container App env: `APP_ENV=production`, `TRUST_PROXY_HEADERS=true`, `TRUSTED_PROXY_COUNT=2` (Vercel and Azure ingress both append to `X-Forwarded-For`), `CORS_ORIGINS=https://<site>` (required even same-origin: the backend checks the browser's `Origin` on every POST/DELETE, otherwise 403 `csrf_failed`), `EMAIL_FROM`, `ADMIN_EMAILS`; secrets `SECRET_KEY` and `RESEND_API_KEY`. `deploy/azure/setup.sh` doesn't set these yet.
+- Resend: until a domain is verified, `onboarding@resend.dev` only delivers to the Resend account's own address. Without `RESEND_API_KEY` in production, sign-in returns 503 `email_not_configured`.
+- Rate limits are in memory per replica: fine with max 1 replica, and they reset when the app scales to zero.
+- Deploy-day checks to add to step 7: request a code and sign in; a second account can't open the first account's trip (404); sign out; delete account; `/terms`, `/privacy` and a bad URL (404 page) load; response headers present (`curl -I`).
+
 **Gotchas from the trial (already fixed in commit `8443341`):**
 - The Dockerfile must `mkdir` + `chown` the app folder as root before `USER user`.
 - `az containerapp revision restart` fails while the app is scaled to zero. To apply a new secret, create a new revision with `az containerapp update ... --set-env-vars SECRET_ROTATED_AT=$(date +%s)`.
@@ -200,12 +233,13 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 ## 9. Open tasks / next steps
 
 1. **Deploy** following §8 (push restored files, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then run the full deploy-day test list (§8 step 7).
-2. **UI redesign** (requested by the owners):
-   - premium, product-grade look with animations, transitions, micro-interactions and a responsive layout
-   - keep the `types/index.ts` contract and the honesty labels: rating source badges, "estimate" tags, attributions footer
-   - add a progress indicator for first-time city loading
+2. **UI follow-ups** (the redesign itself is done):
+   - **Owners to review the Terms and Privacy pages** (`frontend/src/pages/LegalPages.tsx`). They describe the real data flows but aren't lawyer-reviewed. Contact is via GitHub issues; there's no public email or phone yet, so "clickable email/phone" is not implemented.
+   - Place photos (and BlurHash placeholders for them): the data has no images yet; Wikidata P18 / Wikimedia Commons is the free source. Only the globe uses a blurred placeholder today.
+   - A true per-stage progress indicator for first-time city loading (needs async loading on the backend).
+   - Lottie: not used. Animations are Motion (sheets, toasts, menus), GSAP (scroll reveals, parallax, globe turns) and CSS. Add Lottie only with self-made or properly licensed animation files.
 3. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email, or commits carry `Co-authored-by: Chinmay Dahiya <github-email>` (his email is still unknown).
-4. **Dependabot PRs:** merge the green ones (#1–#3 GitHub Actions bumps, #5/#7/#9 backend minimums). Close #4 (React 19), #6 (react-leaflet 5) and #8 (Vite plugin 6): those are major upgrades that break the frontend, so do them during the UI redesign. Majors are now ignored by `dependabot.yml`.
+4. **Dependabot PRs:** merge the green ones (#1–#3 GitHub Actions bumps, #5/#7/#9 backend minimums). Close #4 (React 19), #6 (react-leaflet 5) and #8 (Vite plugin 6): those are major upgrades that need their own change. React Router was moved to 7.18.5 in the redesign (fixes an open-redirect advisory). Majors are now ignored by `dependabot.yml`.
 5. **Nice to have:**
    - async city loading with progress polling
    - real routing (`ROUTING_ENGINE=osrm` exists; it uses public demo servers)
@@ -225,6 +259,9 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 - When deployed with scale-to-zero, the first request after idle takes ~30–60 s while the container starts (the frontend already retries for 2 min).
 - Windows dev: `.gitattributes` forces LF for shell scripts, YAML and the git hooks.
 - Mock mode supports Jaipur and INR only (by design).
+- Local sign-in: with no `RESEND_API_KEY` in development, the 6-digit code is printed in the backend console (`DEV ONLY sign-in code ...`). Existing local SQLite trips have no owner after the migration, so only an admin (`ADMIN_EMAILS`) sees them.
+- Animations are throttled in a hidden or background browser tab, so overlays can look stuck in automated screenshots; that's the browser, not the app.
+- `prefers-reduced-motion` turns off the globe spin, scroll reveals, parallax and view transitions.
 
 ---
 
@@ -241,7 +278,8 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-10 | (this commit) | Restore the tested Azure deployment files and resume the deployment plan |
+| 2026-11-10 | (this commit) | UI redesign (light-mode bento, globe, command menu, sheets, toasts with undo, legal and 404 pages, favicons, per-route heads, CSP); email-code sign-in, per-user trips, account deletion; CSRF, idempotency keys, rate limits, security headers, input limits, injection audit; React Router 7.18.5 |
+| 2026-11-10 | `2bf9321` | Restore the tested Azure deployment files and resume the deployment plan |
 | 2026-11-10 | `b9ffe2b` | README: link author names to their GitHub profiles |
 | 2026-11-10 | `6da2943` | README: fix backend/frontend startup working directories and clarify local-only commits |
 | 2026-11-08 | `8ccf288` | Docs: deployment method is known and proven; added deploy-day full re-test checklist (§8 step 7) |

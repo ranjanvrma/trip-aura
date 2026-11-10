@@ -13,13 +13,18 @@ interface Props {
   submitting: boolean;
   onSubmit: (req: TripRequest) => void;
   prefill?: { parsed: ParsedTrip; version: number } | null;
+  /** Restored draft (kept while the user signs in). */
+  initial?: TripRequest | null;
+  onDraftChange?: (req: TripRequest) => void;
+  onCityLocation?: (loc: LatLng | null) => void;
+  signedIn: boolean;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function TripForm({ options, status, submitting, onSubmit, prefill }: Props) {
+export default function TripForm({ options, status, submitting, onSubmit, prefill, initial, onDraftChange, onCityLocation, signedIn }: Props) {
   const mock = status?.data_mode === "mock";
-  const [req, setReq] = useState<TripRequest>({
+  const [req, setReq] = useState<TripRequest>(() => initial ?? {
     accommodation: { type: "hotel", name_or_address: mock ? "Hotel on MI Road, Jaipur" : "" },
     destination_city: mock ? (status?.mock_city ?? "Jaipur") : "",
     start_date: today(),
@@ -40,6 +45,9 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
   const [coords, setCoords] = useState({ lat: "", lng: "" });
   const [cityLoc, setCityLoc] = useState<LatLng | null>(null);       // from the city dropdown
   const [pinned, setPinned] = useState<LatLng | null>(null);         // exact accommodation point from suggestions
+
+  useEffect(() => { onDraftChange?.(req); }, [req, onDraftChange]);
+  useEffect(() => { onCityLocation?.(cityLoc); }, [cityLoc, onCityLocation]);
 
   // apply fields read from a free-text description (DescribeTrip)
   useEffect(() => {
@@ -71,14 +79,14 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
   };
 
   return (
-    <form className="card form" onSubmit={submit}>
-      <h2>Plan your trip</h2>
+    <form className="form" onSubmit={submit} aria-labelledby="plan-title">
+      <h2 id="plan-title" className="tile-title">Trip details</h2>
 
       <div className="grid-2">
         <label className="field">
           <span>Destination city</span>
           <Autocomplete<CitySuggestion>
-            value={req.destination_city} required minChars={2}
+            inputId="city-input" value={req.destination_city} required minChars={2}
             placeholder={mock ? "Jaipur" : "Start typing a city, e.g. Lis..."}
             onChange={(v) => { set("destination_city", v); setCityLoc(null); }}
             onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); }}
@@ -89,13 +97,14 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
               </span>
             )}
             footer="City data © GeoNames"
+            hint="/"
           />
           {mock ? <small className="muted">Demo mode supports {status?.mock_city} only.</small>
             : <small className="muted">Works for cities worldwide.</small>}
         </label>
         <label className="field">
           <span>Start date</span>
-          <input type="date" value={req.start_date ?? ""} onChange={(e) => set("start_date", e.target.value || null)} />
+          <input type="date" min={today()} value={req.start_date ?? ""} onChange={(e) => set("start_date", e.target.value || null)} />
         </label>
       </div>
 
@@ -196,9 +205,13 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
         </label>
       </div>
 
-      <button className="btn btn-primary" disabled={submitting}>
-        {submitting ? "Generating itinerary..." : "Generate itinerary"}
-      </button>
+      <div className="form-submit">
+        <button className="btn btn-primary btn-block" disabled={submitting} aria-keyshortcuts="Control+Enter Meta+Enter">
+          {submitting ? <><span className="spinner" aria-hidden /> Building your itinerary</>
+            : signedIn ? "Generate itinerary" : "Sign in to generate"}
+        </button>
+        {!signedIn && <p className="small muted">Your details stay filled in while you sign in.</p>}
+      </div>
     </form>
   );
 }

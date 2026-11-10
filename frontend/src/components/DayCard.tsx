@@ -1,5 +1,6 @@
 import type { DayPlan, ItineraryItem } from "../types";
 import { MODE_LABEL, fmtMoney, moneyLabel } from "../utils";
+import { type LucideIcon, ArrowRight, Coffee, House, Sun } from "lucide-react";
 import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   onSelect: (item: ItineraryItem) => void;
 }
 
-const ICON: Record<string, string> = { start: "⌂", activity: "◉", meal: "☕", rest: "☀", travel: "→", end: "⌂" };
+const ICON: Record<string, LucideIcon> = { start: House, meal: Coffee, rest: Sun, travel: ArrowRight, end: House };
 
 function CostTag({ item }: { item: ItineraryItem }) {
   const m = item.type === "travel" ? item.travel?.chosen.cost : item.cost;
@@ -53,9 +54,9 @@ function TravelRow({ item }: { item: ItineraryItem }) {
 export default function DayCard({ day, color, currency, selectedId, onSelect }: Props) {
   let stop = 0;
   return (
-    <section className="card day" style={{ borderTopColor: color }}>
+    <section className="tile day" id={`day-${day.day_number}`} style={{ "--day": color } as React.CSSProperties}>
       <header className="day-head">
-        <h3>Day {day.day_number} <span className="muted">· {day.weekday}, {day.date}</span></h3>
+        <h2 className="h3"><span className="day-dot" aria-hidden />Day {day.day_number} <span className="muted day-date">{day.weekday}, {day.date}</span></h2>
         <span className="day-total" title={`Verified ${fmtMoney(day.budget.verified_amount, currency)} · estimated ${fmtMoney(day.budget.estimated_amount, currency)}`}>
           {fmtMoney(day.budget.total, currency)}
         </span>
@@ -63,13 +64,14 @@ export default function DayCard({ day, color, currency, selectedId, onSelect }: 
       {day.warnings.map((w) => <p key={w} className="warn small">{w}</p>)}
       <ol className="timeline">
         {day.items.map((it) => {
+          const Icon = ICON[it.type];
           const isStop = it.type === "activity" || it.type === "meal";
           if (it.type === "activity") stop += 1;
           return (
             <li key={it.id} className={`tl tl-${it.type} ${selectedId === it.id ? "tl-selected" : ""}`}>
               <span className="tl-time">{it.type === "travel" ? "" : it.start}</span>
               <span className="tl-icon" style={it.type === "activity" ? { background: color } : undefined}>
-                {it.type === "activity" ? stop : ICON[it.type]}
+                {it.type === "activity" ? stop : Icon ? <Icon size={12} /> : null}
               </span>
               <div className="tl-body">
                 {it.type === "travel" ? <TravelRow item={it} /> : (

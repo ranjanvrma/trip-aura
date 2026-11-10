@@ -5,8 +5,10 @@ used; missing information (hours, fees, diet) stays unknown.
 """
 from __future__ import annotations
 
+import math
 import re
 
+from app.core.urls import safe_http_url, wikidata_qid
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, OpeningHours, Place, PlaceKind, TimeRange
 
@@ -26,9 +28,16 @@ FOOD_FILTER = 'nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$
 STATION_FILTERS = ['node["railway"="station"]', 'node["station"~"^(subway|light_rail|monorail)$"]']
 
 
-def _bbox(lat: float, lng: float, radius_km: float) -> str:
-    import math
+def _finite(*values: float) -> tuple[float, ...]:
+    """Only real numbers are interpolated into Overpass QL (the query text is otherwise constant)."""
+    out = tuple(float(v) for v in values)
+    if not all(math.isfinite(v) for v in out):
+        raise ValueError("non-finite coordinate")
+    return out
 
+
+def _bbox(lat: float, lng: float, radius_km: float) -> str:
+    lat, lng, radius_km = _finite(lat, lng, radius_km)
     dlat = radius_km / 111.0
     dlng = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
     return f"{lat - dlat:.5f},{lng - dlng:.5f},{lat + dlat:.5f},{lng + dlng:.5f}"
@@ -277,11 +286,12 @@ def element_to_place(el: dict, local_cuisines: set[str]) -> Place | None:
         return None
     osm_id = f"{el['type'][0]}{el['id']}"
     ext = {"osm": osm_id}
-    if tags.get("wikidata", "").startswith("Q"):
-        ext["wikidata"] = tags["wikidata"].split(";")[0]
+    qid = wikidata_qid(tags.get("wikidata"))
+    if qid:
+        ext["wikidata"] = qid
     amenity = tags.get("amenity")
     hours = parse_opening_hours(tags.get("opening_hours"))
-    website = tags.get("website") or tags.get("contact:website")
+    website = safe_http_url(tags.get("website") or tags.get("contact:website"))   # http(s) only
 
     if amenity in ("restaurant", "cafe", "fast_food", "food_court", "ice_cream"):
         cuisines = _cuisines(tags)

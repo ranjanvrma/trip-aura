@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from app.core.urls import safe_http_url
 from app.schemas.common import DataSource, LatLng, Money
 
 
@@ -99,3 +100,9 @@ class Place(BaseModel):
     external_ids: dict[str, str] = Field(default_factory=dict)   # e.g. {"osm": "n123", "wikidata": "Q1", "google": "..."}
     prominence: int | None = None   # Wikipedia language editions covering the place (Wikidata sitelinks)
     source: DataSource
+
+    @field_validator("google_maps_uri", mode="before")
+    @classmethod
+    def _http_only(cls, v):
+        # links are rendered as <a href>; anything but an absolute http(s) URL is dropped
+        return safe_http_url(v)

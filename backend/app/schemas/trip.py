@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.currencies import SUPPORTED_CURRENCIES
 from app.schemas.common import LatLng
@@ -36,6 +37,7 @@ class AccommodationType(str, Enum):
 
 
 class AccommodationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type: AccommodationType = AccommodationType.HOTEL
     name_or_address: str = Field(min_length=2, max_length=300)
     location: LatLng | None = Field(default=None, description="Optional exact coordinates; skips geocoding.")
@@ -50,6 +52,9 @@ PRESET_DIETS = ["vegetarian", "vegan", "non_vegetarian", "jain", "eggetarian"]
 PRESET_FOOD_CATEGORIES = ["cafes", "street_food", "local_cuisine", "budget_restaurants", "fine_dining"]
 
 
+ShortText = Annotated[str, Field(max_length=100)]
+
+
 def _norm_list(values: list[str]) -> list[str]:
     out: list[str] = []
     for v in values:
@@ -60,18 +65,19 @@ def _norm_list(values: list[str]) -> list[str]:
 
 
 class TripRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     accommodation: AccommodationInput
     destination_city: str = Field(min_length=2, max_length=120)
     start_date: dt.date | None = None
     num_days: int = Field(ge=1, le=14)
     travelers: int = Field(default=1, ge=1, le=20)
-    budget: float = Field(gt=0, description="Total trip budget in `currency`.")
-    currency: str = "INR"
-    accommodation_cost_total: float = Field(default=0, ge=0, description="Counted against the budget if > 0.")
-    interests: list[str] = Field(default_factory=list, max_length=30)
-    food_preferences: list[str] = Field(default_factory=list, max_length=10)
-    food_categories: list[str] = Field(default_factory=list, max_length=10)
-    transport_modes: list[TransportMode] = Field(default_factory=list)
+    budget: float = Field(gt=0, le=1e10, allow_inf_nan=False, description="Total trip budget in `currency`.")
+    currency: str = Field(default="INR", max_length=10)
+    accommodation_cost_total: float = Field(default=0, ge=0, le=1e10, allow_inf_nan=False, description="Counted against the budget if > 0.")
+    interests: list[ShortText] = Field(default_factory=list, max_length=20)
+    food_preferences: list[ShortText] = Field(default_factory=list, max_length=10)
+    food_categories: list[ShortText] = Field(default_factory=list, max_length=10)
+    transport_modes: list[TransportMode] = Field(default_factory=list, max_length=len(TransportMode))
     pace: Pace = Pace.MODERATE
     return_to_accommodation: bool = True
     fit_to_budget: bool = Field(default=False, description="Automatically swap to cheaper options when over budget.")

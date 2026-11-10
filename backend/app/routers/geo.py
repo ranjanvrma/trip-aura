@@ -19,15 +19,16 @@ router = APIRouter(prefix="/api/geo", tags=["geo"])
 
 
 @router.get("/cities")
-def city_suggestions(q: str = Query(min_length=2, max_length=80), limit: int = Query(8, ge=1, le=15)) -> dict:
+def city_suggestions(q: str = Query(min_length=2, max_length=100), limit: int = Query(8, ge=1, le=15)) -> dict:
     cities = get_city_index().search(q, limit)
     return {"query": q, "results": [c.to_dict() for c in cities],
             "attribution": "City data © GeoNames (CC BY 4.0)"}
 
 
 @router.get("/addresses")
-def address_suggestions(q: str = Query(min_length=3, max_length=120), lat: float | None = None,
-                        lng: float | None = None, limit: int = Query(6, ge=1, le=10)) -> dict:
+def address_suggestions(q: str = Query(min_length=2, max_length=100),
+                        lat: float | None = Query(None, ge=-90, le=90),
+                        lng: float | None = Query(None, ge=-180, le=180), limit: int = Query(6, ge=1, le=10)) -> dict:
     s = get_settings()
     params: dict = {"q": q, "limit": limit, "lang": "en"}
     if lat is not None and lng is not None:
