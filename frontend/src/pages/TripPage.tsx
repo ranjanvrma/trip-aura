@@ -50,7 +50,7 @@ export default function TripPage() {
   usePageMeta(it ? `${it.request.num_days} days in ${it.request.destination_city}` : "Your itinerary",
     it ? `Day-by-day plan for ${it.request.destination_city}: sights, meals, transport and budget.` : undefined,
     { noindex: true });
-  useScrollMotion(root, [it?.trip_id, dayFilter]);
+  useScrollMotion(root, [id, dayFilter]);
 
   const days = useMemo(() => (it ? it.days.filter((d) => dayFilter === "all" || d.day_number === dayFilter) : []), [it, dayFilter]);
 

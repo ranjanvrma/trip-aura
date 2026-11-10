@@ -179,8 +179,6 @@ code { font-size: .9em; background: var(--surface-2); border: 1px solid var(--li
 .mobile-nav { display: grid; gap: 4px; }
 .mobile-link { display: block; padding: 14px 12px; border-radius: var(--r-m); color: var(--ink); text-decoration: none; font-weight: 560; font-size: 1.05rem; }
 .mobile-link.is-active, .mobile-link:hover { background: var(--surface-2); }
-.mobile-btn { border: 0; background: none; width: 100%; text-align: left; font: inherit; font-weight: 560; font-size: 1.05rem; cursor: pointer; }
-.mobile-signed { padding: 8px 12px 0; margin: 0; }
 
 /* ---------- tiles and bento grid ---------- */
 .tile {
@@ -189,7 +187,7 @@ code { font-size: .9em; background: var(--surface-2); border: 1px solid var(--li
 }
 @supports (corner-shape: squircle) {
   /* continuous (squircle) corners where the browser supports them */
-  .tile, .btn, .chip, .seg, input, select, textarea, .sheet, .cmd, .toast, .notice, .menu-pop { corner-shape: squircle; }
+  .tile, .btn, .chip, .seg, input, select, textarea, .sheet, .cmd, .toast, .notice { corner-shape: squircle; }
   .tile { border-radius: 28px; }
 }
 .tile-title { font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 650; margin-bottom: 14px; }
@@ -265,10 +263,6 @@ code { font-size: .9em; background: var(--surface-2); border: 1px solid var(--li
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: var(--surface-2); border-color: var(--line); }
 .btn-block { width: 100%; --h: 48px; font-size: 1rem; }
-.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-.btn-danger:hover { background: #8f3b35; color: #fff; }
-.btn-danger-ghost { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: transparent; }
-.btn-danger-ghost:hover { background: var(--blush); color: var(--danger); }
 
 .icon-btn {
   position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px;
@@ -311,7 +305,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .field small { font-size: .8rem; }
 .field-error { color: var(--danger); font-size: .86rem; margin: -6px 0 0; }
 .check { display: inline-flex; align-items: center; gap: 10px; font-size: .92rem; cursor: pointer; min-height: 36px; }
-.switch { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -381,25 +374,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .describe textarea { background: color-mix(in srgb, var(--surface) 90%, transparent); }
 
 /* ---------- menus ---------- */
-.menu { position: relative; }
-.menu-email { max-width: 180px; }
-.menu-pop {
-  position: absolute; right: 0; top: calc(100% + 8px); width: 240px; padding: 6px; z-index: 50;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2);
-  animation: pop var(--base) var(--ease);
-}
-.menu-item {
-  position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; background: none;
-  border-radius: var(--r-s); font: inherit; font-size: .92rem; color: var(--ink); cursor: pointer; text-align: left; min-height: 40px;
-}
-.menu-item:hover, .menu-item:focus-visible, .menu-item[aria-expanded="true"] { background: var(--surface-2); }
-.menu-sub {
-  position: absolute; right: calc(100% + 8px); top: -6px; width: 240px; padding: 6px; z-index: 52;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2);
-}
-.menu-note { padding: 9px 10px; font-size: .86rem; color: var(--muted); }
-.safe-triangle { position: fixed; inset: 0; z-index: 51; }
-@keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
 
 /* ---------- command menu ---------- */
 .cmd-root { position: fixed; inset: 0; z-index: 90; display: grid; justify-items: center; align-items: start; padding: calc(12vh + var(--safe-t)) var(--gutter) 0; }
@@ -477,7 +451,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .empty { display: grid; justify-items: center; text-align: center; gap: 10px; padding: clamp(28px, 6vw, 56px) 20px; }
 .empty p { max-width: 44ch; }
 .empty-icon { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--sage); color: var(--sage-ink); }
-.danger { border-color: color-mix(in srgb, var(--danger) 18%, var(--line)); }
 
 .narrow { max-width: 480px; margin: clamp(8px, 4vh, 48px) auto 0; }
 
@@ -577,11 +550,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .table { width: 100%; border-collapse: collapse; } .table td, .table th { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .table th { font-size: .78rem; color: var(--muted); font-weight: 600; }
 .num { text-align: right !important; }
-.live-box { background: var(--sky); border-radius: var(--r-m); padding: 12px; margin: 10px 0; color: var(--sky-ink); }
-.live-box ul { margin: 6px 0; padding-left: 18px; }
-.alerts { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
-.alert { padding: 9px 12px; border-radius: var(--r-s); font-size: .86rem; background: var(--surface-2); }
-.alert-better_alternative { background: var(--butter); } .alert-traffic_change { background: var(--blush); } .alert-arrived { background: var(--sage); }
 .attributions { line-height: 1.6; padding: 0 4px; }
 .about-data { padding: 0 4px; }
 .about-data summary { cursor: pointer; color: var(--muted); font-size: .86rem; font-weight: 560; width: max-content; padding: 6px 0; }

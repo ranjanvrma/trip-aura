@@ -76,8 +76,6 @@ async def security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = DOCS_CSP if is_docs else API_CSP
     if is_https(request, settings):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    if path.startswith("/api/auth/"):
-        response.headers["Cache-Control"] = "no-store"
     return response
 
 

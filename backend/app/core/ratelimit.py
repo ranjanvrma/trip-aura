@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from app.core.config import Settings, get_settings
-from app.core.errors import RateLimitedError
 
 
 @dataclass(frozen=True)
@@ -29,9 +28,7 @@ class Limit:
 
 # route class -> limit
 LIMITS: dict[str, Limit] = {
-    "auth_email": Limit(3, 15 * 60),     # sign-in code requests per email
-    "auth_ip": Limit(10, 15 * 60),       # sign-in code requests per IP
-    "generate": Limit(6, 60),            # trip create / preview / regenerate per user
+    "generate": Limit(6, 60),            # trip generation (POST /api/trips/preview) per IP
     "geo": Limit(120, 60),               # /api/geo/* per IP
     "nlp": Limit(30, 60),                # /api/nlp/* per IP
     "default": Limit(240, 60),           # everything else per IP
@@ -74,14 +71,6 @@ class RateLimiter:
 limiter = RateLimiter()
 
 
-def enforce(route_class: str, key: str, message: str) -> None:
-    """Take a token for `key` or raise RateLimitedError (no-op when RATE_LIMIT_ENABLED=false)."""
-    if get_settings().rate_limit_enabled:
-        wait = limiter.hit(route_class, key)
-        if wait:
-            raise RateLimitedError(wait, message)
-
-
 def client_ip(request: Request, settings: Settings | None = None) -> str:
     """The socket peer address, or, when proxy headers are trusted, the X-Forwarded-For entry written by the
     outermost trusted proxy. Entries are counted from the right (each proxy appends the address it saw), so a
@@ -98,8 +87,6 @@ def ip_route_class(method: str, path: str) -> str:
     """Route class for the per-IP limit applied to every request."""
     if path == "/api/trips/preview" and method == "POST":
         return "generate"
-    if path == "/api/auth/request-code" and method == "POST":
-        return "auth_ip"
     if path.startswith("/api/geo/"):
         return "geo"
     if path.startswith("/api/nlp/"):

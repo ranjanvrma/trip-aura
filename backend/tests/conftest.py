@@ -1,8 +1,5 @@
 import os
-import re
 import sys
-import uuid
-from functools import partial
 from pathlib import Path
 
 import pytest
@@ -14,20 +11,11 @@ os.environ.setdefault("AI_ENABLED", "false")
 os.environ.setdefault("SEMANTIC_ENABLED", "false")
 os.environ.setdefault("WARMUP_ON_START", "false")
 os.environ["GOOGLE_MAPS_API_KEY"] = ""
-# auth / security: local plain-http test client, fixed signing key, never real email
+# security: development mode, real per-IP rate limits, proxy headers not trusted
 os.environ["APP_ENV"] = "development"
-os.environ["COOKIE_SECURE"] = "false"
-os.environ["COOKIE_SAMESITE"] = "lax"
-os.environ["SECRET_KEY"] = "test-secret-key-0123456789-abcdefghijklmnop"
-os.environ["RESEND_API_KEY"] = ""
-os.environ["ADMIN_EMAILS"] = "admin@example.com"
 os.environ["TRUST_PROXY_HEADERS"] = "false"
 os.environ["RATE_LIMIT_ENABLED"] = "true"
 os.environ.pop("DOCS_ENABLED", None)
-
-USER_EMAIL = "traveller@example.com"
-ADMIN_EMAIL = "admin@example.com"
-GENERATION_PATH = re.compile(r"^/api/trips(/\d+/regenerate)?$")
 
 
 @pytest.fixture
@@ -66,49 +54,6 @@ def _reset_rate_limits():
     limiter.reset()
 
 
-class FakeMailer:
-    """Captures sign-in codes instead of sending email."""
-
-    def __init__(self):
-        self.sent: list[tuple[str, str]] = []
-
-    def send_code(self, email: str, code: str, expires_minutes: int) -> None:
-        self.sent.append((email, code))
-
-    def last_code(self, email: str) -> str:
-        return next(c for e, c in reversed(self.sent) if e == email)
-
-
-@pytest.fixture
-def mailer():
-    from app.main import app
-    from app.services.email_service import get_mailer
-
-    fake = FakeMailer()
-    app.dependency_overrides[get_mailer] = lambda: fake
-    yield fake
-    app.dependency_overrides.pop(get_mailer, None)
-
-
-def login(c, mailer: FakeMailer, email: str = USER_EMAIL, auto_idempotency: bool = True):
-    """Sign `c` in through the real code flow; keeps the cookie and sends the CSRF header by default.
-
-    With auto_idempotency, trip create/regenerate POSTs get a fresh X-Idempotency-Key unless one is set."""
-    r = c.post("/api/auth/request-code", json={"email": email})
-    assert r.status_code == 202, r.text
-    r = c.post("/api/auth/verify", json={"email": email, "code": mailer.last_code(email)})
-    assert r.status_code == 200, r.text
-    data = r.json()
-    c.headers["X-CSRF-Token"] = data["csrf_token"]
-    if auto_idempotency:
-        def add_key(request):
-            if request.method == "POST" and GENERATION_PATH.match(request.url.path) \
-                    and "x-idempotency-key" not in request.headers:
-                request.headers["X-Idempotency-Key"] = uuid.uuid4().hex
-        c.event_hooks = {**c.event_hooks, "request": [*c.event_hooks.get("request", []), add_key]}
-    return data
-
-
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """Test client on a fresh SQLite database (the app's startup creates the tables)."""
@@ -126,31 +71,9 @@ def client(tmp_path, monkeypatch):
 
 @pytest.fixture
 def new_client(client):
-    """Factory for extra clients (own cookie jar) on the same app and database."""
+    """Factory for extra clients (e.g. another base URL) on the same app and database."""
     from fastapi.testclient import TestClient
 
     from app.main import app
 
-    return partial(TestClient, app)
-
-
-def _signed_in(c, mailer: FakeMailer, email: str):
-    c.session_info = login(c, mailer, email)
-    return c
-
-
-@pytest.fixture
-def auth_client(client, mailer):
-    """`client` signed in as an ordinary user."""
-    return _signed_in(client, mailer, USER_EMAIL)
-
-
-@pytest.fixture
-def admin_client(new_client, mailer):
-    return _signed_in(new_client(), mailer, ADMIN_EMAIL)
-
-
-@pytest.fixture
-def other_client(new_client, mailer):
-    """A second ordinary user with their own cookie jar."""
-    return _signed_in(new_client(), mailer, "other@example.com")
+    return lambda **kw: TestClient(app, **kw)

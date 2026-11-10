@@ -2,19 +2,15 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DATABASE_URL = f"sqlite:///{(BACKEND_DIR / 'tripaura.db').as_posix()}"
-# Used by the legacy, currently disabled account endpoints when no secret is configured.
-_PROCESS_SECRET = secrets.token_urlsafe(48)
 log = logging.getLogger(__name__)
 
 
@@ -89,16 +85,7 @@ class Settings(BaseSettings):
     # None = on in development, off in production
     docs_enabled: bool | None = None
 
-    # ---- auth / security ----------------------------------------------------
-    # Legacy account settings retained for database compatibility; account routes are not mounted.
-    secret_key: str = ""
-    session_days: int = Field(default=7, ge=1, le=90)       # absolute session lifetime
-    cookie_secure: bool = True                               # false only for local plain-http development
-    cookie_samesite: Literal["lax", "strict", "none"] = "lax"  # "none" always sets Secure
-    admin_emails: str = ""                                   # comma list; role re-evaluated at each sign-in
-    # Legacy account settings retained for database compatibility; no email is sent.
-    resend_api_key: str = ""
-    email_from: str = "TripAura <onboarding@resend.dev>"
+    # ---- security ----------------------------------------------------------
     # Read the client IP / scheme from X-Forwarded-For / X-Forwarded-Proto. Enable only behind a
     # proxy that overwrites these headers (Azure Container Apps ingress, Vercel rewrites).
     trust_proxy_headers: bool = False
@@ -121,7 +108,7 @@ class Settings(BaseSettings):
     def _blank_docs_means_auto(cls, v):
         return None if isinstance(v, str) and not v.strip() else v
 
-    @field_validator("app_env", "cookie_samesite", mode="before")
+    @field_validator("app_env", mode="before")
     @classmethod
     def _lower(cls, v):
         return v.strip().lower() if isinstance(v, str) else v
@@ -133,22 +120,6 @@ class Settings(BaseSettings):
     @property
     def docs_on(self) -> bool:
         return (not self.is_production) if self.docs_enabled is None else self.docs_enabled
-
-    @property
-    def signing_key(self) -> bytes:
-        return (self.secret_key.strip() or _PROCESS_SECRET).encode()
-
-    @property
-    def cookie_secure_effective(self) -> bool:
-        return self.cookie_secure or self.cookie_samesite == "none"
-
-    @property
-    def admin_email_set(self) -> set[str]:
-        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
-
-    @property
-    def email_configured(self) -> bool:
-        return bool(self.resend_api_key.strip())
 
     @property
     def cors_origin_list(self) -> list[str]:

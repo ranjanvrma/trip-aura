@@ -40,25 +40,9 @@ class NotFoundError(TripAuraError):
     code = "not_found"
 
 
-class TripNotFoundError(NotFoundError):
-    """Also returned for trips owned by someone else, so ids cannot be probed."""
-    code = "trip_not_found"
-
-
-# ---------------------------------------------------------------- auth / security
-class NotAuthenticatedError(TripAuraError):
-    status_code = 401
-    code = "not_authenticated"
-
-
 class CsrfError(TripAuraError):
     status_code = 403
     code = "csrf_failed"
-
-
-class InvalidCodeError(TripAuraError):
-    status_code = 400
-    code = "invalid_code"
 
 
 class RateLimitedError(TripAuraError):
@@ -68,28 +52,3 @@ class RateLimitedError(TripAuraError):
     def __init__(self, retry_after: int, message: str = "Too many requests, please slow down"):
         retry_after = max(1, int(retry_after))
         super().__init__(message, details={"retry_after": retry_after}, headers={"Retry-After": str(retry_after)})
-
-
-class EmailNotConfiguredError(TripAuraError):
-    status_code = 503
-    code = "email_not_configured"
-
-
-class EmailFailedError(TripAuraError):
-    status_code = 502
-    code = "email_failed"
-
-
-class IdempotencyKeyRequiredError(TripAuraError):
-    status_code = 400
-    code = "idempotency_key_required"
-
-
-class IdempotencyKeyReusedError(TripAuraError):
-    status_code = 422
-    code = "idempotency_key_reused"
-
-
-class RequestInProgressError(TripAuraError):
-    status_code = 409
-    code = "request_in_progress"

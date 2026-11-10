@@ -8,11 +8,6 @@ def utc_now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
-def as_utc(t: dt.datetime) -> dt.datetime:
-    """SQLite returns naive datetimes; everything is stored in UTC."""
-    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
-
-
 def hm_to_min(hm: str) -> int:
     h, m = hm.split(":")
     return int(h) * 60 + int(m)

@@ -27,7 +27,7 @@ Tell TripAura where you're staying, where you're going, your budget, interests, 
   - typo-tolerant interests
   - semantic matching with a local embedding model
   - review sentiment
-- **Budget and live mode:** savings suggestions and auto "fit to budget"; live location with next-stop distance and better-transport alerts.
+- **Budget:** savings suggestions and auto "fit to budget".
 - **No account needed:** generated itineraries are saved in your browser on this device. They do not sync; clearing site data removes them.
 
 ## Architecture
@@ -67,7 +67,7 @@ flowchart LR
 | `backend/app/engines/` | Pure planning logic: itinerary, scoring, food, transport, budget, costs |
 | `backend/app/providers/` | Data sources behind one interface: `open/` (worldwide), `google/` (optional), `mock/` (Jaipur demo) |
 | `backend/app/nlp/` | City index, trip-text parser, interests, embeddings, sentiment |
-| `backend/app/services/` | Orchestration (`itinerary_service.py`), FX, Google enrichment, live location |
+| `backend/app/services/` | Orchestration (`itinerary_service.py`), FX, Google enrichment |
 | `backend/app/routers/` | REST API |
 | `frontend/src/` | Pages, components (form, day cards, map, budget), typed API client |
 | `.github/` | CI (tests + build), Dependabot, PR template |
@@ -103,7 +103,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (161 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (130 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration

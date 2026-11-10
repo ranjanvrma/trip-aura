@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** removed account sign-in; trips now save in browser local storage; deployment remains Vercel + Azure
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** removed the leftover sign-in code and fixed CI; trips save in the browser; deployment remains Vercel + Azure
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -32,10 +32,10 @@
 - **Done and working locally:**
   - planning engines and the open-data pipeline
   - NLP features: city autocomplete, trip-text parser, semantic matching, sentiment
-  - budget and live location
+  - budget
   - browser-local saved trips (no account or email needed), security headers and request limits
   - **redesigned frontend**: light-mode bento layout, 3D globe, command menu, sheets, toasts with undo, Terms/Privacy/404 pages
-  - **161 backend tests pass**, the frontend builds, and CI runs on every push
+  - **130 backend tests pass**, the frontend builds, and CI runs on every push
 - **Deployed:** the public Vercel site and Azure backend are live (see [§8](#8-deployment-status)). Trip generation uses the public preview endpoint; the browser stores saved plans locally.
 
 ---
@@ -88,13 +88,13 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Area | Files |
 |---|---|
 | Settings | `backend/app/core/config.py` (every env var and default) |
-| Shared helpers | `core/text.py` (`fold`: accent-insensitive matching), `core/geo.py` (`haversine_km`, `degree_span`), `core/timeutil.py` (`utc_now`, `as_utc`), `core/ratelimit.py` (`enforce`), `core/security.py` (`exception_response`), `services/idempotency.py` (`Idempotency.run`), `providers/base.py` (`RouteResult.unavailable`), `engines/costs.py` (`CostModel.fallback`). `engines/` imports nothing from `services/` (type hints only) |
+| Shared helpers | `core/text.py` (`fold`: accent-insensitive matching), `core/geo.py` (`haversine_km`, `degree_span`), `core/timeutil.py` (`utc_now`), `core/security.py` (`exception_response`), `providers/base.py` (`RouteResult.unavailable`), `engines/costs.py` (`CostModel.fallback`). `engines/` imports nothing from `services/` (type hints only) |
 | Pipeline | `services/itinerary_service.py` (geocode → candidates → semantic match → schedule → budget → enrich → optional LLM summary) |
 | City data | `providers/open/city_store.py`: parallel loader (ThreadPoolExecutor) for Overture/Wikidata/3×OSM/Wikivoyage, merge (`merge_places`, accent-insensitive name + distance), SQLite/Postgres cache (`CityDataset`, `DATASET_VERSION=6`) |
 | Sources | `providers/open/overture.py` (slim columns, shared DuckDB with HTTP/object caches), `open/wikimedia.py` (SPARQL notable places, Wikivoyage dishes), `open/osm.py` (tags, `opening_hours` parser, fees, diet), `open/providers.py` (geocoder uses GeoNames index first, Nominatim fallback), `heuristic_routes.py` |
 | Engines | `engines/itinerary.py` (anchor + greedy + 2-opt, opening windows, meals, rests, near-duplicate removal), `recommendation.py` (weights 0.3/0.2/0.2/0.1/0.1/0.1, semantic boost), `food.py` (diet checks, dish lexicon, sentiment-gated evidence), `transport.py`, `budget.py`, `costs.py` (country price index + ECB FX; curated India table), `pace.py`, `fares.py` |
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
-| API | `routers/` trip preview, geo autocomplete, NLP parsing, metadata, and routing; account and live-location routers are not mounted |
+| API | `routers/` trip preview, geo autocomplete, NLP parsing, metadata, and routing. Sign-in, sessions, server-side saved trips, idempotency records and live location were removed (old tables in existing databases are simply unused). Security that remains: Origin check on POST, per-IP rate limits (`generate` 6/min on `/api/trips/preview`), security headers, input limits, safe URLs; CORS without credentials |
 | API and security | `routers/` contains itinerary generation (`/api/trips/preview`), geo autocomplete, NLP parsing, status/options and routing; `core/security.py` provides security headers, origin checks and per-IP limits. Account routes are not mounted. |
 | Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (header, mobile menu sheet, footer, scroll progress, route chunk preloading), `pages/` (Planner, Trip, Trips, Legal, NotFound), `components/` (CommandMenu, globe, form, day cards and map), `lib/localTrips.ts` (saved itineraries in local storage), `lib/trips.ts` (delete + undo), `services/api.ts` (public API calls), `vite.config.ts` (production CSP and pre-rendered route heads) |
 | Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
@@ -237,6 +237,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
+| 2026-11-10 | (this commit) | Remove the leftover sign-in code after `7113855`: auth/email/idempotency/live-location routers, services, models, errors and settings, the saved-trip API (only `POST /api/trips/preview` remains), CORS credentials; tests rewritten for the public flow (`test_security.py`), CI green again; unused frontend CSS removed. 130 tests |
 | 2026-11-10 | `7113855` | Remove sign-in and save generated itineraries in browser storage; update privacy, deployment, and setup docs |
 | 2026-11-10 | `34ddc15` | Add Vercel security headers and long-lived cache for hashed assets; dependency audits clean |
 | 2026-11-10 | `fa15814` | Whole-codebase cleanup, no behaviour change: dead code, unused settings paths and duplicated logic removed, shared helpers added (see §4 "Shared helpers"), regexes compiled once, faster city merging and fuzzy search. Bugs fixed: trip parser listed corrected interests in random order; address suggestions returned 500 for Photon features without coordinates; frontend sheet stole focus on re-render, Google/Leaflet maps re-fit or re-centred on every re-render, empty "Tags:" row. 161 tests |
