@@ -119,7 +119,7 @@ Everything works without keys. The main settings, set in `backend/.env` (full li
 | `APP_ENV` | `development` | `production` requires `SECRET_KEY` and turns off API docs |
 | `RESEND_API_KEY` | empty | Sends sign-in codes. Empty in development: codes are printed in the backend console |
 
-Frontend: locally, leave `VITE_API_BASE_URL` empty and use the Vite `/api` proxy. The live Vercel deployment currently points `VITE_API_BASE_URL` directly at Azure. Production email sign-in still needs configuration and a same-origin `/api` rewrite; see [HANDOFF.md](HANDOFF.md#8-deployment-status).
+Frontend: locally, leave `VITE_API_BASE_URL` empty and use the Vite `/api` proxy. The production Vercel config now rewrites `/api/*` to Azure so session cookies can be first-party. Set Vercel `VITE_API_BASE_URL` to an empty value and redeploy after this change is pushed. Production email sign-in still needs provider configuration; see [HANDOFF.md](HANDOFF.md#8-deployment-status).
 
 ## Project status
 

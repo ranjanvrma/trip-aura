@@ -3,5 +3,8 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
