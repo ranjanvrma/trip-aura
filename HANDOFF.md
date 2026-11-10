@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-08 · **Branch:** `main` · **Latest change:** docs say the deployment method is known and proven; deploy-day full re-test checklist added (§8 step 7)
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** README startup commands now run from the correct project directories; local commits only
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -17,7 +17,7 @@
    - **No AI attribution anywhere:** no `Co-Authored-By` lines for AI tools, no assistant or tool names in code, docs or commit messages.
    - **Never commit secrets** (see §7 for where they live).
    - **Documentation lives only in `README.md` and `HANDOFF.md`.** The owners asked for no extra doc files: keep the README short, and put depth here.
-   - Push or deploy only when a human asks.
+   - Never push code; the human owner pushes their local commits. Deploy only when a human asks.
    - Keep the honesty rules: label data sources, keep external ratings separate from the suitability score, mark estimates, and never silently replace failed live data with mock data.
    - Tests stay offline (fakes, `httpx.MockTransport`); add a test for every behaviour change.
    - `backend/app/engines/` stays pure (no network).
@@ -241,7 +241,8 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-08 | (this commit) | Docs: deployment method is known and proven; added deploy-day full re-test checklist (§8 step 7) |
+| 2026-11-10 | (this commit) | README: fix backend/frontend startup working directories and clarify local-only commits |
+| 2026-11-08 | `8ccf288` | Docs: deployment method is known and proven; added deploy-day full re-test checklist (§8 step 7) |
 | 2026-11-08 | `665e0ba` | Deployment trial torn down: all cloud resources deleted; removed Dockerfile, deploy scripts, deploy workflows, `modal_app.py`, `render.yaml`, `vercel.json` (restore from `8443341`); README gains *Project status* + *Deployment plan*; HANDOFF §8 is now the redeploy plan |
 | 2026-11-08 | `8443341` | HANDOFF: backend live on Azure Central India, verification results (last commit with all deployment files) |
 | 2026-11-08 | `c88cc71` | `deploy/azure/setup.sh`: detect regions allowed by the subscription policy and pick one; reuse an existing resource group |

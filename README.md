@@ -83,14 +83,19 @@ flowchart LR
 ## Quick start
 
 ```bash
-# backend (in backend/)
+cd backend
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt        # macOS/Linux: .venv/bin/pip
+.venv/Scripts/python -m pip install -r requirements.txt  # macOS: .venv/bin/python -m pip
 cp .env.example .env
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+```
 
-# frontend (in frontend/, second terminal)
-npm install && npm run dev
+In a second terminal, from the repository root:
+
+```bash
+cd frontend
+npm ci
+npm run dev
 ```
 
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
@@ -158,9 +163,9 @@ The exact steps, how to restore the deployment files from git history, and the f
 
 ## Contributing
 
-1. **Catch up:** `git pull`, read [HANDOFF.md](HANDOFF.md), and skim `git log --oneline -15`.
+1. **Catch up:** fetch and review the latest changes, read [HANDOFF.md](HANDOFF.md), and skim `git log --oneline -15`.
 2. **One-time setup per clone:** `git config core.hooksPath .githooks`. This hook blocks commits that don't update `HANDOFF.md`; for trivial commits, bypass with `SKIP_HANDOFF=1 git commit ...`.
-3. **Commit:** every change updates `HANDOFF.md` (status, decisions, change log). Never commit secrets.
+3. **Commit locally:** every change updates `HANDOFF.md` (status, decisions, change log). Never commit secrets. Do not push; push the commits yourself when ready.
 4. **GitHub credit:** commit with the email on your GitHub account so you appear in Contributors.
 
 ## Authors
