@@ -35,12 +35,8 @@ export function TermsPage() {
         transport, with the official source before you travel.
       </p>
 
-      <h2>Your account</h2>
-      <ul>
-        <li>You sign in with a one-time code sent to your email address. Keep access to that inbox secure.</li>
-        <li>You're responsible for what happens under your account. Sign out on shared devices.</li>
-        <li>You can delete your trips at any time, and delete your account from the <Link to="/trips">My trips</Link> page.</li>
-      </ul>
+      <h2>Your saved trips</h2>
+      <p>Trips are saved in this browser on this device. They do not sync to other devices. Anyone using the same browser profile may be able to see them. Clearing this website's browser storage deletes saved trips.</p>
 
       <h2>Acceptable use</h2>
       <p>Don't misuse the service. In particular, don't:</p>
@@ -94,32 +90,23 @@ export function PrivacyPage() {
       <table className="table legal-table">
         <thead><tr><th>Data</th><th>Why</th><th>How long</th></tr></thead>
         <tbody>
-          <tr><td>Your email address</td><td>To send sign-in codes and identify your account</td><td>Until you delete your account</td></tr>
-          <tr><td>Sign-in codes</td><td>To check that you own the email address. Only a one-way hash is stored.</td><td>10 minutes, or until used</td></tr>
-          <tr><td>Session record</td><td>To keep you signed in. The cookie holds a random token; we store only its hash.</td><td>7 days, or until you sign out</td></tr>
-          <tr><td>Your trips</td><td>The details you enter (city, accommodation, dates, budget, preferences) and the generated plan</td><td>Until you delete the trip or your account</td></tr>
-          <tr><td>Request keys</td><td>To stop a retried request from creating a duplicate trip</td><td>24 hours</td></tr>
+          <tr><td>Trip request and itinerary</td><td>Saved in your browser so you can reopen your plan</td><td>Until you delete it or clear this website's browser storage</td></tr>
         </tbody>
       </table>
 
       <h2>What we don't store</h2>
       <ul>
-        <li><strong>Live location.</strong> When you switch on live location, your position is sent to refresh travel estimates and is not saved. Switching it off stops tracking at once.</li>
         <li><strong>IP addresses.</strong> They're used briefly in server memory to limit request rates, and aren't written to the database.</li>
       </ul>
 
       <h2>Cookies and browser storage</h2>
       <p>
-        We set one essential cookie, <code>ta_session</code>. It keeps you signed in, can't be read by page scripts,
-        and is only sent to TripAura. There are no advertising or analytics cookies. While you sign in, the trip form
-        you filled in is kept in your browser's session storage, so it isn't lost; it's removed when the trip is created
-        or the tab is closed.
+        Saved trips use your browser's local storage. They stay on this device and browser profile, and are removed if you delete them or clear site data. There are no advertising or analytics cookies.
       </p>
 
       <h2>Services that process data for us</h2>
       <ul>
-        <li><strong>Resend</strong> delivers sign-in emails, so it receives your email address and the code.</li>
-        <li><strong>Hosting and database providers</strong> run the website, API and database that hold the data above.</li>
+        <li><strong>Hosting provider</strong> runs the website and API. When you generate a plan, the trip details are sent to the API to build it; the generated itinerary is returned to your browser and saved there.</li>
         <li>
           <strong>Map tiles</strong> are loaded by your browser from the OpenStreetMap tile servers (or Google Maps, if
           enabled). Those servers see your IP address and the map area you view.
@@ -127,21 +114,19 @@ export function PrivacyPage() {
         <li>
           <strong>Open-data lookups.</strong> To build a plan, our server queries services such as Overture Maps,
           Wikidata, OpenStreetMap (Overpass and Nominatim), Photon and Wikivoyage with the city or address you
-          typed. These requests don't include your email or account.
+          typed. These requests don't include your email.
         </li>
       </ul>
 
       <h2>Your choices and rights</h2>
       <ul>
-        <li>Delete any trip from <Link to="/trips">My trips</Link>.</li>
-        <li>Delete your account, together with all your trips and sessions, from <Link to="/trips">My trips</Link>. This is permanent.</li>
-        <li>Depending on where you live, you may have rights to access, correct or erase your data. Deleting your account erases it.</li>
+        <li>Delete any trip from <Link to="/trips">My trips</Link>, or clear this website's storage in your browser settings.</li>
+        <li>Depending on where you live, you may have rights to access, correct or erase your data.</li>
       </ul>
 
       <h2>Security</h2>
       <p>
-        Connections are encrypted (HTTPS). Sessions use secure, HttpOnly, SameSite cookies with CSRF protection.
-        Sign-in codes expire quickly and are limited in attempts, and requests are rate limited.
+        Connections are encrypted (HTTPS). Requests are rate limited. Trips saved in local storage can be viewed by anyone who can use the same browser profile.
       </p>
 
       <h2>Children</h2>

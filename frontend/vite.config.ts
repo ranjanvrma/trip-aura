@@ -40,7 +40,6 @@ function prerenderHeads(): Plugin {
   const routes: Record<string, [string, string]> = {
     terms: ["Terms of use | TripAura", "The terms for using TripAura, a free day-by-day trip planner."],
     privacy: ["Privacy policy | TripAura", "What TripAura stores, why, for how long, and who it is shared with."],
-    signin: ["Sign in | TripAura", "Sign in to TripAura with a one-time code sent to your email. No password needed."],
     trips: ["My trips | TripAura", "Your saved TripAura itineraries."],
     "404": ["Page not found | TripAura", "This page doesn't exist on TripAura."],
   };

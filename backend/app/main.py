@@ -18,7 +18,7 @@ from app.core.errors import NotFoundError, TripAuraError
 from app.core.logging_config import configure_logging
 from app.core.security import error_response, exception_response, request_guard, security_headers
 from app.db.database import init_engine
-from app.routers import auth, geo, location, meta, nlp, routes, trips
+from app.routers import geo, meta, nlp, routes, trips
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -30,9 +30,8 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.check_startup()   # e.g. APP_ENV=production without SECRET_KEY stops here
     init_engine()
-    log.info("TripAura started: APP_ENV=%s, DATA_MODE=%s, google_configured=%s, ai=%s, email=%s",
-             settings.app_env, settings.data_mode.value, settings.google_configured, settings.ai_available,
-             "resend" if settings.email_configured else "dev log")
+    log.info("TripAura started: APP_ENV=%s, DATA_MODE=%s, google_configured=%s, ai=%s",
+             settings.app_env, settings.data_mode.value, settings.google_configured, settings.ai_available)
     if settings.data_mode == DataMode.LIVE and not settings.google_configured:
         log.error("DATA_MODE=live but GOOGLE_MAPS_API_KEY is empty: itinerary requests will return 503.")
     if settings.warmup_on_start:
@@ -114,10 +113,8 @@ def redoc_docs() -> HTMLResponse:
     return _docs_off() or get_redoc_html(openapi_url="/openapi.json", title="TripAura API - ReDoc")
 
 
-app.include_router(auth.router)
 app.include_router(meta.router)
 app.include_router(trips.router)
-app.include_router(location.router)
 app.include_router(routes.router)
 app.include_router(geo.router)
 app.include_router(nlp.router)

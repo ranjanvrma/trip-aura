@@ -1,13 +1,11 @@
 import { motion, useScroll, useSpring } from "motion/react";
 import { useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { CodeXml, Menu, Search } from "lucide-react";
-import { useAuth } from "../../lib/auth";
 import { modKey } from "../../lib/platform";
 import { useCommands } from "../CommandMenu";
 import Sheet from "../ui/Sheet";
 import { Kbd } from "../ui/Skeleton";
-import AccountMenu from "./AccountMenu";
 import Logo from "./Logo";
 
 export const REPO_URL = "https://github.com/ranjanvrma/trip-aura";
@@ -15,7 +13,6 @@ export const REPO_URL = "https://github.com/ranjanvrma/trip-aura";
 /** Warm the route's code chunk on hover or focus, so the next page appears without a wait. */
 const preload: Record<string, () => Promise<unknown>> = {
   "/trips": () => import("../../pages/TripsPage"),
-  "/signin": () => import("../../pages/SignInPage"),
   "/terms": () => import("../../pages/LegalPages"),
   "/privacy": () => import("../../pages/LegalPages"),
 };
@@ -34,9 +31,7 @@ function ScrollProgress() {
 
 export default function Layout({ banner }: { banner?: React.ReactNode }) {
   const { open } = useCommands();
-  const { user, signOut } = useAuth();
   const [menu, setMenu] = useState(false);
-  const loc = useLocation();
   const closeMenu = () => setMenu(false);
 
   return (
@@ -57,7 +52,6 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
               <Search size={16} aria-hidden /> <span className="cmd-trigger-text">Search</span>
               <span className="kbd-group" aria-hidden><Kbd>{modKey()}</Kbd><Kbd>K</Kbd></span>
             </button>
-            <div className="nav-desktop"><AccountMenu /></div>
             <button className="icon-btn hit nav-mobile" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu}>
               <Menu size={20} aria-hidden />
             </button>
@@ -71,14 +65,6 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
             <NavLink key={l.to} to={l.to} end viewTransition onClick={closeMenu}
                      className={({ isActive }) => `mobile-link ${isActive ? "is-active" : ""}`}>{l.label}</NavLink>
           ))}
-          {user
-            ? (
-              <>
-                <p className="muted small mobile-signed">Signed in as {user.email}</p>
-                <button className="mobile-link mobile-btn" onClick={() => { closeMenu(); void signOut(); }}>Sign out</button>
-              </>
-            )
-            : <Link to={`/signin?next=${encodeURIComponent(loc.pathname)}`} className="mobile-link" onClick={closeMenu}>Sign in</Link>}
           <Link to="/terms" className="mobile-link" onClick={closeMenu}>Terms of use</Link>
           <Link to="/privacy" className="mobile-link" onClick={closeMenu}>Privacy policy</Link>
         </nav>

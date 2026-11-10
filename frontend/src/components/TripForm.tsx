@@ -13,18 +13,14 @@ interface Props {
   submitting: boolean;
   onSubmit: (req: TripRequest) => void;
   prefill?: { parsed: ParsedTrip; version: number } | null;
-  /** Restored draft (kept while the user signs in). */
-  initial?: TripRequest | null;
-  onDraftChange?: (req: TripRequest) => void;
   onCityLocation?: (loc: LatLng | null) => void;
-  signedIn: boolean;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function TripForm({ options, status, submitting, onSubmit, prefill, initial, onDraftChange, onCityLocation, signedIn }: Props) {
+export default function TripForm({ options, status, submitting, onSubmit, prefill, onCityLocation }: Props) {
   const mock = status?.data_mode === "mock";
-  const [req, setReq] = useState<TripRequest>(() => initial ?? {
+  const [req, setReq] = useState<TripRequest>(() => ({
     accommodation: { type: "hotel", name_or_address: mock ? "Hotel on MI Road, Jaipur" : "" },
     destination_city: mock ? (status?.mock_city ?? "Jaipur") : "",
     start_date: today(),
@@ -40,13 +36,12 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
     pace: "moderate",
     return_to_accommodation: true,
     fit_to_budget: false,
-  });
+  }));
   const [useCoords, setUseCoords] = useState(false);
   const [coords, setCoords] = useState({ lat: "", lng: "" });
   const [cityLoc, setCityLoc] = useState<LatLng | null>(null);       // from the city dropdown
   const [pinned, setPinned] = useState<LatLng | null>(null);         // exact accommodation point from suggestions
 
-  useEffect(() => { onDraftChange?.(req); }, [req, onDraftChange]);
   useEffect(() => { onCityLocation?.(cityLoc); }, [cityLoc, onCityLocation]);
 
   // apply fields read from a free-text description (DescribeTrip)
@@ -207,10 +202,9 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
       <div className="form-submit">
         <button className="btn btn-primary btn-block" disabled={submitting} aria-keyshortcuts="Control+Enter Meta+Enter">
-          {submitting ? <><span className="spinner" aria-hidden /> Building your itinerary</>
-            : signedIn ? "Generate itinerary" : "Sign in to generate"}
+          {submitting ? <><span className="spinner" aria-hidden /> Building your itinerary</> : "Generate itinerary"}
         </button>
-        {!signedIn && <p className="small muted">Your details stay filled in while you sign in.</p>}
+        <p className="small muted">Trips are saved only in this browser on this device.</p>
       </div>
     </form>
   );

@@ -13,8 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DATABASE_URL = f"sqlite:///{(BACKEND_DIR / 'tripaura.db').as_posix()}"
-# Used only outside production when SECRET_KEY is empty: one random key per process, so sign-in
-# codes and sessions do not survive a restart.
+# Used by the legacy, currently disabled account endpoints when no secret is configured.
 _PROCESS_SECRET = secrets.token_urlsafe(48)
 log = logging.getLogger(__name__)
 
@@ -85,20 +84,19 @@ class Settings(BaseSettings):
     cors_origin_regex: str = ""
     log_level: str = "INFO"
     warmup_on_start: bool = True   # preload city index + AI model in the background at startup
-    # "development" or "production". Production requires SECRET_KEY, refuses to print sign-in codes
-    # to the log and hides the API docs unless DOCS_ENABLED=true.
+    # "development" or "production". Production hides API docs unless DOCS_ENABLED=true.
     app_env: str = "development"
     # None = on in development, off in production
     docs_enabled: bool | None = None
 
     # ---- auth / security ----------------------------------------------------
-    # HMAC key for sign-in codes. Required in production (>= 32 chars); random per process otherwise.
+    # Legacy account settings retained for database compatibility; account routes are not mounted.
     secret_key: str = ""
     session_days: int = Field(default=7, ge=1, le=90)       # absolute session lifetime
     cookie_secure: bool = True                               # false only for local plain-http development
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"  # "none" always sets Secure
     admin_emails: str = ""                                   # comma list; role re-evaluated at each sign-in
-    # Email delivery through the Resend HTTPS API. Empty key: codes are logged (development only).
+    # Legacy account settings retained for database compatibility; no email is sent.
     resend_api_key: str = ""
     email_from: str = "TripAura <onboarding@resend.dev>"
     # Read the client IP / scheme from X-Forwarded-For / X-Forwarded-Proto. Enable only behind a
@@ -163,16 +161,6 @@ class Settings(BaseSettings):
 
     def check_startup(self) -> None:
         """Raise on configuration that must not run; warn about weak development defaults."""
-        if self.is_production:
-            key = self.secret_key.strip()
-            if not key:
-                raise RuntimeError("SECRET_KEY must be set when APP_ENV=production "
-                                   "(e.g. python -c \"import secrets; print(secrets.token_urlsafe(48))\")")
-            if len(key) < 32:
-                raise RuntimeError("SECRET_KEY must be at least 32 characters when APP_ENV=production")
-        elif not self.secret_key.strip():
-            log.warning("SECRET_KEY is empty: using a random per-process key (development only; "
-                        "sign-in codes and sessions reset on restart)")
         if "*" in self.cors_origin_list:
             log.warning("CORS_ORIGINS contains '*', which is ignored: credentialed requests need explicit origins")
 

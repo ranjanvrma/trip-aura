@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Trash } from "lucide-react";
 import DescribeTrip from "../components/DescribeTrip";
@@ -6,49 +6,32 @@ import Globe from "../components/globe/Globe";
 import TripForm from "../components/TripForm";
 import RetryNotice from "../components/ui/RetryNotice";
 import { Kbd, SkeletonLines } from "../components/ui/Skeleton";
-import { useAuth } from "../lib/auth";
 import { usePageMeta } from "../lib/meta";
 import { modKey } from "../lib/platform";
-import { invalidate, useSWR } from "../lib/swr";
+import { mutate, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useDeleteTrip } from "../lib/trips";
 import { useScrollMotion } from "../lib/useScrollMotion";
-import { api, ApiError, newIdempotencyKey } from "../services/api";
+import { listSavedTrips, saveTrip } from "../lib/localTrips";
+import { api, ApiError } from "../services/api";
 import type { ApiStatus, LatLng, ParsedTrip, TripRequest } from "../types";
-
-const DRAFT_KEY = "ta_draft";
-
-function readDraft(): TripRequest | null {
-  try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as TripRequest) : null;
-  } catch {
-    return null;
-  }
-}
 
 export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   usePageMeta(null);
   const nav = useNavigate();
   const toast = useToast();
-  const { user } = useAuth();
   const root = useRef<HTMLDivElement>(null);
   const ready = status !== null;
   const options = useSWR(ready ? "options" : null, api.options, { dedupeMs: 60_000 });
-  const trips = useSWR(ready && user ? "trips" : null, api.listTrips);
+  const trips = useSWR("localTrips", async () => listSavedTrips());
   const deleteTrip = useDeleteTrip();
 
   const [submitting, setSubmitting] = useState(false);
   const [prefill, setPrefill] = useState<{ parsed: ParsedTrip; version: number } | null>(null);
   const [error, setError] = useState<{ message: string; details?: unknown } | null>(null);
   const [cityLoc, setCityLoc] = useState<LatLng | null>(null);
-  const [initial] = useState(readDraft);
-  const draft = useRef<TripRequest | null>(initial);
-  const attempt = useRef<{ body: string; key: string } | null>(null);
 
   useScrollMotion(root, [options.data !== undefined]);
-
-  const onDraftChange = useCallback((r: TripRequest) => { draft.current = r; }, []);
 
   // keyboard: "/" focuses the city field, Ctrl/Cmd+Enter submits the form
   useEffect(() => {
@@ -65,23 +48,14 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   }, []);
 
   const submit = async (req: TripRequest) => {
-    if (!user) {
-      try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(req)); } catch { /* storage may be unavailable */ }
-      nav("/signin?next=/", { viewTransition: true });
-      return;
-    }
-    // Same details as a failed attempt -> same idempotency key, so a retry can never create a second trip.
-    const body = JSON.stringify(req);
-    if (!attempt.current || attempt.current.body !== body) attempt.current = { body, key: newIdempotencyKey() };
     setSubmitting(true);
     setError(null);
     try {
-      const it = await api.createTrip(req, attempt.current.key);
-      attempt.current = null;
-      try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
-      invalidate("trips");
+      const it = await api.previewTrip(req);
+      const saved = saveTrip(it);
+      mutate("localTrips", listSavedTrips());
       toast.show({ tone: "success", message: `Your ${it.days.length}-day plan for ${req.destination_city} is ready` });
-      nav(`/trips/${it.trip_id}`, { state: { itinerary: it }, viewTransition: true });
+      nav(`/trips/${saved.id}`, { viewTransition: true });
     } catch (e) {
       const err = e as ApiError;
       setError({ message: err.message, details: err.details });
@@ -144,8 +118,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
         )}
         {options.data && status ? (
           <TripForm options={options.data} status={status} submitting={submitting} onSubmit={(r) => void submit(r)}
-                    prefill={prefill} initial={initial} onDraftChange={onDraftChange} onCityLocation={setCityLoc}
-                    signedIn={!!user} />
+                    prefill={prefill} onCityLocation={setCityLoc} />
         ) : options.error ? (
           <RetryNotice message={`Couldn't load the form options: ${options.error.message}`} onRetry={() => void options.refresh()} />
         ) : (
@@ -156,13 +129,9 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
       <aside className="tile tile-saved" data-reveal aria-labelledby="saved-title">
         <div className="tile-head">
           <h2 id="saved-title" className="tile-title">Saved trips</h2>
-          {user && <Link to="/trips" className="small" viewTransition>View all</Link>}
+          <Link to="/trips" className="small" viewTransition>View all</Link>
         </div>
-        {!user ? (
-          <p className="small muted">
-            <Link to="/signin?next=/">Sign in</Link> with your email to save trips and come back to them later.
-          </p>
-        ) : trips.loading ? <SkeletonLines lines={3} />
+        {trips.loading ? <SkeletonLines lines={3} />
           : trips.data?.length === 0 ? <p className="small muted">No saved trips yet. Your first plan will appear here.</p>
           : (
             <ul className="trip-list">

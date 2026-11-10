@@ -1,10 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { CommandProvider } from "./components/CommandMenu";
 import DataSourceBanner from "./components/DataSourceBanner";
 import Layout from "./components/layout/Layout";
 import { SkeletonLines } from "./components/ui/Skeleton";
-import { AuthProvider } from "./lib/auth";
 import { ToastProvider } from "./lib/toast";
 import PlannerPage from "./pages/PlannerPage";
 import { api, ApiError } from "./services/api";
@@ -13,7 +12,6 @@ import type { ApiStatus } from "./types";
 // route-level code splitting; Layout also warms these chunks on link hover
 const TripPage = lazy(() => import("./pages/TripPage"));
 const TripsPage = lazy(() => import("./pages/TripsPage"));
-const SignInPage = lazy(() => import("./pages/SignInPage"));
 const TermsPage = lazy(() => import("./pages/LegalPages").then((m) => ({ default: m.TermsPage })));
 const PrivacyPage = lazy(() => import("./pages/LegalPages").then((m) => ({ default: m.PrivacyPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
@@ -70,21 +68,19 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <AuthProvider>
-        <CommandProvider>
-          <Routes>
-            <Route element={<Layout banner={banner} />}>
-              <Route index element={<PlannerPage status={status} />} />
-              <Route path="trips" element={page(<TripsPage />)} />
-              <Route path="trips/:id" element={page(<TripPage />)} />
-              <Route path="signin" element={page(<SignInPage status={status} />)} />
-              <Route path="terms" element={page(<TermsPage />)} />
-              <Route path="privacy" element={page(<PrivacyPage />)} />
-              <Route path="*" element={page(<NotFoundPage />)} />
-            </Route>
-          </Routes>
-        </CommandProvider>
-      </AuthProvider>
+      <CommandProvider>
+        <Routes>
+          <Route element={<Layout banner={banner} />}>
+            <Route index element={<PlannerPage status={status} />} />
+            <Route path="trips" element={page(<TripsPage />)} />
+            <Route path="trips/:id" element={page(<TripPage />)} />
+            <Route path="signin" element={<Navigate to="/" replace />} />
+            <Route path="terms" element={page(<TermsPage />)} />
+            <Route path="privacy" element={page(<PrivacyPage />)} />
+            <Route path="*" element={page(<NotFoundPage />)} />
+          </Route>
+        </Routes>
+      </CommandProvider>
     </ToastProvider>
   );
 }

@@ -96,6 +96,8 @@ def client_ip(request: Request, settings: Settings | None = None) -> str:
 
 def ip_route_class(method: str, path: str) -> str:
     """Route class for the per-IP limit applied to every request."""
+    if path == "/api/trips/preview" and method == "POST":
+        return "generate"
     if path == "/api/auth/request-code" and method == "POST":
         return "auth_ip"
     if path.startswith("/api/geo/"):

@@ -1,11 +1,10 @@
 import { AnimatePresence, motion } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, LogIn, LogOut, MapPin, Plus, Search, Shield } from "lucide-react";
-import { useAuth } from "../lib/auth";
+import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, MapPin, Plus, Search, Shield } from "lucide-react";
+import { listSavedTrips } from "../lib/localTrips";
 import { useSWR } from "../lib/swr";
 import { modKey } from "../lib/platform";
-import { api } from "../services/api";
 import { Kbd } from "./ui/Skeleton";
 
 export interface Command { id: string; label: string; hint?: string; group: string; icon?: LucideIcon; run: () => void }
@@ -44,8 +43,7 @@ export function CommandProvider({ children }: { children: React.ReactNode }) {
 
 function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: () => void }) {
   const nav = useNavigate();
-  const { user, signOut } = useAuth();
-  const trips = useSWR(user ? "trips" : null, api.listTrips);
+  const trips = useSWR("localTrips", async () => listSavedTrips());
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -57,9 +55,6 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
     const base: Command[] = [
       { id: "new", label: "Plan a new trip", group: "Navigate", icon: Plus, run: go("/") },
       { id: "trips", label: "My trips", group: "Navigate", icon: ListChecks, run: go("/trips") },
-      user
-        ? { id: "out", label: "Sign out", group: "Account", icon: LogOut, run: () => void signOut().then(go("/")) }
-        : { id: "in", label: "Sign in", group: "Account", icon: LogIn, run: go("/signin") },
       { id: "terms", label: "Terms of use", group: "Legal", icon: FileText, run: go("/terms") },
       { id: "privacy", label: "Privacy policy", group: "Legal", icon: Shield, run: go("/privacy") },
     ];
@@ -67,7 +62,7 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
       id: `trip-${t.id}`, label: t.title, hint: `${t.num_days} days`, group: "Saved trips", icon: MapPin, run: go(`/trips/${t.id}`),
     }));
     return [...pageCommands, ...saved, ...base];
-  }, [pageCommands, trips.data, user, go, signOut]);
+  }, [pageCommands, trips.data, go]);
 
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase();

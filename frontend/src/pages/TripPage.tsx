@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { CalendarDays, Plus, RotateCcw } from "lucide-react";
 import BudgetSummary from "../components/BudgetSummary";
 import { type Command, usePageCommands } from "../components/CommandMenu";
 import DayCard from "../components/DayCard";
-import LiveLocationPanel from "../components/LiveLocationPanel";
 import MapView from "../components/map/MapView";
 import type { MapMarker, MapPolyline } from "../components/map/types";
 import PlaceDetails from "../components/PlaceDetails";
@@ -12,15 +11,14 @@ import RestaurantList from "../components/RestaurantList";
 import RetryNotice from "../components/ui/RetryNotice";
 import Sheet from "../components/ui/Sheet";
 import { Skeleton, SkeletonLines } from "../components/ui/Skeleton";
-import { useGeolocation } from "../hooks/useGeolocation";
-import { useLiveProgress } from "../hooks/useLiveProgress";
 import { usePageMeta } from "../lib/meta";
 import { prefersReducedMotion } from "../lib/platform";
-import { mutate, seed, useSWR } from "../lib/swr";
+import { mutate, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useScrollMotion } from "../lib/useScrollMotion";
-import { api, ApiError, newIdempotencyKey } from "../services/api";
-import type { Itinerary, ItineraryItem } from "../types";
+import { getSavedTrip, listSavedTrips, saveTrip } from "../lib/localTrips";
+import { api, ApiError } from "../services/api";
+import type { ItineraryItem } from "../types";
 import { dataSourceLabel, dayColor } from "../utils";
 import NotFoundPage from "./NotFoundPage";
 
@@ -37,34 +35,22 @@ function useIsNarrow(query = "(max-width: 960px)") {
 
 export default function TripPage() {
   const { id } = useParams();
-  const tripId = Number(id);
-  const loc = useLocation();
   const toast = useToast();
   const narrow = useIsNarrow();
   const root = useRef<HTMLDivElement>(null);
 
-  // the itinerary handed over by the planner is shown at once (cache seeded), then revalidated
-  const handed = (loc.state as { itinerary?: Itinerary } | null)?.itinerary;
-  const key = Number.isFinite(tripId) ? `trip:${tripId}` : null;
-  if (key && handed?.trip_id === tripId) seed(key, handed);
-  const trip = useSWR(key, () => api.getTrip(tripId), { dedupeMs: 30_000 });
-  const it = trip.data ?? null;
+  const key = id ? `local-trip:${id}` : null;
+  const trip = useSWR(key, async () => id ? getSavedTrip(id) : null, { dedupeMs: 30_000 });
+  const it = trip.data?.itinerary ?? null;
 
   const [dayFilter, setDayFilter] = useState<number | "all">("all");
   const [selected, setSelected] = useState<ItineraryItem | null>(null);
-  const [liveOn, setLiveOn] = useState(false);
-  const [target, setTarget] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
-  const regenKey = useRef<string | null>(null);
 
   usePageMeta(it ? `${it.request.num_days} days in ${it.request.destination_city}` : "Your itinerary",
     it ? `Day-by-day plan for ${it.request.destination_city}: sights, meals, transport and budget.` : undefined,
     { noindex: true });
   useScrollMotion(root, [it?.trip_id, dayFilter]);
-
-  const liveDay = dayFilter === "all" ? 1 : dayFilter;
-  const geo = useGeolocation(liveOn);
-  const live = useLiveProgress(it ? tripId : null, liveDay, geo.position, geo.accuracy, liveOn, target);
 
   const days = useMemo(() => (it ? it.days.filter((d) => dayFilter === "all" || d.day_number === dayFilter) : []), [it, dayFilter]);
 
@@ -94,26 +80,19 @@ export default function TripPage() {
     return { markers, polylines };
   }, [it, days]);
 
-  const targets = useMemo(() => it?.days.find((d) => d.day_number === liveDay)?.items
-    .filter((i) => (i.type === "activity" || i.type === "meal") && i.place)
-    .map((i) => ({ id: i.id, label: `${i.start} ${i.title}` })) ?? [], [it, liveDay]);
-
   // stable map props: the Google renderer rebuilds its overlays and refits the view whenever these change
   const selectById = useCallback((mid: string) => {
     const item = it?.days.flatMap((d) => d.items).find((i) => i.id === mid);
     if (item) setSelected(item);
   }, [it]);
-  const current = useMemo(() => (geo.position ? { position: geo.position, accuracy: geo.accuracy } : null),
-    [geo.position, geo.accuracy]);
-
   const regenerate = useCallback(async () => {
-    if (!key) return;
-    regenKey.current ??= newIdempotencyKey();   // the same key is reused if this attempt is retried
+    if (!key || !id || !it) return;
     setRegenerating(true);
     try {
-      const fresh = await api.regenerate(tripId, regenKey.current);
-      regenKey.current = null;
-      mutate(key, fresh);
+      const fresh = await api.previewTrip(it.request);
+      const saved = saveTrip(fresh, id, trip.data?.created_at);
+      mutate(key, saved);
+      mutate("localTrips", listSavedTrips());
       setSelected(null);
       toast.show({ tone: "success", message: "Itinerary regenerated with the latest data" });
     } catch (e) {
@@ -121,7 +100,7 @@ export default function TripPage() {
     } finally {
       setRegenerating(false);
     }
-  }, [key, tripId, toast]);
+  }, [key, id, it, trip.data?.created_at, toast]);
 
   const showDay = useCallback((n: number | "all") => {
     const apply = () => setDayFilter(n);
@@ -140,7 +119,7 @@ export default function TripPage() {
   ], [it, showDay, regenerate]);
   usePageCommands(commands);
 
-  if (!key || (trip.error as ApiError | undefined)?.status === 404) return <NotFoundPage what="trip" />;
+  if (!key || (trip.data === null && !trip.loading) || (trip.error as ApiError | undefined)?.status === 404) return <NotFoundPage what="trip" />;
   if (trip.error && !it) {
     return (
       <div className="narrow">
@@ -238,13 +217,10 @@ export default function TripPage() {
           <div className="sticky stack-m">
             <div className="tile tile-map">
               <MapView markers={markers} polylines={polylines} selectedId={selected?.id ?? null} onSelect={selectById}
-                       current={current} />
+                       current={null} />
             </div>
             {!narrow && details}
-            <LiveLocationPanel enabled={liveOn} onToggle={setLiveOn} geo={geo} progress={live.progress}
-                               alerts={live.alerts} loading={live.loading} error={live.error}
-                               onRefresh={() => void live.refresh()} targets={targets} targetId={target}
-                               onTarget={setTarget} />
+            <p className="tile small muted">Live location updates aren’t available for trips saved only in this browser.</p>
             <BudgetSummary b={it.budget} />
           </div>
         </div>

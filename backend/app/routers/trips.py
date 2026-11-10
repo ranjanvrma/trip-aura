@@ -69,10 +69,9 @@ def create_trip(req: TripRequest, db: Session = Depends(get_db), auth: Auth = De
 
 
 @router.post("/preview", response_model=Itinerary)
-def preview_trip(req: TripRequest, auth: Auth = Depends(require_auth),
-                 svc: ItineraryService = Depends(get_itinerary_service)) -> Itinerary:
+def preview_trip(req: TripRequest, svc: ItineraryService = Depends(get_itinerary_service)) -> Itinerary:
     """Generate without saving."""
-    generation_limit(auth)
+    # Public generation is limited by IP in request_guard; it never creates a server-side trip.
     return svc.generate(req)
 
 

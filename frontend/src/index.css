@@ -480,11 +480,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .danger { border-color: color-mix(in srgb, var(--danger) 18%, var(--line)); }
 
 .narrow { max-width: 480px; margin: clamp(8px, 4vh, 48px) auto 0; }
-.auth { display: grid; gap: 6px; padding: clamp(22px, 4vw, 36px); }
-.auth-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--sky); color: var(--sky-ink); margin-bottom: 8px; }
-.auth form { margin-top: 8px; }
-.otp { font-size: 1.6rem; letter-spacing: .5em; text-align: center; font-variant-numeric: tabular-nums; padding-left: calc(12px + .5em); }
-.auth-legal { margin: 12px 0 0; }
 
 /* legal */
 .legal { max-width: 760px; margin: 0 auto; }

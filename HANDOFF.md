@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** whole-codebase cleanup (dead code and duplication removed, 3 bugs fixed); Vercel same-origin API rewrite is in; production email setup remains (§8); next: UI makeover
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** removed account sign-in; trips now save in browser local storage; deployment remains Vercel + Azure
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -33,10 +33,10 @@
   - planning engines and the open-data pipeline
   - NLP features: city autocomplete, trip-text parser, semantic matching, sentiment
   - budget and live location
-  - **email one-time-code sign-in** (Resend), private per-user trips, account deletion, security hardening (CSRF, rate limits, idempotency keys, security headers, input limits)
+  - browser-local saved trips (no account or email needed), security headers and request limits
   - **redesigned frontend**: light-mode bento layout, 3D globe, command menu, sheets, toasts with undo, Terms/Privacy/404 pages
   - **161 backend tests pass**, the frontend builds, and CI runs on every push
-- **Deployed:** the public Vercel site and Azure backend are live (see [§8](#8-deployment-status)). Email sign-in still needs production configuration; do not treat authenticated trip planning as verified until that is complete.
+- **Deployed:** the public Vercel site and Azure backend are live (see [§8](#8-deployment-status)). Trip generation uses the public preview endpoint; the browser stores saved plans locally.
 
 ---
 
@@ -94,9 +94,9 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Sources | `providers/open/overture.py` (slim columns, shared DuckDB with HTTP/object caches), `open/wikimedia.py` (SPARQL notable places, Wikivoyage dishes), `open/osm.py` (tags, `opening_hours` parser, fees, diet), `open/providers.py` (geocoder uses GeoNames index first, Nominatim fallback), `heuristic_routes.py` |
 | Engines | `engines/itinerary.py` (anchor + greedy + 2-opt, opening windows, meals, rests, near-duplicate removal), `recommendation.py` (weights 0.3/0.2/0.2/0.1/0.1/0.1, semantic boost), `food.py` (diet checks, dish lexicon, sentiment-gated evidence), `transport.py`, `budget.py`, `costs.py` (country price index + ECB FX; curated India table), `pace.py`, `fares.py` |
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
-| API | `routers/` trips, location (live), geo (autocomplete), nlp (parse-trip), meta (status/options), routes, auth |
-| Auth and security | `routers/auth.py` (request-code, verify, me, logout, `DELETE /api/auth/account`), `services/auth_service.py` (HMAC-hashed 6-digit codes: 10 min, 5 attempts, single use; sessions = SHA-256 of a random cookie token + CSRF token, 7 days), `services/email_service.py` (Resend; dev mode prints codes to the console), `services/idempotency.py` (`X-Idempotency-Key` on create/regenerate, 24 h), `core/security.py` (security headers, Origin check, per-IP limits), `core/ratelimit.py` (in-memory token buckets; client IP counted from the right of `X-Forwarded-For`), `core/urls.py` (http(s)-only URLs, QID checks), `routers/deps.py` (`require_auth` + CSRF). Trips are owner-only (others get 404); admins (`ADMIN_EMAILS`) can read/list/delete any |
-| Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (Layout: header, mobile menu sheet, footer, scroll progress, route chunk preloading; AccountMenu with a safe-triangle submenu), `pages/` (Planner bento, Trip, Trips, SignIn, LegalPages, NotFound), `components/` (CommandMenu `Ctrl/Cmd+K`, `globe/` three.js lazy chunk, `ui/Sheet` swipe-to-dismiss, `ui/Skeleton` + Kbd, TripForm, DayCard, PlaceDetails, map/*...), `lib/` (auth context, toast with undo, `swr.ts` stale-while-revalidate cache, `meta.ts` page titles/descriptions, `useBackToClose` predictive back, `useScrollMotion` GSAP reveals/parallax, `trips.ts` optimistic delete + undo, `safeUrl.ts` http(s)-only links, `platform.ts` reduced motion + Ctrl/Cmd key), `components/ui/RetryNotice` (error notice with Try again), `utils.ts` (`dayColor`, `dataSourceLabel`, money helpers), `services/api.ts` (cookies, CSRF header, idempotency keys), `index.css` (design tokens, light mode only). `vite.config.ts` adds a production CSP meta tag and pre-renders per-route `<head>` files (`dist/terms/index.html`, `404.html`...) |
+| API | `routers/` trip preview, geo autocomplete, NLP parsing, metadata, and routing; account and live-location routers are not mounted |
+| API and security | `routers/` contains itinerary generation (`/api/trips/preview`), geo autocomplete, NLP parsing, status/options and routing; `core/security.py` provides security headers, origin checks and per-IP limits. Account routes are not mounted. |
+| Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (header, mobile menu sheet, footer, scroll progress, route chunk preloading), `pages/` (Planner, Trip, Trips, Legal, NotFound), `components/` (CommandMenu, globe, form, day cards and map), `lib/localTrips.ts` (saved itineraries in local storage), `lib/trips.ts` (delete + undo), `services/api.ts` (public API calls), `vite.config.ts` (production CSP and pre-rendered route heads) |
 | Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
 | Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; Azure deployment files and workflow are present; live deployment details are in §8 |
 
@@ -156,7 +156,7 @@ Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`)
 | `VITE_API_BASE_URL` | Vercel environment variable; set empty to use the same-origin rewrite |
 | Google / LLM keys | optional, unused (`ANTHROPIC_MODEL` has no default) |
 
-Still required to enable production sign-in (see `backend/.env.example`): `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters, required in production), `RESEND_API_KEY` (secret), `EMAIL_FROM` (address on a domain verified in Resend), `ADMIN_EMAILS`, `COOKIE_SECURE`/`COOKIE_SAMESITE` (defaults true/lax are right), `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_COUNT`, `RATE_LIMIT_ENABLED`, `DOCS_ENABLED` (off in production by default), `SESSION_DAYS`.
+No email or sign-in provider configuration is needed. `APP_ENV=production`, `CORS_ORIGINS`, `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_COUNT`, `RATE_LIMIT_ENABLED`, and `DOCS_ENABLED` control the API deployment. `DATABASE_URL` is used for the shared city cache; saved user itineraries are not written to that database.
 
 Lesson from the trial: **never screenshot or paste connection strings or the service-principal JSON.** Both leaked once and had to be rotated.
 
@@ -168,14 +168,10 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 - Website: [https://trip-aura-cr.vercel.app/](https://trip-aura-cr.vercel.app/), hosted on Vercel.
 - Backend: [Azure Container Apps](https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io), Korea Central. The image built from `c55f12c` was deployed successfully by GitHub Actions after Azure credentials were corrected.
 - `GET /api/health` and `GET /api/meta/status` respond successfully. The website loads and its API requests pass CORS. Security response headers are present.
-- The API reports `email_configured=false` and `dev_codes_in_console=true`. Email sign-in is therefore **not ready in production**. The owner confirmed the new domain can reach the API after the Azure CORS update. Authenticated trip creation and saved-trip flows have not been verified end to end.
+- The owner confirmed the public site can reach the API after the Azure CORS update. The API health and status endpoints responded successfully.
 - Google Maps enrichment is optional and currently off; open-data mode is active.
 
-**Remaining production setup — sign-in:**
-1. Update Azure for the new Vercel domain: run `az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://trip-aura-cr.vercel.app` (keep any other allowed origins if they are still needed). Then open the new site and check that `/api/meta/status` loads without a connection/CORS error.
-2. Configure Azure Container App `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters), `RESEND_API_KEY` (secret), `EMAIL_FROM` (on a verified Resend domain), `ADMIN_EMAILS`, `TRUST_PROXY_HEADERS=true`, `TRUSTED_PROXY_COUNT=2`, and `CORS_ORIGINS=https://trip-aura-cr.vercel.app`. Azure must be updated to include this exact origin; the old domain may still be configured there. Keep secrets in Azure settings only. Without `RESEND_API_KEY`, production code requests return `503 email_not_configured`.
-3. `frontend/vercel.json` now has the `/api/:path*` rewrite to Azure before the SPA fallback. After this change is pushed, set Vercel `VITE_API_BASE_URL` to an empty value (remove the variable or leave its value blank), then redeploy the frontend. This makes the session cookie first-party (`SameSite=Lax`).
-4. After deployment, verify requesting and receiving a sign-in code, sign-in/out, account deletion, trip save/list, account isolation, and `/terms`, `/privacy`, and 404 routes. Check browser console and response headers too.
+**After this code is pushed:** redeploy the frontend and backend so the browser-only trip storage and public preview API are active. No Resend domain, API key, or email sender is needed. Ensure Vercel `VITE_API_BASE_URL` is blank so `/api/*` uses the same-origin rewrite. Trips remain in each user's browser and do not sync across devices.
 
 **Deployment resources:** Vercel hosts the frontend; Azure Container Apps runs the backend (1 vCPU / 2 GiB, scale-to-zero, max one replica); GitHub Actions builds and deploys the image to GHCR; Neon provides Postgres. Never commit or paste provider secrets.
 
@@ -201,7 +197,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
    - Place photos (and BlurHash placeholders for them): the data has no images yet; Wikidata P18 / Wikimedia Commons is the free source. Only the globe uses a blurred placeholder today.
    - A true per-stage progress indicator for first-time city loading (needs async loading on the backend).
    - Lottie: not used. Animations are Motion (sheets, toasts, menus), GSAP (scroll reveals, parallax, globe turns) and CSS. Add Lottie only with self-made or properly licensed animation files.
-3. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email, or commits carry `Co-authored-by: Chinmay Dahiya <github-email>` (his email is still unknown).
+3. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email (his email is still unknown).
 4. **Dependabot PRs:** merge the green ones (#1–#3 GitHub Actions bumps, #5/#7/#9 backend minimums). Close #4 (React 19), #6 (react-leaflet 5) and #8 (Vite plugin 6): those are major upgrades that need their own change. React Router was moved to 7.18.5 in the redesign (fixes an open-redirect advisory). Majors are now ignored by `dependabot.yml`.
 5. **Nice to have:**
    - async city loading with progress polling
@@ -222,7 +218,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 - When deployed with scale-to-zero, the first request after idle takes ~30–60 s while the container starts (the frontend already retries for 2 min).
 - Windows dev: `.gitattributes` forces LF for shell scripts, YAML and the git hooks.
 - Mock mode supports Jaipur and INR only (by design).
-- Local sign-in: with no `RESEND_API_KEY` in development, the 6-digit code is printed in the backend console (`DEV ONLY sign-in code ...`). Existing local SQLite trips have no owner after the migration, so only an admin (`ADMIN_EMAILS`) sees them.
+- Saved itineraries live in local storage for this browser profile and device. Clearing site data or using another browser removes access to those plans. Previously server-saved trips do not automatically migrate into local storage.
 - Animations are throttled in a hidden or background browser tab, so overlays can look stuck in automated screenshots; that's the browser, not the app.
 - `prefers-reduced-motion` turns off the globe spin, scroll reveals, parallax and view transitions.
 
@@ -241,6 +237,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
+| 2026-11-10 | (this commit) | Remove sign-in UI and mounted auth endpoints; generate plans without accounts and save itineraries in browser storage; update privacy, deployment, and setup docs |
 | 2026-11-10 | (this commit) | Whole-codebase cleanup, no behaviour change: dead code, unused settings paths and duplicated logic removed, shared helpers added (see §4 "Shared helpers"), regexes compiled once, faster city merging and fuzzy search. Bugs fixed: trip parser listed corrected interests in random order; address suggestions returned 500 for Photon features without coordinates; frontend sheet stole focus on re-render, Google/Leaflet maps re-fit or re-centred on every re-render, empty "Tags:" row. 161 tests |
 | 2026-11-10 | `27450b2` | Add same-origin Vercel API rewrite; document blank `VITE_API_BASE_URL` and email provider setup |
 | 2026-11-10 | `37ae7d8` | Update the Vercel domain to `trip-aura-cr.vercel.app`; document Azure CORS and domain verification steps |

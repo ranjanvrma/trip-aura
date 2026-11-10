@@ -182,7 +182,7 @@ export interface Itinerary {
 }
 
 export interface TripSummary {
-  id: number; title: string; destination: string; num_days: number; data_source: string; created_at: string;
+  id: string; title: string; destination: string; num_days: number; data_source: string; created_at: string;
 }
 
 export interface ApiStatus {
@@ -193,30 +193,13 @@ export interface ApiStatus {
   ai: { enabled: boolean; configured: boolean; model: string };
   mock_city: string | null;
   problems: string[];
-  auth?: { email_configured: boolean; dev_codes_in_console: boolean };
 }
-
-export interface AuthUser { id: number; email: string; role: "user" | "admin" }
-export interface AuthSession { user: AuthUser; csrf_token: string }
 
 export interface ApiOptions {
   interests: string[]; food_preferences: string[]; food_categories: string[]; transport_modes: TransportMode[];
   paces: Pace[]; accommodation_types: string[]; currencies: string[];
 }
 
-export interface TransportAlert { kind: string; message: string; suggested_mode?: TransportMode | null }
-
-export interface LiveProgress {
-  next_item_id: string | null;
-  next_place_name: string | null;
-  next_location: LatLng | null;
-  straight_line_km: number | null;
-  options: TransportOption[];
-  recommended: TransportOption | null;
-  alerts: TransportAlert[];
-  checked_at: string;
-  data_source: string;
-}
 
 export interface CitySuggestion {
   id: number; name: string; region: string; country: string; country_code: string;
