@@ -8,9 +8,3 @@ export function safeExternalUrl(raw: string | null | undefined): string | null {
     return null;
   }
 }
-
-export const prefersReducedMotion = () =>
-  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-export const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-export const modKey = () => (isMac() ? "⌘" : "Ctrl");

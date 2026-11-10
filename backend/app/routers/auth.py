@@ -12,9 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import RateLimitedError
-from app.core.ratelimit import limiter
+from app.core.ratelimit import enforce
 from app.db.database import get_db
+from app.db.models import User
 from app.routers.deps import Auth, require_auth
 from app.services import auth_service as svc
 from app.services.email_service import Mailer, get_mailer
@@ -53,14 +53,21 @@ class SessionOut(BaseModel):
     csrf_token: str
 
 
+def _session_out(user: User, csrf_token: str) -> SessionOut:
+    return SessionOut(user=UserOut(id=user.id, email=user.email, role=user.role), csrf_token=csrf_token)
+
+
+def _signed_out() -> Response:
+    """204 that also clears the session cookie in the browser."""
+    response = Response(status_code=204)
+    svc.clear_session_cookie(response, get_settings())
+    return response
+
+
 @router.post("/request-code", status_code=202, response_model=CodeSent)
 def request_code(body: EmailBody, db: Session = Depends(get_db), mailer: Mailer = Depends(get_mailer)) -> CodeSent:
-    s = get_settings()
-    if s.rate_limit_enabled:
-        wait = limiter.hit("auth_email", body.email)
-        if wait:
-            raise RateLimitedError(wait, "Too many codes requested for this address, please wait")
-    code = svc.issue_code(db, s, body.email)
+    enforce("auth_email", body.email, "Too many codes requested for this address, please wait")
+    code = svc.issue_code(db, get_settings(), body.email)
     mailer.send_code(body.email, code, svc.CODE_TTL_SECONDS // 60)
     return CodeSent(sent=True, expires_in=svc.CODE_TTL_SECONDS)
 
@@ -73,21 +80,18 @@ def verify(body: VerifyBody, response: Response, db: Session = Depends(get_db)) 
     new = svc.create_session(db, s, user)
     svc.set_session_cookie(response, s, new.token)
     log.info("User %s signed in (%s)", user.id, user.role)
-    return SessionOut(user=UserOut(**svc.user_dict(user)), csrf_token=new.record.csrf_token)
+    return _session_out(user, new.record.csrf_token)
 
 
 @router.get("/me", response_model=SessionOut)
 def me(auth: Auth = Depends(require_auth)) -> SessionOut:
-    return SessionOut(user=UserOut(**svc.user_dict(auth.user)), csrf_token=auth.session.csrf_token)
+    return _session_out(auth.user, auth.session.csrf_token)
 
 
 @router.post("/logout", status_code=204)
 def logout(auth: Auth = Depends(require_auth), db: Session = Depends(get_db)) -> Response:
     svc.delete_session(db, auth.session)
-    response = Response(status_code=204)
-    svc.clear_session_cookie(response, get_settings())
-    return response
-
+    return _signed_out()
 
 
 @router.delete("/account", status_code=204)
@@ -96,6 +100,4 @@ def delete_account(auth: Auth = Depends(require_auth), db: Session = Depends(get
     user_id = auth.user.id
     svc.delete_account(db, user_id)
     log.info("User %s deleted their account", user_id)
-    response = Response(status_code=204)
-    svc.clear_session_cookie(response, get_settings())
-    return response
+    return _signed_out()

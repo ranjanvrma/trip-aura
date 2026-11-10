@@ -73,7 +73,6 @@ export function useSWR<T>(key: string | null, fetcher: () => Promise<T>, { dedup
     data: snapshot?.data,
     error: snapshot?.error,
     loading: !!key && snapshot?.data === undefined && !snapshot?.error,
-    validating: !!snapshot?.promise,
     refresh,
   };
 }

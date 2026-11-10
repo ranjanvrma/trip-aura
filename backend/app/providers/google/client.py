@@ -59,6 +59,11 @@ class GoogleClient:
             raise ProviderRequestError("Google Maps Platform returned a non-JSON response") from exc
 
 
+def money_amount(m: dict[str, Any]) -> float:
+    """Amount of a google.type.Money object ({"units": "12", "nanos": 500000000})."""
+    return float(m.get("units", 0)) + m.get("nanos", 0) / 1e9
+
+
 def _error_message(resp: httpx.Response) -> str:
     try:
         data = resp.json()

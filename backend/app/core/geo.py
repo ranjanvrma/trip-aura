@@ -14,10 +14,9 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
 
 
-def centroid(points: list[tuple[float, float]]) -> tuple[float, float]:
-    if not points:
-        raise ValueError("centroid of empty list")
-    return sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)
+def degree_span(lat: float, radius_km: float) -> tuple[float, float]:
+    """(delta latitude, delta longitude) in degrees covering `radius_km` around latitude `lat`."""
+    return radius_km / 111.0, radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
 
 
 def interpolate(a: tuple[float, float], b: tuple[float, float], steps: int = 8) -> list[tuple[float, float]]:

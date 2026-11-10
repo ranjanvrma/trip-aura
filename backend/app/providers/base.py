@@ -58,6 +58,11 @@ class RouteResult:
     note: str | None = None
     extra: dict = field(default_factory=dict)
 
+    @classmethod
+    def unavailable(cls, mode: TransportMode, source: DataSource, note: str, distance_km: float = 0) -> "RouteResult":
+        """The mode is not offered on this route (no stations nearby, no route found...)."""
+        return cls(mode, distance_km, 0, None, False, [], source, available=False, note=note)
+
 
 class GeocodingProvider(Protocol):
     source: DataSource

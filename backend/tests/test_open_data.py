@@ -4,11 +4,12 @@ import httpx
 import pytest
 
 from app.core.errors import ProviderRequestError
+from app.core.text import fold
 from app.engines.costs import CostModel
 from app.providers.open import osm
 from app.providers.open.city_store import merge_places
 from app.providers.open.overture import row_to_place
-from app.providers.open.wikimedia import _classify, extract_dishes, fold
+from app.providers.open.wikimedia import _classify, extract_dishes
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import Place, PlaceKind
 from app.schemas.trip import TransportMode

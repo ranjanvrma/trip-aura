@@ -1,5 +1,16 @@
-"""Minutes-since-midnight helpers. The scheduler works in integer minutes."""
+"""Time helpers: UTC timestamps for stored records, and minutes-since-midnight for the scheduler."""
 from __future__ import annotations
+
+import datetime as dt
+
+
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def as_utc(t: dt.datetime) -> dt.datetime:
+    """SQLite returns naive datetimes; everything is stored in UTC."""
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
 
 
 def hm_to_min(hm: str) -> int:

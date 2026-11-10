@@ -8,8 +8,8 @@ preference.
 from __future__ import annotations
 
 import datetime as dt
-import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.core.errors import TripAuraError
 from app.core.geo import haversine_km
@@ -17,12 +17,13 @@ from app.engines.costs import CostModel
 from app.engines.fares import heuristic_duration_min
 from app.engines.pace import PaceProfile
 from app.providers.base import CityContext, RouteResult
-from app.schemas.common import DataSource, LatLng, Money
+from app.schemas.common import LatLng, Money
 from app.schemas.itinerary import TransportOption, TravelLeg
 from app.schemas.trip import TransportMode, TripRequest
-from app.services.routes_service import RoutesService
 
-log = logging.getLogger(__name__)
+if TYPE_CHECKING:  # type hints only: engines stay independent of services
+    from app.services.routes_service import RoutesService
+
 LABEL = {
     TransportMode.WALKING: "Walk", TransportMode.METRO: "Metro", TransportMode.BUS: "Bus",
     TransportMode.TRAIN: "Train", TransportMode.CAB: "Cab", TransportMode.AUTO: "Auto-rickshaw",
@@ -45,9 +46,11 @@ def score_options(options: list[TransportOption], preferred: set[TransportMode],
     Cost is judged against `leg_allowance` (what the budget comfortably allows per leg),
     so a generous budget does not force long walks just because walking is free.
     """
+    if not options:
+        return
     practical = [o for o in options if o.practical] or options
-    fastest = min(o.duration_min for o in practical) if practical else 1
-    priciest = max(o.cost.amount for o in practical) if practical else 0
+    fastest = min(o.duration_min for o in practical)
+    priciest = max(o.cost.amount for o in practical)
     ref = leg_allowance if leg_allowance and leg_allowance > 0 else priciest
     for o in options:
         t = max(fastest, 1) / max(o.duration_min, 1)
@@ -87,7 +90,7 @@ class TransportEngine:
         self.pace = pace
         self.weights = weights or TransportWeights()
         self.preferred = set(req.transport_modes)
-        self.costs = costs or CostModel.build("IN" if req.currency == "INR" else "US", req.currency)
+        self.costs = costs or CostModel.fallback(req.currency)
         # ~25% of the daily spend for transport, spread over ~6 legs a day
         daily = (req.budget - req.accommodation_cost_total) / req.num_days
         self.leg_allowance = daily * 0.25 / 6
@@ -125,12 +128,12 @@ class TransportEngine:
             cost = fare.model_copy(update={"amount": round(fare.amount * travelers, 2)})
         else:
             cost = self.costs.fare(r.mode, r.distance_km, travelers)
-        practical = r.available
+        practical = True
         note = r.note
         if r.mode == TransportMode.WALKING and r.distance_km > self.pace.max_walk_km:
             practical = False
             note = f"{r.distance_km:.1f} km is a long walk for a {self.req.pace.value} pace"
-        if r.available and r.duration_min > 150:
+        if r.duration_min > 150:
             practical = False
             note = "Journey longer than 2.5 hours"
         return TransportOption(
@@ -141,17 +144,16 @@ class TransportEngine:
 
     def options(self, origin: LatLng, dest: LatLng, departure: dt.datetime | None, *, fresh: bool = False,
                 include_fallback: bool = True) -> list[TransportOption]:
-        km = haversine_km(origin.lat, origin.lng, dest.lat, dest.lng)
-        modes = self._candidate_modes(km)
-        out: list[TransportOption] = []
-        for mode in modes:
+        def option(mode: TransportMode) -> TransportOption:
             r = self.routes.route(origin, dest, mode, departure, self.city, fresh=fresh)
-            out.append(self._to_option(r, self.req.travelers))
+            return self._to_option(r, self.req.travelers)
+
+        modes = self._candidate_modes(haversine_km(origin.lat, origin.lng, dest.lat, dest.lng))
+        out = [option(mode) for mode in modes]
         if include_fallback and not any(o.practical for o in out):
             for mode in FALLBACK_ORDER:
                 if mode not in modes:
-                    r = self.routes.route(origin, dest, mode, departure, self.city, fresh=fresh)
-                    opt = self._to_option(r, self.req.travelers)
+                    opt = option(mode)
                     opt.note = (opt.note + "; " if opt.note else "") + "not in your preferences"
                     out.append(opt)
                     if opt.practical:
@@ -169,10 +171,3 @@ class TransportEngine:
             a.polyline = []
         return TravelLeg(from_name=from_name, to_name=to_name, origin=origin, destination=dest,
                          chosen=chosen, alternatives=alts, recommendation_reason=reason)
-
-
-def zero_leg(name: str, at: LatLng, currency: str, source: DataSource) -> TravelLeg:
-    opt = TransportOption(mode=TransportMode.WALKING, distance_km=0, duration_min=0,
-                          cost=Money.estimate(0, currency), practical=True, score=1, source=source)
-    return TravelLeg(from_name=name, to_name=name, origin=at, destination=at, chosen=opt,
-                     recommendation_reason="Same location")

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { CalendarDays, MapPinned, Plus, Trash } from "lucide-react";
+import RetryNotice from "../components/ui/RetryNotice";
 import { Skeleton } from "../components/ui/Skeleton";
 import { useAuth } from "../lib/auth";
 import { usePageMeta } from "../lib/meta";
@@ -8,6 +9,7 @@ import { clearCache, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useDeleteTrip } from "../lib/trips";
 import { api, ApiError } from "../services/api";
+import { dataSourceLabel } from "../utils";
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 
@@ -47,10 +49,7 @@ export default function TripsPage() {
       </header>
 
       {trips.error && (
-        <div className="notice notice-error" role="alert">
-          Couldn't load your trips: {trips.error.message}{" "}
-          <button className="link" onClick={() => void trips.refresh()}>Try again</button>
-        </div>
+        <RetryNotice message={`Couldn't load your trips: ${trips.error.message}`} onRetry={() => void trips.refresh()} />
       )}
 
       {(checking || trips.loading) && (
@@ -75,11 +74,11 @@ export default function TripsPage() {
           {trips.data.map((t) => (
             <li key={t.id} className="tile trip-card">
               <Link to={`/trips/${t.id}`} viewTransition className="trip-card-link">
-                <h2 className="h3 balance">{t.title}</h2>
+                <h2 className="h3">{t.title}</h2>
                 <p className="small muted row gap-s"><CalendarDays size={14} aria-hidden />
                   <span className="num">{t.num_days} day{t.num_days > 1 ? "s" : ""}</span> · created {fmtDate(t.created_at)}
                 </p>
-                <span className="badge">{t.data_source === "mock" ? "Demo data" : "Open data"}</span>
+                <span className="badge">{dataSourceLabel(t.data_source)}</span>
               </Link>
               <button className="icon-btn hit trip-card-delete" onClick={() => deleteTrip(t)} aria-label={`Delete ${t.title}`}>
                 <Trash size={16} aria-hidden />

@@ -81,7 +81,7 @@ export default function SignInPage({ status }: { status: ApiStatus | null }) {
         <h1 id="signin-title" className="h2">{step === "email" ? "Sign in to TripAura" : "Check your email"}</h1>
 
         {step === "email" ? (
-          <form onSubmit={(e) => void send(e)} className="stack-m" noValidate={false}>
+          <form onSubmit={(e) => void send(e)} className="stack-m">
             <p className="muted">We'll email you a 6-digit code. There's no password to remember, and a new account is created the first time.</p>
             <label className="field">
               <span>Email address</span>

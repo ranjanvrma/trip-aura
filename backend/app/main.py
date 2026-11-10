@@ -13,10 +13,10 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.config import get_settings
-from app.core.errors import TripAuraError
+from app.core.config import DataMode, get_settings
+from app.core.errors import NotFoundError, TripAuraError
 from app.core.logging_config import configure_logging
-from app.core.security import error_response, request_guard, security_headers
+from app.core.security import error_response, exception_response, request_guard, security_headers
 from app.db.database import init_engine
 from app.routers import auth, geo, location, meta, nlp, routes, trips
 
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     log.info("TripAura started: APP_ENV=%s, DATA_MODE=%s, google_configured=%s, ai=%s, email=%s",
              settings.app_env, settings.data_mode.value, settings.google_configured, settings.ai_available,
              "resend" if settings.email_configured else "dev log")
-    if settings.data_mode.value == "live" and not settings.google_configured:
+    if settings.data_mode == DataMode.LIVE and not settings.google_configured:
         log.error("DATA_MODE=live but GOOGLE_MAPS_API_KEY is empty: itinerary requests will return 503.")
     if settings.warmup_on_start:
         threading.Thread(target=_warm_up, name="warm-up", daemon=True).start()
@@ -74,14 +74,13 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=security_headers)
 @app.exception_handler(TripAuraError)
 async def tripaura_error(_: Request, exc: TripAuraError) -> JSONResponse:
     log.warning("%s: %s", exc.code, exc.message)
-    return error_response(exc.status_code, exc.code, exc.message, exc.details, exc.headers or None)
+    return exception_response(exc)
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     issues = [{"field": ".".join(str(p) for p in e["loc"][1:]), "message": e["msg"]} for e in exc.errors()]
-    return JSONResponse(status_code=422, content={"error": {"code": "validation_error",
-                                                            "message": "Invalid trip details", "details": issues}})
+    return error_response(422, "validation_error", "Invalid trip details", issues)
 
 
 @app.exception_handler(Exception)
@@ -97,9 +96,7 @@ def health() -> dict:
 
 
 def _docs_off() -> JSONResponse | None:
-    if get_settings().docs_on:
-        return None
-    return error_response(404, "not_found", "Not found")
+    return None if get_settings().docs_on else exception_response(NotFoundError("Not found"))
 
 
 @app.get("/openapi.json", include_in_schema=False)

@@ -12,7 +12,7 @@ import re
 
 from app.core.errors import NotFoundError
 from app.providers.base import CityContext, PlaceQuery
-from app.providers.google.client import GoogleClient
+from app.providers.google.client import GoogleClient, money_amount
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, ExternalRating, OpeningHours, Place, PlaceKind, Review, TimeRange
 
@@ -57,6 +57,13 @@ VISIT_MINUTES = {"museum": 90, "art_gallery": 60, "park": 45, "shopping_mall": 9
                  "hindu_temple": 40, "church": 30, "mosque": 30, "zoo": 120, "amusement_park": 180, "castle": 120}
 
 
+# review-text hints for diet options Google has no field for
+_VEGAN = re.compile(r"\bvegan\b")
+_JAIN = re.compile(r"\bjain\b")
+_EGG = re.compile(r"\begg")
+_MEAT = re.compile(r"\b(chicken|mutton|fish|lamb|beef|pork|kebab)")
+
+
 def _hours(raw: dict | None) -> OpeningHours:
     if not raw or "periods" not in raw:
         return OpeningHours(known=False, weekly={}, source=DataSource.GOOGLE)
@@ -87,9 +94,9 @@ def _price_range(raw: dict | None) -> Money | None:
     if not raw or "startPrice" not in raw:
         return None
     start = raw["startPrice"]
-    lo = float(start.get("units", 0)) + start.get("nanos", 0) / 1e9
+    lo = money_amount(start)
     end = raw.get("endPrice")
-    hi = float(end.get("units", 0)) + end.get("nanos", 0) / 1e9 if end else lo
+    hi = money_amount(end) if end else lo
     return Money(amount=round((lo + hi) / 2, 2), currency=start.get("currencyCode", ""), verified=False,
                  source=DataSource.GOOGLE, note=f"Midpoint of Google-reported price range {lo:g}-{hi:g} per person")
 
@@ -102,10 +109,10 @@ def _diet(p: dict, reviews: list[Review]) -> DietInfo:
     return DietInfo(
         vegetarian_only=veg_only,
         vegetarian_options=bool(serves_veg) or veg_only,
-        vegan_options="vegan_restaurant" in types or bool(re.search(r"\bvegan\b", text)),
-        jain_options=bool(re.search(r"\bjain\b", text)),
-        egg_options=bool(re.search(r"\begg", text)),
-        non_veg=bool(types & NONVEG_TYPES) or bool(re.search(r"\b(chicken|mutton|fish|lamb|beef|pork|kebab)", text)),
+        vegan_options="vegan_restaurant" in types or bool(_VEGAN.search(text)),
+        jain_options=bool(_JAIN.search(text)),
+        egg_options=bool(_EGG.search(text)),
+        non_veg=bool(types & NONVEG_TYPES) or bool(_MEAT.search(text)),
         known=serves_veg is not None or veg_only,
         source=DataSource.GOOGLE,
     )
@@ -136,7 +143,7 @@ def to_place(p: dict, tag: str | None = None, kind_hint: str | None = None) -> P
     count = p.get("userRatingCount")
     ext = ExternalRating(provider=DataSource.GOOGLE, rating=rating, review_count=count, verified=rating is not None,
                          label="Google rating" if rating is not None else "No Google rating available")
-    price_level = PRICE_LEVELS.get(p.get("priceLevel", ""), None)
+    price_level = PRICE_LEVELS.get(p.get("priceLevel", ""))
 
     food_cats: list[str] = []
     meals: list[str] = []
@@ -164,7 +171,7 @@ def to_place(p: dict, tag: str | None = None, kind_hint: str | None = None) -> P
         external_rating=ext, price_level=price_level,
         entry_fee=None,  # Google does not publish entry fees; the budget engine estimates and labels them
         avg_cost_per_person=_price_range(p.get("priceRange")) if is_food else None,
-        typical_visit_minutes=VISIT_MINUTES.get(primary or "", 60 if not is_food else 60),
+        typical_visit_minutes=VISIT_MINUTES.get(primary or "", 60),
         opening_hours=_hours(p.get("regularOpeningHours")),
         is_famous=tag == "famous" and (count or 0) >= 5000,
         best_time=meals if is_food else [],

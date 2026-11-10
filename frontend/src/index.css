@@ -102,7 +102,6 @@ code { font-size: .9em; background: var(--surface-2); border: 1px solid var(--li
 .eyebrow { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: .6em; }
 .muted { color: var(--muted); }
 .small { font-size: .86rem; }
-.balance { text-wrap: balance; }
 .pre { white-space: pre-wrap; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .center { justify-content: center; }
@@ -200,7 +199,7 @@ code { font-size: .9em; background: var(--surface-2); border: 1px solid var(--li
 .bento { display: grid; gap: 16px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .bento > * { grid-column: 1 / -1; }
 
-.planner .tile-hero { grid-column: span 7; padding: clamp(22px, 3vw, 40px); display: flex; flex-direction: column; justify-content: center; background: var(--surface); }
+.planner .tile-hero { grid-column: span 7; padding: clamp(22px, 3vw, 40px); display: flex; flex-direction: column; justify-content: center; }
 .planner .tile-globe { grid-column: span 5; padding: 0; overflow: hidden; background: linear-gradient(160deg, var(--sky) 0%, var(--surface) 70%); min-height: 320px; }
 .planner .tile-describe { grid-column: span 12; background: linear-gradient(120deg, var(--sage) 0%, var(--surface) 55%); }
 .planner .tile-form { grid-column: span 8; grid-row: span 3; }
@@ -433,7 +432,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   border-radius: 22px 22px 0 0; padding-bottom: var(--safe-b);
   padding-left: var(--safe-l); padding-right: var(--safe-r);
 }
-.sheet-right { top: 0; right: 0; bottom: 0; width: min(420px, 92vw); padding: var(--safe-t) var(--safe-r) var(--safe-b) 0; border-radius: 22px 0 0 22px; }
 .sheet-handle-zone { touch-action: none; cursor: grab; padding: 10px 18px 4px; }
 .sheet-handle { display: block; width: 40px; height: 5px; border-radius: 3px; background: var(--line-strong); margin: 0 auto 8px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -495,7 +493,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .legal-body h2 { font-size: 1.1rem; margin-top: 1.6em; }
 .legal-body h2:first-of-type { margin-top: 1em; }
 .legal-body li { margin-bottom: .35em; }
-.legal-table-wrap, .legal-table { display: block; overflow-x: auto; }
+.legal-table { display: block; overflow-x: auto; }
 .legal-table th { white-space: nowrap; }
 
 /* ---------- trip page ---------- */
@@ -550,7 +548,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .note { color: var(--ink-2); margin: 4px 0 0; }
 
 .tile-map { padding: 8px; }
-.map-wrap { margin: 0; }
 .map { height: 380px; width: 100%; border-radius: var(--r-m); z-index: 0; }
 @media (max-width: 960px) { .map { height: 300px; } }
 .map .leaflet-tile-pane { filter: saturate(.55) sepia(.12) brightness(1.03); }   /* calm the tiles to match the palette */
@@ -585,7 +582,6 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .table { width: 100%; border-collapse: collapse; } .table td, .table th { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .table th { font-size: .78rem; color: var(--muted); font-weight: 600; }
 .num { text-align: right !important; }
-.legal-table .num { text-align: left !important; }
 .live-box { background: var(--sky); border-radius: var(--r-m); padding: 12px; margin: 10px 0; color: var(--sky-ink); }
 .live-box ul { margin: 6px 0; padding-left: 18px; }
 .alerts { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }

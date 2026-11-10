@@ -10,7 +10,10 @@ import datetime as dt
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from typing import Any
+
+from pydantic import BaseModel
 
 from fastapi import Header
 from fastapi.responses import JSONResponse
@@ -20,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import IdempotencyKeyRequiredError, IdempotencyKeyReusedError, RequestInProgressError
 from app.db.models import IdempotencyRecord
-from app.services.auth_service import aware, now
+from app.core.timeutil import as_utc, utc_now
 
 HEADER = "X-Idempotency-Key"
 TTL = dt.timedelta(hours=24)
@@ -42,7 +45,7 @@ def body_hash(body: Any) -> str:
 
 
 class Idempotency:
-    """Usage: rec = begin(...) -> replay response or None; then finish(...) or abort(...)."""
+    """Usage: run(status, produce), or begin() -> replay response or None; then finish(...) or abort()."""
 
     def __init__(self, db: Session, user_id: int, key: str, endpoint: str, body: Any):
         self.db, self.user_id, self.key, self.endpoint = db, user_id, key, endpoint
@@ -55,11 +58,11 @@ class Idempotency:
             IdempotencyRecord.endpoint == self.endpoint)).first()
 
     def begin(self) -> JSONResponse | None:
-        t = now()
+        t = utc_now()
         self.db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.created_at < t - TTL))
         self.db.commit()
         old = self._existing()
-        if old is not None and old.status_code is None and aware(old.created_at) < t - STALE_IN_FLIGHT:
+        if old is not None and old.status_code is None and as_utc(old.created_at) < t - STALE_IN_FLIGHT:
             self.db.delete(old)
             self.db.commit()
             old = None
@@ -82,6 +85,20 @@ class Idempotency:
             raise RequestInProgressError("A request with this idempotency key is still in progress")
         return JSONResponse(status_code=old.status_code, content=old.response_json,
                             headers={"Idempotent-Replayed": "true"})
+
+    def run(self, status_code: int, produce: Callable[[], BaseModel]) -> BaseModel | JSONResponse:
+        """The stored response for a retry; otherwise produce() once and store its result.
+        Any failure (including client disconnects) releases the key so the request can be retried."""
+        replay = self.begin()
+        if replay is not None:
+            return replay
+        try:
+            result = produce()
+            self.finish(status_code, result.model_dump(mode="json"))
+        except BaseException:
+            self.abort()
+            raise
+        return result
 
     def finish(self, status_code: int, response_json: Any) -> None:
         if self.record is None:

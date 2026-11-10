@@ -16,9 +16,8 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz, process
 
 from app.core.currencies import SUPPORTED_CURRENCIES
-from app.nlp.interests import THESAURUS, normalise_interest
-from app.providers.open.wikimedia import fold
-from app.schemas.trip import PRESET_INTERESTS
+from app.core.text import fold
+from app.nlp.interests import PRESETS_SPACED, THESAURUS, normalise_interest
 
 NUMBER_WORDS = {"one": 1, "a": 1, "an": 1, "two": 2, "couple of": 2, "three": 3, "four": 4, "five": 5, "six": 6,
                 "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fourteen": 14}
@@ -68,6 +67,10 @@ ACCOM_TYPES = {"hotel": "hotel", "airbnb": "airbnb", "hostel": "hostel", "dorm":
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
                                       "dec"], start=1)}
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_PRESET_NAMES = list(PRESETS_SPACED)
+_NOT_CITIES = {"i", "we", "my", "our", "budget", "staying", "hotel", "airbnb", "hostel", "vegetarian", "vegan",
+               "jain", *WEEKDAYS, *MONTHS}
+_INTEREST_VOCABULARY = sorted(_PRESET_NAMES + list(THESAURUS), key=len, reverse=True)   # longest phrase first
 
 
 @dataclass
@@ -80,9 +83,7 @@ class ParseResult:
 
 def _num(tok: str) -> int | None:
     tok = tok.strip().lower()
-    if tok.isdigit():
-        return int(tok)
-    return NUMBER_WORDS.get(tok)
+    return int(tok) if tok.isdigit() else NUMBER_WORDS.get(tok)
 
 
 def _has(text: str, phrase: str) -> bool:
@@ -101,31 +102,27 @@ def _amount(raw: str, suffix: str | None) -> float:
     return v
 
 
+_SYM = r"(₹|\$|€|£|¥|rs\.?|inr|usd|eur|gbp|jpy)"
+_AMT = r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|lakhs?|lac|m|mn|million)?\b"
+_CURRENCY_NAMES = "|".join(sorted((re.escape(w) for w in CURRENCY_WORDS if w.isalpha() and len(w) > 2),
+                                  key=len, reverse=True))
+_BUDGET_SYMBOL_FIRST = re.compile(rf"{_SYM}\s*{_AMT}")                    # $600, rs 40,000, € 2k
+_BUDGET_AMOUNT_FIRST = re.compile(rf"{_AMT}\s*({_CURRENCY_NAMES}|{_SYM})")  # 600 euros, 40k inr
+_BUDGET_NO_CURRENCY = re.compile(rf"budget\D{{0,15}}?{_AMT}")             # budget of 600
+
+
 def parse_budget(text: str) -> tuple[float, str | None] | None:
-    sym = r"(₹|\$|€|£|¥|rs\.?|inr|usd|eur|gbp|jpy)"
-    amt = r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|lakhs?|lac|m|mn|million)?\b"
-    words = "|".join(sorted((re.escape(w) for w in CURRENCY_WORDS if w.isalpha() and len(w) > 2), key=len, reverse=True))
-    patterns = [
-        rf"{sym}\s*{amt}",                                     # $600, rs 40,000, € 2k
-        rf"{amt}\s*({words}|{sym})",                           # 600 euros, 40k inr
-        rf"budget\D{{0,15}}?{amt}",                            # budget of 600 (no currency)
-    ]
     t = text.lower()
-    for i, p in enumerate(patterns):
-        m = re.search(p, t)
-        if not m:
-            continue
-        if i == 0:
-            cur, value, suf = m.group(1), m.group(2), m.group(3)
-        elif i == 1:
-            value, suf, cur = m.group(1), m.group(2), m.group(3)
-        else:
-            value, suf, cur = m.group(1), m.group(2), None
-        code = CURRENCY_WORDS.get(cur.strip(".") if cur else "", None) if cur else None
-        if cur and not code:
-            code = CURRENCY_WORDS.get(cur)
-        return _amount(value, suf), code
-    return None
+    if m := _BUDGET_SYMBOL_FIRST.search(t):
+        cur, value, suf = m.group(1), m.group(2), m.group(3)
+    elif m := _BUDGET_AMOUNT_FIRST.search(t):
+        value, suf, cur = m.group(1), m.group(2), m.group(3)
+    elif m := _BUDGET_NO_CURRENCY.search(t):
+        value, suf, cur = m.group(1), m.group(2), None
+    else:
+        return None
+    code = (CURRENCY_WORDS.get(cur.strip(".")) or CURRENCY_WORDS.get(cur)) if cur else None
+    return _amount(value, suf), code
 
 
 def parse_date(text: str, today: dt.date) -> dt.date | None:
@@ -171,13 +168,11 @@ def _find_city(text: str, city_index) -> dict | None:
                         text)
     # 3) any capitalised phrase
     cands += re.findall(r"\b([A-ZÀ-ɏ][\wÀ-ɏ'.-]+(?:\s+[A-ZÀ-ɏ][\wÀ-ɏ'.-]+){0,2})", text)
-    skip = {"i", "we", "my", "our", "budget", "staying", "hotel", "airbnb", "hostel", "vegetarian", "vegan", "jain",
-            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"} | set(MONTHS)
     for chunk in cands:
         words = chunk.split()
         for n in range(len(words), 0, -1):  # longest prefix first ("New York City" before "New")
             phrase = " ".join(words[:n])
-            if fold(phrase) in skip or len(phrase) < 3:
+            if fold(phrase) in _NOT_CITIES or len(phrase) < 3:
                 continue
             exact = city_index.exact(phrase)          # name or alternate name ("Lisboa", "Bombay")
             if exact:
@@ -216,8 +211,8 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
 
     # days
     m = re.search(rf"\b{_NUM}\s*(?:-\s*)?(day|days|night|nights)\b", t)
-    if m and _num(m.group(1)):
-        n = _num(m.group(1))
+    n = _num(m.group(1)) if m else None
+    if n:
         days = n + 1 if m.group(2).startswith("night") else n
         f["num_days"] = max(1, min(14, days))
         res.understood.append(f"{f['num_days']} day(s)")
@@ -238,10 +233,11 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
     m = re.search(rf"\b(?:we are|we're|group of|family of|party of)?\s*{_NUM}\s*(people|persons|adults|travell?ers|"
                   r"friends|of us|pax|guests)\b", t)
     m2 = re.search(r"\b(?:family|group|party) of (\d+)\b", t)
+    n = _num(m.group(1)) if m else None
     if m2:
         f["travelers"] = int(m2.group(1))
-    elif m and _num(m.group(1)):
-        f["travelers"] = _num(m.group(1))
+    elif n:
+        f["travelers"] = n
     elif re.search(r"\b(with my|with our) (wife|husband|partner|girlfriend|boyfriend|spouse)\b|\bcouple\b|\bhoneymoon\b", t):
         f["travelers"] = 2
     elif re.search(r"\b(solo|alone|by myself|on my own)\b", t):
@@ -305,11 +301,10 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
 
     # interests: presets/thesaurus anywhere + free phrases after "love/like/into/interested in"
     interests: list[str] = []
-    vocab = {p.replace("_", " "): p for p in PRESET_INTERESTS}
-    for phrase in sorted(list(vocab) + list(THESAURUS), key=len, reverse=True):
+    for phrase in _INTEREST_VOCABULARY:
         if _has(t, phrase):
             mapped, _ = normalise_interest(phrase)
-            key = vocab.get(phrase)
+            key = PRESETS_SPACED.get(phrase)
             if key and key not in interests:
                 interests.append(key)
             elif not key and phrase not in interests:
@@ -343,9 +338,9 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
                 for x in mapped:
                     if x not in interests:
                         interests.append(x)
-    # typo-tolerant pass over single words ("musuems" -> museums)
-    for w in set(re.findall(r"[a-z]{5,}", t)):
-        if w in vocab or w in THESAURUS:
+    # typo-tolerant pass over single words ("musuems" -> museums), in order of appearance
+    for w in dict.fromkeys(re.findall(r"[a-z]{5,}", t)):
+        if w in PRESETS_SPACED or w in THESAURUS:
             continue
         guess = fuzzy_preset(w)
         if guess and guess not in interests and fuzz.ratio(w, guess.replace("_", " ")) < 100:
@@ -363,6 +358,5 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
 
 
 def fuzzy_preset(word: str) -> str | None:
-    best = process.extractOne(fold(word), [p.replace("_", " ") for p in PRESET_INTERESTS], scorer=fuzz.ratio,
-                              score_cutoff=82)
-    return best[0].replace(" ", "_") if best else None
+    best = process.extractOne(fold(word), _PRESET_NAMES, scorer=fuzz.ratio, score_cutoff=82)
+    return PRESETS_SPACED[best[0]] if best else None

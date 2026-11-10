@@ -1,7 +1,7 @@
 import { useLayoutEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { prefersReducedMotion } from "./safeUrl";
+import { prefersReducedMotion } from "./platform";
 
 gsap.registerPlugin(ScrollTrigger);
 

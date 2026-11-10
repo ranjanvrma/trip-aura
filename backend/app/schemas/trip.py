@@ -96,7 +96,7 @@ class TripRequest(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _defaults(self) -> "TripRequest":
+    def _defaults(self) -> TripRequest:
         if not self.transport_modes:
             self.transport_modes = [TransportMode.WALKING, TransportMode.AUTO, TransportMode.CAB, TransportMode.BUS]
         if self.accommodation_cost_total >= self.budget:

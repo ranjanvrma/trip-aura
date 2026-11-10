@@ -6,6 +6,8 @@ Verified vs estimated money is tracked separately:
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.core.geo import haversine_km
 from app.engines.costs import CostModel
 from app.schemas.common import DataSource, Money
@@ -19,7 +21,7 @@ BREAKFAST_FACTOR = 0.6
 
 
 def _costs(req: TripRequest, costs: CostModel | None) -> CostModel:
-    return costs or CostModel.build("IN" if req.currency == "INR" else "US", req.currency)
+    return costs or CostModel.fallback(req.currency)
 
 
 def entry_cost(place: Place, req: TripRequest, costs: CostModel | None = None) -> Money:
@@ -40,11 +42,12 @@ def meal_cost(place: Place | None, meal: str, req: TripRequest, costs: CostModel
         m = cm.to_trip_currency(place.avg_cost_per_person)
         return m.model_copy(update={"amount": round(m.amount * factor * req.travelers, 2)})
     level = place.price_level if place is not None else None
-    if place is not None and level is not None:
-        who = "an estimated price level for this type of place" if place.price_level_estimated \
-            else "the restaurant's price level"
-    else:
+    if level is None:
         who = "a typical budget meal"
+    elif place.price_level_estimated:
+        who = "an estimated price level for this type of place"
+    else:
+        who = "the restaurant's price level"
     return Money.estimate(cm.meal(level) * factor * req.travelers, req.currency,
                           note=f"Estimated from {who} ({cm.basis})")
 
@@ -57,25 +60,28 @@ def day_budget(day_number: int, items: list[ItineraryItem]) -> DayBudget:
     totals = CategoryTotals()
     verified = estimated = 0.0
     for it in items:
-        for money, cat in _item_costs(it):
-            setattr(totals, cat, round(getattr(totals, cat) + money.amount, 2))
-            if _is_verified(money):
-                verified += money.amount
-            else:
-                estimated += money.amount
+        cost = _item_cost(it)
+        if cost is None:
+            continue
+        money, cat = cost
+        setattr(totals, cat, round(getattr(totals, cat) + money.amount, 2))
+        if _is_verified(money):
+            verified += money.amount
+        else:
+            estimated += money.amount
     return DayBudget(day_number=day_number, totals=totals, total=totals.total(),
                      verified_amount=round(verified, 2), estimated_amount=round(estimated, 2))
 
 
-def _item_costs(it: ItineraryItem) -> list[tuple[Money, str]]:
-    out: list[tuple[Money, str]] = []
-    if it.type == ItemType.TRAVEL and it.travel is not None:
-        out.append((it.travel.chosen.cost, "transport"))
-    elif it.type == ItemType.MEAL and it.cost is not None:
-        out.append((it.cost, "food"))
-    elif it.type == ItemType.ACTIVITY and it.cost is not None:
-        out.append((it.cost, "attractions"))
-    return out
+def _item_cost(it: ItineraryItem) -> tuple[Money, str] | None:
+    """(cost, budget category) of an item; rests, start and end items are not counted."""
+    if it.type == ItemType.TRAVEL:
+        return (it.travel.chosen.cost, "transport") if it.travel is not None else None
+    if it.type == ItemType.MEAL and it.cost is not None:
+        return it.cost, "food"
+    if it.type == ItemType.ACTIVITY and it.cost is not None:
+        return it.cost, "attractions"
+    return None
 
 
 def summarize(days: list[DayPlan], req: TripRequest) -> BudgetSummary:
@@ -107,7 +113,8 @@ def summarize(days: list[DayPlan], req: TripRequest) -> BudgetSummary:
 
 
 def suggest_savings(days: list[DayPlan], req: TripRequest, spare_attractions: list[tuple[Place, SuitabilityScore]],
-                    cheaper_food: callable | None = None, limit: int = 10) -> list[BudgetSuggestion]:
+                    cheaper_food: Callable[[ItineraryItem, DayPlan], tuple[Place, float] | None] | None = None,
+                    limit: int = 10) -> list[BudgetSuggestion]:
     """Concrete ways to cut cost, largest saving first."""
     out: list[BudgetSuggestion] = []
     used_alt: set[str] = set()
@@ -128,7 +135,7 @@ def suggest_savings(days: list[DayPlan], req: TripRequest, spare_attractions: li
                     ))
             elif it.type == ItemType.ACTIVITY and it.place and it.cost and it.cost.amount > 0:
                 alts = [(p, s) for p, s in spare_attractions
-                        if p.id not in used_alt and (p.entry_fee is not None and p.entry_fee.amount == 0)
+                        if p.id not in used_alt and p.entry_fee is not None and p.entry_fee.amount == 0
                         and haversine_km(p.location.lat, p.location.lng, it.place.location.lat, it.place.location.lng) < 6
                         and (it.suitability is None or s.score >= it.suitability.score - 1.0)]
                 if alts:
@@ -141,13 +148,12 @@ def suggest_savings(days: list[DayPlan], req: TripRequest, spare_attractions: li
                     ))
             elif it.type == ItemType.MEAL and it.place and it.cost and cheaper_food is not None:
                 alt = cheaper_food(it, d)
-                if alt is not None:
+                if alt is not None and alt[1] < it.cost.amount * 0.8:
                     alt_place, alt_cost = alt
-                    if alt_cost < it.cost.amount * 0.8:
-                        out.append(BudgetSuggestion(
-                            kind="cheaper_food", item_id=it.id, alternative_place_id=alt_place.id,
-                            estimated_saving=round(it.cost.amount - alt_cost, 2),
-                            message=f"Day {d.day_number}: {it.meal_type} at {alt_place.name} instead of {it.place.name}.",
-                        ))
+                    out.append(BudgetSuggestion(
+                        kind="cheaper_food", item_id=it.id, alternative_place_id=alt_place.id,
+                        estimated_saving=round(it.cost.amount - alt_cost, 2),
+                        message=f"Day {d.day_number}: {it.meal_type} at {alt_place.name} instead of {it.place.name}.",
+                    ))
     out.sort(key=lambda s: -s.estimated_saving)
     return out[:limit]

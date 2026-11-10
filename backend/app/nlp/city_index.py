@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+from rapidfuzz import fuzz, process
 
 from app.core.errors import ProviderRequestError
-from app.providers.open.wikimedia import fold
+from app.core.text import fold
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,9 @@ class CityIndex:
         self.user_agent = user_agent
         self.transport = transport
         self.cities: list[City] = []
-        self._keys: list[tuple[str, int]] = []        # (folded name variant, city index)
+        self._keys: list[tuple[str, int, bool]] = []   # (folded name variant, city index, is primary name)
+        self._names: list[str] = []                    # the variants alone, for fuzzy search
+        self._exact: dict[str, int] = {}
         self._lock = threading.Lock()
         self.ready = False
 
@@ -116,6 +119,7 @@ class CityIndex:
             if j is None or (is_primary, cities[i].population) > (False, cities[j].population):
                 exact[v] = i
         self.cities, self._keys, self._exact = cities, keys, exact
+        self._names = [k for k, _, _ in keys]
         self.ready = True
         log.info("City index ready: %d cities, %d name variants", len(cities), len(keys))
 
@@ -128,8 +132,7 @@ class CityIndex:
             return []
         country_hint = None
         if "," in qf:  # "paris, us" / "london, canada"
-            qf, _, hint = (s.strip() for s in qf.partition(","))
-            country_hint = hint
+            qf, _, country_hint = (s.strip() for s in qf.partition(","))
         scored: dict[int, float] = {}
         for key, i, is_primary in self._keys:
             if key.startswith(qf):
@@ -138,10 +141,7 @@ class CityIndex:
                 bonus = (2.0 if key == qf else 1.0) * (1.0 if is_primary else 0.6)
                 scored[i] = max(scored.get(i, 0), bonus + min(c.population, 40_000_000) / 40_000_000)
         if len(scored) < limit and len(qf) >= 4:
-            from rapidfuzz import fuzz, process
-
-            names = [k for k, _, _ in self._keys]
-            for _, score, pos in process.extract(qf, names, scorer=fuzz.ratio, limit=limit * 4, score_cutoff=80):
+            for _, score, pos in process.extract(qf, self._names, scorer=fuzz.ratio, limit=limit * 4, score_cutoff=80):
                 i = self._keys[pos][1]
                 c = self.cities[i]
                 scored.setdefault(i, score / 100 * 0.9 + min(c.population, 40_000_000) / 80_000_000)

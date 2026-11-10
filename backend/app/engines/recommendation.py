@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from app.core.geo import haversine_km
 from app.engines.costs import CostModel
 from app.engines.pace import PaceProfile, profile_for
-from app.schemas.common import LatLng
+from app.schemas.common import DataSource, LatLng
 from app.schemas.place import Place, PlaceKind, SuitabilityScore
 from app.schemas.trip import TransportMode, TripRequest
 
@@ -50,7 +50,7 @@ class ScoringContext:
         if self.interests is None:
             self.interests = list(self.req.interests)
         if self.costs is None:
-            self.costs = CostModel.build("IN" if self.req.currency == "INR" else "US", self.req.currency)
+            self.costs = CostModel.fallback(self.req.currency)
         spendable = self.req.budget - self.req.accommodation_cost_total
         self.daily_budget_pp = spendable / self.req.num_days / self.req.travelers
 
@@ -173,16 +173,15 @@ def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     if semantic_hits:
         reasons.append("Similar in meaning to your interest in " + ", ".join(i.replace("_", " ") for i in semantic_hits[:2])
                        + " (AI text matching)")
-    if (matched or semantic_hits) and place.is_famous:
-        reasons.append("One of the city's best-known sights")
-    elif matched or semantic_hits:
-        pass
+    if matched or semantic_hits:
+        if place.is_famous:
+            reasons.append("One of the city's best-known sights")
     elif discovery:
         reasons.append("Outside your selected interests, but one of the city's best-known sights")
     elif req.interests:
         reasons.append("Weak match with your selected interests")
     if fee == 0:
-        assumed = place.entry_fee is not None and place.entry_fee.source.value == "estimate"
+        assumed = place.entry_fee.source == DataSource.ESTIMATE
         reasons.append("Probably free entry (assumed - no fee data)" if assumed else "Free entry")
     elif fee is not None:
         word = "fits" if comps["budget"] >= 0.99 else "stretches"

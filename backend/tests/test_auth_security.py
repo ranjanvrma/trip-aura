@@ -6,7 +6,7 @@ import logging
 import httpx
 import pytest
 
-from tests.conftest import ADMIN_EMAIL, USER_EMAIL, login
+from tests.conftest import USER_EMAIL, login
 
 
 def _db():
@@ -25,6 +25,18 @@ def _set_env(monkeypatch, **env):
 
 def _request_code(c, email=USER_EMAIL):
     return c.post("/api/auth/request-code", json={"email": email})
+
+
+def _wrong(code: str) -> str:
+    """A valid-looking code that differs from `code`."""
+    return f"{(int(code) + 1) % 1_000_000:06d}"
+
+
+def _forwarded_request(xff: str):
+    """A request that arrived from peer 10.0.0.1 with the given X-Forwarded-For header."""
+    from starlette.requests import Request
+
+    return Request({"type": "http", "headers": [(b"x-forwarded-for", xff.encode())], "client": ("10.0.0.1", 1234)})
 
 
 # ------------------------------------------------------------------ code flow
@@ -61,9 +73,7 @@ def test_only_hashes_are_stored(client, mailer):
 
 def test_wrong_code(client, mailer):
     _request_code(client)
-    code = mailer.last_code(USER_EMAIL)
-    wrong = f"{(int(code) + 1) % 1_000_000:06d}"
-    r = client.post("/api/auth/verify", json={"email": USER_EMAIL, "code": wrong})
+    r = client.post("/api/auth/verify", json={"email": USER_EMAIL, "code": _wrong(mailer.last_code(USER_EMAIL))})
     assert r.status_code == 400 and r.json()["error"]["code"] == "invalid_code"
     assert client.get("/api/auth/me").status_code == 401
 
@@ -82,10 +92,9 @@ def test_code_expiry(client, mailer):
 def test_attempt_limit_kills_code(client, mailer):
     _request_code(client)
     code = mailer.last_code(USER_EMAIL)
-    wrong = f"{(int(code) + 1) % 1_000_000:06d}"
     messages = set()
     for _ in range(5):
-        r = client.post("/api/auth/verify", json={"email": USER_EMAIL, "code": wrong})
+        r = client.post("/api/auth/verify", json={"email": USER_EMAIL, "code": _wrong(code)})
         assert r.status_code == 400
         messages.add(r.json()["error"]["message"])
     r = client.post("/api/auth/verify", json={"email": USER_EMAIL, "code": code})
@@ -155,9 +164,8 @@ def test_production_without_secret_key_fails_startup(monkeypatch):
         Settings(app_env="production", secret_key="short").check_startup()
     _set_env(monkeypatch, APP_ENV="production", SECRET_KEY="")
     try:
-        with pytest.raises(RuntimeError, match="SECRET_KEY"):
-            with TestClient(app):
-                pass
+        with pytest.raises(RuntimeError, match="SECRET_KEY"), TestClient(app):
+            pass
     finally:
         monkeypatch.undo()
         get_settings.cache_clear()
@@ -225,12 +233,10 @@ def test_logout(auth_client):
     assert auth_client.get("/api/auth/me").status_code == 401
 
 
-def test_delete_account(auth_client, base_request, new_client, mailer):
+def test_delete_account(auth_client, other_client, base_request):
     from app.db.models import AuthSession, IdempotencyRecord, LoginCode, Trip, User
 
-    other = new_client()
-    login(other, mailer, "other@example.com")
-    other_trip = other.post("/api/trips", json=base_request).json()["trip_id"]
+    other_trip = other_client.post("/api/trips", json=base_request).json()["trip_id"]
     tid = auth_client.post("/api/trips", json=base_request).json()["trip_id"]
     token = auth_client.cookies.get("ta_session")
     assert auth_client.delete("/api/auth/account", headers={"X-CSRF-Token": "nope"}).status_code == 403
@@ -249,7 +255,7 @@ def test_delete_account(auth_client, base_request, new_client, mailer):
         assert db.query(IdempotencyRecord).count() == 1         # the other user's record
     auth_client.cookies.set("ta_session", token)
     assert auth_client.get("/api/auth/me").status_code == 401
-    assert other.get(f"/api/trips/{other_trip}").status_code == 200
+    assert other_client.get(f"/api/trips/{other_trip}").status_code == 200
 
 
 # ------------------------------------------------------------------ authorization
@@ -270,16 +276,15 @@ def test_public_endpoints_stay_public(client):
                                                     "destination": {"lat": 26.92, "lng": 75.82}}).status_code == 200
 
 
-def test_owner_only_access_and_admin(auth_client, admin_client, new_client, mailer, base_request):
+def test_owner_only_access_and_admin(auth_client, admin_client, other_client, base_request):
     tid = auth_client.post("/api/trips", json=base_request).json()["trip_id"]
-    other = new_client()
-    login(other, mailer, "other@example.com")
-    for r in (other.get(f"/api/trips/{tid}"), other.delete(f"/api/trips/{tid}"),
-              other.post(f"/api/trips/{tid}/regenerate"),
-              other.post(f"/api/trips/{tid}/live", json={"current": {"lat": 26.9, "lng": 75.8}, "day_number": 1})):
+    for r in (other_client.get(f"/api/trips/{tid}"), other_client.delete(f"/api/trips/{tid}"),
+              other_client.post(f"/api/trips/{tid}/regenerate"),
+              other_client.post(f"/api/trips/{tid}/live",
+                                json={"current": {"lat": 26.9, "lng": 75.8}, "day_number": 1})):
         assert r.status_code == 404 and r.json()["error"]["code"] == "trip_not_found"
-    assert other.get("/api/trips").json() == []
-    assert other.get("/api/trips?all=true").json() == []          # not an admin: ignored
+    assert other_client.get("/api/trips").json() == []
+    assert other_client.get("/api/trips?all=true").json() == []          # not an admin: ignored
 
     assert admin_client.get(f"/api/trips/{tid}").status_code == 200
     assert admin_client.get("/api/trips").json() == []            # own trips by default
@@ -409,11 +414,11 @@ def test_idempotency_in_flight(auth_client, base_request):
 
 
 def test_failed_generation_releases_key(auth_client, base_request):
+    from app.db.models import IdempotencyRecord
+
     h = {"X-Idempotency-Key": "fails-first-01"}
     r = auth_client.post("/api/trips", json={**base_request, "destination_city": "Paris"}, headers=h)
     assert r.status_code == 422
-    from app.db.models import IdempotencyRecord
-
     with _db() as db:
         assert db.query(IdempotencyRecord).count() == 0
 
@@ -447,14 +452,11 @@ def test_rate_limit_can_be_disabled(client, mailer, monkeypatch):
         assert _request_code(client).status_code == 202
 
 
-def test_forwarded_for_only_when_trusted(client, monkeypatch):
-    from starlette.requests import Request
-
+def test_forwarded_for_only_when_trusted():
     from app.core.config import Settings
     from app.core.ratelimit import client_ip
 
-    req = Request({"type": "http", "headers": [(b"x-forwarded-for", b"203.0.113.9, 10.0.0.1")],
-                   "client": ("10.0.0.1", 1234)})
+    req = _forwarded_request("203.0.113.9, 10.0.0.1")
     assert client_ip(req, Settings(trust_proxy_headers=False)) == "10.0.0.1"
     # one trusted proxy: the entry it appended (rightmost) is the client
     assert client_ip(req, Settings(trust_proxy_headers=True)) == "10.0.0.1"
@@ -463,15 +465,11 @@ def test_forwarded_for_only_when_trusted(client, monkeypatch):
 
 
 def test_forwarded_for_spoofing_is_ignored():
-    from starlette.requests import Request
-
     from app.core.config import Settings
     from app.core.ratelimit import client_ip
 
     # the client sent its own "1.2.3.4"; the trusted proxy appended the real peer address
-    req = Request({"type": "http", "headers": [(b"x-forwarded-for", b"1.2.3.4, 198.51.100.7")],
-                   "client": ("10.0.0.1", 1234)})
-    assert client_ip(req, Settings(trust_proxy_headers=True)) == "198.51.100.7"
+    assert client_ip(_forwarded_request("1.2.3.4, 198.51.100.7"), Settings(trust_proxy_headers=True)) == "198.51.100.7"
 
 
 def test_token_bucket_refills():

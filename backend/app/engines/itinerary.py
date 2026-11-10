@@ -13,7 +13,6 @@ Two passes per day:
 from __future__ import annotations
 
 import datetime as dt
-import logging
 import re
 from dataclasses import dataclass, field
 
@@ -28,7 +27,6 @@ from app.schemas.common import DataSource, LatLng
 from app.schemas.itinerary import DayPlan, ItemType, ItineraryItem, UnscheduledPlace
 from app.schemas.place import Place, PlaceKind, SuitabilityScore
 
-log = logging.getLogger(__name__)
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 MIN_SCORE = 1.5
 MIN_EXTERNAL_RATING = 3.3
@@ -120,36 +118,36 @@ def _drop_near_duplicates(ranked: list[Candidate], max_m: float = 150) -> list[C
 
 class ItineraryEngine:
     def __init__(self, ctx: ScoringContext, accommodation: Place, transport: TransportEngine, food: FoodEngine,
-                 data_source: DataSource, constraints: PlanConstraints | None = None):
+                 constraints: PlanConstraints | None = None):
         self.ctx = ctx
         self.req = ctx.req
         self.pace = ctx.pace
         self.home = accommodation
         self.transport = transport
         self.food = food
-        self.source = data_source
         self.c = constraints or PlanConstraints()
         self.max_acts = min(self.pace.max_activities, self.c.max_activities or 99)
+        # planning-pass estimates: first activity after breakfast, the lunch + rest block, and the
+        # latest activity end that still leaves time for dinner and the trip back
+        self.first_activity = self.pace.day_start + self.pace.breakfast_min + 10
+        self.lunch_block = self.pace.lunch_min + self.pace.rest_after_lunch + 10
+        self.latest_activity_end = self.pace.day_end - self.pace.dinner_min - 30
 
     # ------------------------------------------------------------------ planning
-    def _latest_activity_end(self) -> int:
-        # leave time for dinner and the trip back before the pace's day end
-        return self.pace.day_end - self.pace.dinner_min - 30
-
     def _simulate(self, seq: list[Candidate], weekday: int) -> tuple[bool, float]:
         """Quick feasibility check of an ordered sequence. Returns (feasible, travel minutes)."""
-        t = self.pace.day_start + self.pace.breakfast_min + 10
+        t = self.first_activity
         loc = self.home.location
         lunch = False
         travel_total = 0.0
         for c in seq:
             if not lunch and t >= LUNCH_WINDOW[0]:
-                t += self.pace.lunch_min + self.pace.rest_after_lunch + 10
+                t += self.lunch_block
                 lunch = True
             travel = self.transport.quick_minutes(loc, c.loc)
             travel_total += travel
             w = open_window(c.place, weekday, int(t + travel + self.pace.buffer_min), c.place.typical_visit_minutes)
-            if w is None or w[0] - (t + travel) > MAX_WAIT_MIN or w[1] > self._latest_activity_end():
+            if w is None or w[0] - (t + travel) > MAX_WAIT_MIN or w[1] > self.latest_activity_end:
                 return False, travel_total
             if not lunch and w[1] > LUNCH_WINDOW[1] + 30:
                 return False, travel_total
@@ -158,7 +156,7 @@ class ItineraryEngine:
         return True, travel_total
 
     def _plan_day(self, weekday: int, pool: list[Candidate], used: set[str], want_park: bool) -> list[Candidate]:
-        t = self.pace.day_start + self.pace.breakfast_min + 10
+        t = self.first_activity
         loc = self.home.location
         lunch = False
         seq: list[Candidate] = []
@@ -175,7 +173,7 @@ class ItineraryEngine:
         anchor = max(open_today, key=anchor_key, default=None)
         while len(seq) < self.max_acts:
             if not lunch and t >= LUNCH_WINDOW[0]:
-                t += self.pace.lunch_min + self.pace.rest_after_lunch + 10
+                t += self.lunch_block
                 lunch = True
             best: tuple[float, Candidate, tuple[int, int]] | None = None
             for c in pool:
@@ -184,7 +182,7 @@ class ItineraryEngine:
                 travel = self.transport.quick_minutes(loc, c.loc)
                 arrive = int(t + travel + self.pace.buffer_min)
                 w = open_window(c.place, weekday, arrive, c.place.typical_visit_minutes)
-                if w is None or w[1] > self._latest_activity_end():
+                if w is None or w[1] > self.latest_activity_end:
                     continue
                 wait = w[0] - arrive
                 if wait > MAX_WAIT_MIN:
@@ -265,11 +263,12 @@ class ItineraryEngine:
 
         def meal(kind: str, duration: int) -> None:
             radius = 1.5 if kind == "breakfast" else 3.0
-            pick = self.food.pick(kind, state["loc"], int(state["t"] + 10), weekday, used_food, max_km=radius,
-                                  max_cost=self.c.max_meal_cost_pp, duration=duration)
-            if pick is None:
-                pick = self.food.pick(kind, state["loc"], int(state["t"] + 10), weekday, set(), max_km=radius,
+            pick = None
+            for exclude in (used_food, set()):   # prefer a restaurant not used yet; repeat one if needed
+                pick = self.food.pick(kind, state["loc"], int(state["t"] + 10), weekday, exclude, max_km=radius,
                                       max_cost=self.c.max_meal_cost_pp, duration=duration)
+                if pick is not None:
+                    break
             if pick is None:
                 cost = budget_engine.meal_cost(None, kind, self.req, self.ctx.costs)
                 label = "at your accommodation" if state["name"] == self.home.name else f"near {state['name']}"
@@ -284,7 +283,7 @@ class ItineraryEngine:
             add(ItemType.MEAL, f"{kind.title()} at {cand.place.name}", int(state["t"]), int(state["t"] + duration),
                 place=cand.place, suitability=score, meal_type=kind,
                 cost=budget_engine.meal_cost(cand.place, kind, self.req, self.ctx.costs),
-                notes=[f"Diet info: {cand.check.confidence}"] + (cand.check.reasons[:2]))
+                notes=[f"Diet info: {cand.check.confidence}"] + cand.check.reasons[:2])
             state["t"] += duration
 
         add(ItemType.START, f"Start at {self.home.name}", self.pace.day_start, self.pace.day_start, place=self.home)
@@ -305,7 +304,7 @@ class ItineraryEngine:
             prev = (state["t"], state["loc"], state["name"], len(items))
             travel_to(c.place.name, c.loc)
             w = open_window(c.place, weekday, int(state["t"]), c.place.typical_visit_minutes)
-            if w is None or w[0] - state["t"] > MAX_WAIT_MIN or w[1] > self._latest_activity_end():
+            if w is None or w[0] - state["t"] > MAX_WAIT_MIN or w[1] > self.latest_activity_end:
                 # does not fit with real travel times: roll back the leg and report it
                 state["t"], state["loc"], state["name"] = prev[0], prev[1], prev[2]
                 del items[prev[3]:]
@@ -325,8 +324,7 @@ class ItineraryEngine:
 
         maybe_lunch(force=True)
         if state["t"] < DINNER_WINDOW[0] - 45:
-            free_start = int(state["t"])
-            add(ItemType.REST, "Free time / relax", free_start, DINNER_WINDOW[0] - 15,
+            add(ItemType.REST, "Free time / relax", int(state["t"]), DINNER_WINDOW[0] - 15,
                 notes=["Unplanned time for shopping, a cafe stop or rest at your accommodation."])
             state["t"] = DINNER_WINDOW[0] - 15
         meal("dinner", self.pace.dinner_min)
@@ -348,12 +346,15 @@ class ItineraryEngine:
         """Post-lunch rest: a nearby open park if there is one, otherwise a plain break."""
         dur = self.pace.rest_after_lunch
         t = int(state["t"])
+        here = state["loc"]
+
+        def km(p: Place) -> float:
+            return haversine_km(here.lat, here.lng, p.location.lat, p.location.lng)
+
         parks = [p for p in self._parks
-                 if p.id not in self._used_parks
-                 and haversine_km(state["loc"].lat, state["loc"].lng, p.location.lat, p.location.lng) < 1.5
-                 and open_window(p, weekday, t + 15, dur) is not None]
+                 if p.id not in self._used_parks and km(p) < 1.5 and open_window(p, weekday, t + 15, dur) is not None]
         if parks:
-            park = min(parks, key=lambda p: haversine_km(state["loc"].lat, state["loc"].lng, p.location.lat, p.location.lng))
+            park = min(parks, key=km)
             self._used_parks.add(park.id)
             add(ItemType.REST, f"Rest at {park.name}", t, t + dur, place=park,
                 cost=budget_engine.entry_cost(park, self.req, self.ctx.costs), notes=["Relaxed break in a nearby park or garden"])

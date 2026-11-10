@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import gsap from "gsap";
 import type { LatLng } from "../../types";
-import { prefersReducedMotion } from "../../lib/safeUrl";
+import { prefersReducedMotion } from "../../lib/platform";
 
 const DEG = Math.PI / 180;
 

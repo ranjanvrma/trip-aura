@@ -8,21 +8,24 @@ interface Props {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  side?: "bottom" | "right";
 }
 
-/** Bottom sheet (mobile) or side panel: swipe or drag down to dismiss, Escape and system back close it. */
-export default function Sheet({ open, onClose, title, children, side = "bottom" }: Props) {
+/** Bottom sheet: swipe or drag down to dismiss, Escape and system back close it. */
+export default function Sheet({ open, onClose, title, children }: Props) {
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
   const drag = useDragControls();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useBackToClose(open, onClose);
 
+  // keyed on `open` only: callers pass inline onClose functions, and re-running this on every parent render
+  // would pull focus back to the panel and forget which element opened the sheet
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     panel.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
     document.addEventListener("keydown", onKey);
     document.documentElement.classList.add("no-scroll");
     return () => {
@@ -30,9 +33,8 @@ export default function Sheet({ open, onClose, title, children, side = "bottom" 
       document.documentElement.classList.remove("no-scroll");
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
-  const bottom = side === "bottom";
   return (
     <AnimatePresence>
       {open && (
@@ -41,21 +43,14 @@ export default function Sheet({ open, onClose, title, children, side = "bottom" 
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
           <motion.div
             ref={panel} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
-            className={`sheet sheet-${side}`}
-            initial={bottom ? { y: "100%" } : { x: "100%" }}
-            animate={bottom ? { y: 0 } : { x: 0 }}
-            exit={bottom ? { y: "100%" } : { x: "100%" }}
+            className="sheet sheet-bottom"
+            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 380, damping: 38 }}
-            drag={bottom ? "y" : "x"} dragListener={false} dragControls={drag}
-            dragConstraints={bottom ? { top: 0, bottom: 0 } : { left: 0, right: 0 }}
-            dragElastic={bottom ? { top: 0.05, bottom: 0.8 } : { left: 0.05, right: 0.8 }}
-            onDragEnd={(_, info) => {
-              const dist = bottom ? info.offset.y : info.offset.x;
-              const vel = bottom ? info.velocity.y : info.velocity.x;
-              if (dist > 120 || vel > 600) onClose();
-            }}>
+            drag="y" dragListener={false} dragControls={drag}
+            dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0.05, bottom: 0.8 }}
+            onDragEnd={(_, info) => { if (info.offset.y > 120 || info.velocity.y > 600) onClose(); }}>
             <div className="sheet-handle-zone" onPointerDown={(e) => drag.start(e)}>
-              {bottom && <span className="sheet-handle" aria-hidden />}
+              <span className="sheet-handle" aria-hidden />
               <div className="sheet-head">
                 <h2 id={titleId} className="sheet-title">{title}</h2>
                 <button className="icon-btn hit" onClick={onClose} aria-label="Close">

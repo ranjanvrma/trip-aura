@@ -33,7 +33,7 @@ def _title(req: TripRequest) -> str:
     return f"{req.num_days} day{'s' if req.num_days > 1 else ''} in {req.destination_city.title()}"
 
 
-def _load(db: Session, trip_id: int, auth: Auth, *, admin_ok: bool = False) -> Trip:
+def load_trip(db: Session, trip_id: int, auth: Auth, *, admin_ok: bool = False) -> Trip:
     """The trip if the caller owns it (or is an admin and `admin_ok`). Anything else is a 404, so
     other users' trip ids cannot be probed. Trips without an owner (saved before sign-in existed)
     are reachable by admins only."""
@@ -43,7 +43,7 @@ def _load(db: Session, trip_id: int, auth: Auth, *, admin_ok: bool = False) -> T
     return trip
 
 
-def _to_itinerary(trip: Trip) -> Itinerary:
+def to_itinerary(trip: Trip) -> Itinerary:
     it = Itinerary.model_validate(trip.itinerary_json)
     it.trip_id = trip.id
     return it
@@ -53,11 +53,7 @@ def _to_itinerary(trip: Trip) -> Itinerary:
 def create_trip(req: TripRequest, db: Session = Depends(get_db), auth: Auth = Depends(require_auth),
                 key: str = Depends(idempotency_key),
                 svc: ItineraryService = Depends(get_itinerary_service)):
-    idem = Idempotency(db, auth.user.id, key, "POST /api/trips", req.model_dump(mode="json"))
-    replay = idem.begin()
-    if replay is not None:
-        return replay
-    try:
+    def produce() -> Itinerary:
         generation_limit(auth)
         itinerary = svc.generate(req)
         trip = Trip(title=_title(req), destination=req.destination_city, num_days=req.num_days,
@@ -66,19 +62,17 @@ def create_trip(req: TripRequest, db: Session = Depends(get_db), auth: Auth = De
         db.add(trip)
         db.commit()
         itinerary.trip_id = trip.id
-        idem.finish(201, itinerary.model_dump(mode="json"))
-    except BaseException:
-        idem.abort()
-        raise
-    log.info("Created trip %s (%s, %s) for user %s", trip.id, trip.title, trip.data_source, auth.user.id)
-    return itinerary
+        log.info("Created trip %s (%s, %s) for user %s", trip.id, trip.title, trip.data_source, auth.user.id)
+        return itinerary
+
+    return Idempotency(db, auth.user.id, key, "POST /api/trips", req.model_dump(mode="json")).run(201, produce)
 
 
 @router.post("/preview", response_model=Itinerary)
 def preview_trip(req: TripRequest, auth: Auth = Depends(require_auth),
                  svc: ItineraryService = Depends(get_itinerary_service)) -> Itinerary:
     """Generate without saving."""
-    generation_limit(auth)   # counted only for valid requests
+    generation_limit(auth)
     return svc.generate(req)
 
 
@@ -95,35 +89,29 @@ def list_trips(all: bool = Query(False, description="Admins only: list every use
 
 @router.get("/{trip_id}", response_model=Itinerary)
 def get_trip(trip_id: int, db: Session = Depends(get_db), auth: Auth = Depends(require_auth)) -> Itinerary:
-    return _to_itinerary(_load(db, trip_id, auth, admin_ok=True))
+    return to_itinerary(load_trip(db, trip_id, auth, admin_ok=True))
 
 
 @router.post("/{trip_id}/regenerate", response_model=Itinerary)
 def regenerate_trip(trip_id: int, db: Session = Depends(get_db), auth: Auth = Depends(require_auth),
                     key: str = Depends(idempotency_key),
                     svc: ItineraryService = Depends(get_itinerary_service)):
-    trip = _load(db, trip_id, auth)
-    idem = Idempotency(db, auth.user.id, key, f"POST /api/trips/{trip_id}/regenerate", {})
-    replay = idem.begin()
-    if replay is not None:
-        return replay
-    try:
+    trip = load_trip(db, trip_id, auth)
+
+    def produce() -> Itinerary:
         generation_limit(auth)
-        req = TripRequest.model_validate(trip.request_json)
-        itinerary = svc.generate(req)
+        itinerary = svc.generate(TripRequest.model_validate(trip.request_json))
         trip.itinerary_json = itinerary.model_dump(mode="json")
         trip.data_source = itinerary.data_source.value
         db.commit()
         itinerary.trip_id = trip.id
-        idem.finish(200, itinerary.model_dump(mode="json"))
-    except BaseException:
-        idem.abort()
-        raise
-    return itinerary
+        return itinerary
+
+    return Idempotency(db, auth.user.id, key, f"POST /api/trips/{trip_id}/regenerate", {}).run(200, produce)
 
 
 @router.delete("/{trip_id}", status_code=204)
 def delete_trip(trip_id: int, db: Session = Depends(get_db), auth: Auth = Depends(require_auth)) -> Response:
-    db.delete(_load(db, trip_id, auth, admin_ok=True))
+    db.delete(load_trip(db, trip_id, auth, admin_ok=True))
     db.commit()
     return Response(status_code=204)

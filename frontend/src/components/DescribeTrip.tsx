@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, ApiError } from "../services/api";
 import type { ParsedTrip } from "../types";
+import { Kbd } from "./ui/Skeleton";
 
 const EXAMPLE = "4 days in Lisbon with my partner from 12 Dec, vegetarian, we love museums, street art and sunsets, "
   + "budget 900 euros, staying at Rossio, relaxed pace, metro and walking";
@@ -36,7 +37,7 @@ export default function DescribeTrip({ onParsed }: { onParsed: (p: ParsedTrip) =
         <button type="button" className="btn" onClick={() => void run()} disabled={busy || text.trim().length < 3}>
           {busy ? <><span className="spinner" aria-hidden /> Reading</> : "Fill the form"}
         </button>
-        <span className="small muted shortcut-hint"><kbd className="kbd">Ctrl</kbd><kbd className="kbd">Enter</kbd></span>
+        <span className="small muted shortcut-hint"><Kbd>Ctrl</Kbd><Kbd>Enter</Kbd></span>
         <button type="button" className="btn" onClick={() => setText(EXAMPLE)}>Use example</button>
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}

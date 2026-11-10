@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_health_and_status(client):
     assert client.get("/api/health").json() == {"status": "ok"}
     s = client.get("/api/meta/status").json()
@@ -56,7 +59,7 @@ def test_live_progress_arrived(auth_client, base_request):
     first = next(i for i in trip["days"][0]["items"] if i["type"] == "activity")
     loc = first["place"]["location"]
     r = auth_client.post(f"/api/trips/{trip['trip_id']}/live",
-                    json={"current": loc, "day_number": 1, "next_item_id": first["id"]})
+                         json={"current": loc, "day_number": 1, "next_item_id": first["id"]})
     assert any(a["kind"] == "arrived" for a in r.json()["alerts"])
 
 
@@ -68,12 +71,11 @@ def test_route_compare(client):
     assert {o["mode"] for o in r.json()["options"]} == {"walking", "auto", "cab"}
 
 
-def test_live_mode_without_key_fails_loudly(monkeypatch, base_request):
+def test_live_mode_without_key_fails_loudly():
     """Live mode must never silently fall back to mock data."""
     from app.core.config import Settings
     from app.core.errors import ProviderNotConfiguredError
     from app.services.providers import build_providers
-    import pytest
 
     with pytest.raises(ProviderNotConfiguredError):
         build_providers(Settings(data_mode="live", google_maps_api_key=""))
@@ -92,3 +94,24 @@ def test_blank_database_url_uses_default_sqlite():
 
     assert Settings(database_url="").database_url == DEFAULT_DATABASE_URL
     assert Settings(database_url="postgres://u:p@h/db").database_url == "postgres://u:p@h/db"
+
+
+def test_address_suggestions_skip_features_without_coordinates(client, monkeypatch):
+    import httpx
+
+    from app.routers import geo
+
+    features = [
+        {"properties": {"name": "No geometry"}, "geometry": None},
+        {"properties": {"name": "Short"}, "geometry": {"coordinates": [9.1]}},
+        {"properties": {"name": "Bad"}, "geometry": {"coordinates": ["x", "y"]}},
+        {"properties": None, "geometry": {"coordinates": [-9.14, 38.71]}},
+        {"properties": {"name": "Rossio", "city": "Lisbon"}, "geometry": {"coordinates": [-9.1394, 38.7139]}},
+    ]
+    resp = httpx.Response(200, json={"features": features}, request=httpx.Request("GET", "https://photon.test"))
+    monkeypatch.setattr(geo.httpx, "get", lambda *a, **k: resp)
+    r = client.get("/api/geo/addresses", params={"q": "rossio"})
+    assert r.status_code == 200
+    results = r.json()["results"]
+    # the nameless point is dropped too: it would show as an empty suggestion
+    assert [(x["label"], x["lat"]) for x in results] == [("Rossio, Lisbon", 38.7139)]

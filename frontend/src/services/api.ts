@@ -7,8 +7,7 @@ import type {
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string, public details?: unknown,
-              public retryAfter?: number) {
+  constructor(public status: number, public code: string, message: string, public details?: unknown) {
     super(message);
   }
 }
@@ -47,7 +46,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     const message = res.status === 429
       ? `Too many requests. Try again in ${retry ?? "a few"} seconds.`
       : err?.message ?? `Request failed (${res.status})`;
-    throw new ApiError(res.status, err?.code ?? "http_error", message, err?.details, retry);
+    throw new ApiError(res.status, err?.code ?? "http_error", message, err?.details);
   }
   return body as T;
 }

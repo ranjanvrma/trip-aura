@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** configure the Vercel same-origin API rewrite; production email setup remains (see §8)
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** whole-codebase cleanup (dead code and duplication removed, 3 bugs fixed); Vercel same-origin API rewrite is in; production email setup remains (§8); next: UI makeover
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -35,7 +35,7 @@
   - budget and live location
   - **email one-time-code sign-in** (Resend), private per-user trips, account deletion, security hardening (CSRF, rate limits, idempotency keys, security headers, input limits)
   - **redesigned frontend**: light-mode bento layout, 3D globe, command menu, sheets, toasts with undo, Terms/Privacy/404 pages
-  - **159 backend tests pass**, the frontend builds, and CI runs on every push
+  - **161 backend tests pass**, the frontend builds, and CI runs on every push
 - **Deployed:** the public Vercel site and Azure backend are live (see [§8](#8-deployment-status)). Email sign-in still needs production configuration; do not treat authenticated trip planning as verified until that is complete.
 
 ---
@@ -88,6 +88,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Area | Files |
 |---|---|
 | Settings | `backend/app/core/config.py` (every env var and default) |
+| Shared helpers | `core/text.py` (`fold`: accent-insensitive matching), `core/geo.py` (`haversine_km`, `degree_span`), `core/timeutil.py` (`utc_now`, `as_utc`), `core/ratelimit.py` (`enforce`), `core/security.py` (`exception_response`), `services/idempotency.py` (`Idempotency.run`), `providers/base.py` (`RouteResult.unavailable`), `engines/costs.py` (`CostModel.fallback`). `engines/` imports nothing from `services/` (type hints only) |
 | Pipeline | `services/itinerary_service.py` (geocode → candidates → semantic match → schedule → budget → enrich → optional LLM summary) |
 | City data | `providers/open/city_store.py`: parallel loader (ThreadPoolExecutor) for Overture/Wikidata/3×OSM/Wikivoyage, merge (`merge_places`, accent-insensitive name + distance), SQLite/Postgres cache (`CityDataset`, `DATASET_VERSION=6`) |
 | Sources | `providers/open/overture.py` (slim columns, shared DuckDB with HTTP/object caches), `open/wikimedia.py` (SPARQL notable places, Wikivoyage dishes), `open/osm.py` (tags, `opening_hours` parser, fees, diet), `open/providers.py` (geocoder uses GeoNames index first, Nominatim fallback), `heuristic_routes.py` |
@@ -95,7 +96,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
 | API | `routers/` trips, location (live), geo (autocomplete), nlp (parse-trip), meta (status/options), routes, auth |
 | Auth and security | `routers/auth.py` (request-code, verify, me, logout, `DELETE /api/auth/account`), `services/auth_service.py` (HMAC-hashed 6-digit codes: 10 min, 5 attempts, single use; sessions = SHA-256 of a random cookie token + CSRF token, 7 days), `services/email_service.py` (Resend; dev mode prints codes to the console), `services/idempotency.py` (`X-Idempotency-Key` on create/regenerate, 24 h), `core/security.py` (security headers, Origin check, per-IP limits), `core/ratelimit.py` (in-memory token buckets; client IP counted from the right of `X-Forwarded-For`), `core/urls.py` (http(s)-only URLs, QID checks), `routers/deps.py` (`require_auth` + CSRF). Trips are owner-only (others get 404); admins (`ADMIN_EMAILS`) can read/list/delete any |
-| Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (Layout: header, mobile menu sheet, footer, scroll progress, route chunk preloading; AccountMenu with a safe-triangle submenu), `pages/` (Planner bento, Trip, Trips, SignIn, LegalPages, NotFound), `components/` (CommandMenu `Ctrl/Cmd+K`, `globe/` three.js lazy chunk, `ui/Sheet` swipe-to-dismiss, `ui/Skeleton` + Kbd, TripForm, DayCard, PlaceDetails, map/*...), `lib/` (auth context, toast with undo, `swr.ts` stale-while-revalidate cache, `meta.ts` page titles/descriptions, `useBackToClose` predictive back, `useScrollMotion` GSAP reveals/parallax, `trips.ts` optimistic delete + undo, `safeUrl.ts`), `services/api.ts` (cookies, CSRF header, idempotency keys), `index.css` (design tokens, light mode only). `vite.config.ts` adds a production CSP meta tag and pre-renders per-route `<head>` files (`dist/terms/index.html`, `404.html`...) |
+| Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (Layout: header, mobile menu sheet, footer, scroll progress, route chunk preloading; AccountMenu with a safe-triangle submenu), `pages/` (Planner bento, Trip, Trips, SignIn, LegalPages, NotFound), `components/` (CommandMenu `Ctrl/Cmd+K`, `globe/` three.js lazy chunk, `ui/Sheet` swipe-to-dismiss, `ui/Skeleton` + Kbd, TripForm, DayCard, PlaceDetails, map/*...), `lib/` (auth context, toast with undo, `swr.ts` stale-while-revalidate cache, `meta.ts` page titles/descriptions, `useBackToClose` predictive back, `useScrollMotion` GSAP reveals/parallax, `trips.ts` optimistic delete + undo, `safeUrl.ts` http(s)-only links, `platform.ts` reduced motion + Ctrl/Cmd key), `components/ui/RetryNotice` (error notice with Try again), `utils.ts` (`dayColor`, `dataSourceLabel`, money helpers), `services/api.ts` (cookies, CSRF header, idempotency keys), `index.css` (design tokens, light mode only). `vite.config.ts` adds a production CSP meta tag and pre-renders per-route `<head>` files (`dist/terms/index.html`, `404.html`...) |
 | Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
 | Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; Azure deployment files and workflow are present; live deployment details are in §8 |
 
@@ -240,8 +241,9 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
+| 2026-11-10 | (this commit) | Whole-codebase cleanup, no behaviour change: dead code, unused settings paths and duplicated logic removed, shared helpers added (see §4 "Shared helpers"), regexes compiled once, faster city merging and fuzzy search. Bugs fixed: trip parser listed corrected interests in random order; address suggestions returned 500 for Photon features without coordinates; frontend sheet stole focus on re-render, Google/Leaflet maps re-fit or re-centred on every re-render, empty "Tags:" row. 161 tests |
 | 2026-11-10 | `27450b2` | Add same-origin Vercel API rewrite; document blank `VITE_API_BASE_URL` and email provider setup |
-| 2026-11-10 | `146b756` | Update the Vercel domain to `trip-aura-cr.vercel.app`; document Azure CORS and domain verification steps |
+| 2026-11-10 | `37ae7d8` | Update the Vercel domain to `trip-aura-cr.vercel.app`; document Azure CORS and domain verification steps |
 | 2026-11-10 | `d65f949` | README and HANDOFF: document the live deployment, verified health/connectivity, and remaining production sign-in setup |
 | 2026-11-10 | `368143f` | Production CSP allows Google Maps hosts; records the live deployment check |
 | 2026-11-10 | `c55f12c` | UI redesign (light-mode bento, globe, command menu, sheets, toasts with undo, legal and 404 pages, favicons, per-route heads, CSP); email-code sign-in, per-user trips, account deletion; CSRF, idempotency keys, rate limits, security headers, input limits, injection audit; React Router 7.18.5 |

@@ -24,6 +24,7 @@ NEGATIVE = {
 }
 NEGATORS = {"not", "no", "never", "n't", "nothing", "hardly", "barely", "isnt", "wasnt", "dont", "didnt"}
 _WORD = re.compile(r"[a-z']+")
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n+")
 
 POS_PROTOTYPES = ["The food was delicious and I loved it.", "This dish is a must try, highly recommended."]
 NEG_PROTOTYPES = ["The food was bad, cold and disappointing.", "This dish was terrible, avoid it."]
@@ -59,4 +60,4 @@ def sentence_polarity(sentences: list[str], semantic=None) -> list[float]:
 
 
 def split_sentences(text: str) -> list[str]:
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if s.strip()]
+    return [s.strip() for s in _SENTENCE_BREAK.split(text) if s.strip()]

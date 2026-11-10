@@ -19,7 +19,7 @@ class ProviderBundle:
     places: PlacesProvider
     routes: RoutesProvider
     geocoding: GeocodingProvider
-    extras: dict = field(default_factory=dict)   # e.g. {"cities": CityDataService, "enricher": GoogleEnricher}
+    extras: dict = field(default_factory=dict)   # open mode: {"cities": CityDataService, "enricher_factory": ...}
 
 
 def _google_client(settings: Settings):
@@ -39,6 +39,7 @@ def build_providers(settings: Settings) -> ProviderBundle:
                               GoogleRoutesProvider(client), GoogleGeocodingProvider(client))
 
     if settings.data_mode == DataMode.OPEN:
+        from app.nlp.registry import get_city_index
         from app.providers.heuristic_routes import HeuristicRoutesProvider
         from app.providers.open.city_store import CityDataService
         from app.providers.open.http import OpenHttp
@@ -55,10 +56,11 @@ def build_providers(settings: Settings) -> ProviderBundle:
             from app.providers.google.places import GooglePlacesProvider
             from app.services.enrichment import GoogleEnricher
 
-            extras["google_places"] = GooglePlacesProvider(_google_client(settings))
-            extras["enricher_factory"] = lambda: GoogleEnricher(extras["google_places"])
+            google_places = GooglePlacesProvider(_google_client(settings))
+            extras["enricher_factory"] = lambda: GoogleEnricher(google_places)
+        # the offline GeoNames city index lets the open geocoder skip Nominatim for city names
         return ProviderBundle(DataMode.OPEN, DataSource.OPEN, OpenPlacesProvider(cities), routes,
-                              OpenGeocodingProvider(http, _city_index()), extras)
+                              OpenGeocodingProvider(http, get_city_index()), extras)
 
     from app.providers.mock.providers import MockGeocodingProvider, MockPlacesProvider, MockRoutesProvider
 
@@ -75,9 +77,3 @@ def get_providers() -> ProviderBundle:
     s = get_settings()
     return _cached(s.data_mode.value, s.google_configured)
 
-
-def _city_index():
-    """Offline GeoNames index (lets the open geocoder skip Nominatim for city names)."""
-    from app.nlp.registry import get_city_index
-
-    return get_city_index()

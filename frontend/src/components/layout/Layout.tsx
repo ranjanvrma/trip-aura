@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { CodeXml, Menu, Search } from "lucide-react";
 import { useAuth } from "../../lib/auth";
-import { modKey } from "../../lib/safeUrl";
+import { modKey } from "../../lib/platform";
 import { useCommands } from "../CommandMenu";
 import Sheet from "../ui/Sheet";
 import { Kbd } from "../ui/Skeleton";
@@ -19,7 +19,12 @@ const preload: Record<string, () => Promise<unknown>> = {
   "/terms": () => import("../../pages/LegalPages"),
   "/privacy": () => import("../../pages/LegalPages"),
 };
-export const warm = (path: string) => () => { void preload[path]?.(); };
+const warm = (path: string) => () => { void preload[path]?.(); };
+
+const LINKS = [
+  { to: "/", label: "Plan a trip" },
+  { to: "/trips", label: "My trips" },
+];
 
 function ScrollProgress() {
   const { scrollYProgress } = useScroll();
@@ -32,11 +37,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const [menu, setMenu] = useState(false);
   const loc = useLocation();
-
-  const links = [
-    { to: "/", label: "Plan a trip" },
-    { to: "/trips", label: "My trips" },
-  ];
+  const closeMenu = () => setMenu(false);
 
   return (
     <div className="shell">
@@ -46,7 +47,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
         <div className="topbar-inner">
           <Link to="/" className="brand" viewTransition aria-label="TripAura home"><Logo /> <span>TripAura</span></Link>
           <nav className="nav-desktop" aria-label="Main">
-            {links.map((l) => (
+            {LINKS.map((l) => (
               <NavLink key={l.to} to={l.to} end viewTransition onPointerEnter={warm(l.to)} onFocus={warm(l.to)}
                        className={({ isActive }) => `nav-link ${isActive ? "is-active" : ""}`}>{l.label}</NavLink>
             ))}
@@ -64,22 +65,22 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
         </div>
       </header>
 
-      <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
+      <Sheet open={menu} onClose={closeMenu} title="Menu">
         <nav className="mobile-nav" aria-label="Mobile">
-          {links.map((l) => (
-            <NavLink key={l.to} to={l.to} end viewTransition onClick={() => setMenu(false)}
+          {LINKS.map((l) => (
+            <NavLink key={l.to} to={l.to} end viewTransition onClick={closeMenu}
                      className={({ isActive }) => `mobile-link ${isActive ? "is-active" : ""}`}>{l.label}</NavLink>
           ))}
           {user
             ? (
               <>
                 <p className="muted small mobile-signed">Signed in as {user.email}</p>
-                <button className="mobile-link mobile-btn" onClick={() => { setMenu(false); void signOut(); }}>Sign out</button>
+                <button className="mobile-link mobile-btn" onClick={() => { closeMenu(); void signOut(); }}>Sign out</button>
               </>
             )
-            : <Link to={`/signin?next=${encodeURIComponent(loc.pathname)}`} className="mobile-link" onClick={() => setMenu(false)}>Sign in</Link>}
-          <Link to="/terms" className="mobile-link" onClick={() => setMenu(false)}>Terms of use</Link>
-          <Link to="/privacy" className="mobile-link" onClick={() => setMenu(false)}>Privacy policy</Link>
+            : <Link to={`/signin?next=${encodeURIComponent(loc.pathname)}`} className="mobile-link" onClick={closeMenu}>Sign in</Link>}
+          <Link to="/terms" className="mobile-link" onClick={closeMenu}>Terms of use</Link>
+          <Link to="/privacy" className="mobile-link" onClick={closeMenu}>Privacy policy</Link>
         </nav>
       </Sheet>
 

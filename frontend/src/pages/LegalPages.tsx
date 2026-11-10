@@ -10,7 +10,7 @@ function LegalShell({ title, children }: { title: string; children: React.ReactN
     <article className="page legal">
       <header className="legal-head">
         <p className="eyebrow">Legal</p>
-        <h1 className="h1 balance">{title}</h1>
+        <h1 className="h1">{title}</h1>
         <p className="muted small">Last updated {UPDATED}</p>
       </header>
       <div className="legal-body">{children}</div>
@@ -156,5 +156,3 @@ export function PrivacyPage() {
     </LegalShell>
   );
 }
-
-export default TermsPage;

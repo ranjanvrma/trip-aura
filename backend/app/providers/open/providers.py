@@ -3,17 +3,17 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import math
 
 from rapidfuzz import fuzz
 
 from app.core.errors import LocationNotFoundError, NotFoundError
+from app.core.geo import degree_span
 from app.core.geo import haversine_km
+from app.core.text import fold
 from app.providers.base import CityContext, GeocodeResult, PlaceQuery, RouteResult
 from app.providers.heuristic_routes import HeuristicRoutesProvider
 from app.providers.open.city_store import CityDataService
 from app.providers.open.http import OpenHttp
-from app.providers.open.wikimedia import fold
 from app.schemas.common import DataSource, LatLng
 from app.schemas.place import Place, PlaceKind
 from app.schemas.trip import TransportMode
@@ -85,8 +85,7 @@ class OpenGeocodingProvider:
     def geocode(self, query: str, city: CityContext | None = None) -> GeocodeResult:
         params = {"q": query, "limit": 1, "addressdetails": 0, "accept-language": "en"}
         if city:
-            d = city.radius_km * 1.5 / 111
-            dl = d / max(0.2, math.cos(math.radians(city.center.lat)))
+            d, dl = degree_span(city.center.lat, city.radius_km * 1.5)
             params.update({"viewbox": f"{city.center.lng - dl},{city.center.lat + d},{city.center.lng + dl},"
                                       f"{city.center.lat - d}", "bounded": 1})
         res = self.http.nominatim("search", params)
@@ -128,7 +127,7 @@ class OpenPlacesProvider:
         pool = [p for p in data.places if p.kind in (PlaceKind.ATTRACTION, PlaceKind.PARK)]
         if query.tag == "famous":
             pool = [p for p in pool if p.is_famous]
-        elif query.tag not in ("all",):
+        elif query.tag != "all":
             pool = [p for p in pool if query.tag in p.categories]
         pool.sort(key=lambda p: (-(p.prominence or 0), p.name))
         return pool[: query.max_results]
@@ -139,9 +138,6 @@ class OpenPlacesProvider:
                 if p.id == place_id:
                     return p
         raise NotFoundError(f"Place '{place_id}' is not in a loaded city")
-
-    def city_data(self, city: CityContext):
-        return self.cities.get(city)
 
 
 class OsrmRoutesProvider:
@@ -163,8 +159,7 @@ class OsrmRoutesProvider:
         url = f"{base}/{origin.lng:.6f},{origin.lat:.6f};{destination.lng:.6f},{destination.lat:.6f}"
         data = self.http.get_json(url, {"overview": "simplified", "geometries": "geojson"}, what="OSRM routing")
         if data.get("code") != "Ok" or not data.get("routes"):
-            return RouteResult(mode, 0, 0, None, False, [], self.source, available=False,
-                               note=f"OSRM found no {mode.value} route")
+            return RouteResult.unavailable(mode, self.source, f"OSRM found no {mode.value} route")
         r = data["routes"][0]
         minutes = r["duration"] / 60
         if mode == TransportMode.AUTO:

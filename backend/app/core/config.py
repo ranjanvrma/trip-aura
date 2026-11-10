@@ -153,6 +153,10 @@ class Settings(BaseSettings):
         return bool(self.resend_api_key.strip())
 
     @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
     def allowed_origins(self) -> list[str]:
         """Explicit CORS origins. A wildcard is never allowed with credentialed requests."""
         return [o.rstrip("/") for o in self.cors_origin_list if o != "*"]
@@ -171,10 +175,6 @@ class Settings(BaseSettings):
                         "sign-in codes and sessions reset on restart)")
         if "*" in self.cors_origin_list:
             log.warning("CORS_ORIGINS contains '*', which is ignored: credentialed requests need explicit origins")
-
-    @property
-    def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def overpass_url_list(self) -> list[str]:

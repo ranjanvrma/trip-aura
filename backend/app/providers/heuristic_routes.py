@@ -53,14 +53,12 @@ class HeuristicRoutesProvider:
             s2, d2 = self._nearest(stations, kind, destination)
             reach = STATION_REACH_KM[kind]
             if s1 is None:
-                return RouteResult(mode, straight, 0, None, False, [], self.source, available=False,
-                                   note=f"No {kind} stations mapped in this city")
+                return RouteResult.unavailable(mode, self.source, f"No {kind} stations mapped in this city", straight)
             if d1 > reach or d2 > reach or s1["name"] == s2["name"]:
-                return RouteResult(mode, straight, 0, None, False, [], self.source, available=False,
-                                   note=f"No {kind} station within {reach} km of both ends")
+                return RouteResult.unavailable(mode, self.source, f"No {kind} station within {reach} km of both ends",
+                                               straight)
             if mode == TransportMode.TRAIN and straight < 8:
-                return RouteResult(mode, straight, 0, None, False, [], self.source, available=False,
-                                   note="Train not useful for short intra-city hops")
+                return RouteResult.unavailable(mode, self.source, "Train not useful for short intra-city hops", straight)
             walk = (d1 + d2) * 1.25 / MODE_PROFILES[TransportMode.WALKING].speed_kmh * 60
             dist, dur = heuristic_duration_min(mode, straight)
             unverified = " - station type not verified" if "rail" in (s1["kind"], s2["kind"]) else ""

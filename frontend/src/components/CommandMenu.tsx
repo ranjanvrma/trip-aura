@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, LogIn, LogOut, MapPin, Plus, Search, Shield } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useSWR } from "../lib/swr";
-import { modKey } from "../lib/safeUrl";
+import { modKey } from "../lib/platform";
 import { api } from "../services/api";
 import { Kbd } from "./ui/Skeleton";
 
@@ -76,7 +76,6 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
   }, [all, q]);
 
   useEffect(() => { input.current?.focus(); }, []);
-  useEffect(() => { setActive(0); }, [q]);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
@@ -99,7 +98,7 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
                   transition={{ type: "spring", stiffness: 500, damping: 36 }}>
         <div className="cmd-search">
           <Search size={18} aria-hidden />
-          <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages, trips and actions"
+          <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setActive(0); }} placeholder="Search pages, trips and actions"
                  role="combobox" aria-expanded="true" aria-controls="cmd-list" aria-autocomplete="list"
                  aria-activedescendant={shown[active] ? `cmd-${shown[active].id}` : undefined} />
           <Kbd>Esc</Kbd>

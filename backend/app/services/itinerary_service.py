@@ -6,7 +6,7 @@ import logging
 
 from app.core.config import DataMode, Settings
 from app.core.errors import UnsupportedInMockModeError
-from app.core.timeutil import hm_to_min
+from app.core.timeutil import hm_to_min, utc_now
 from app.engines import budget as budget_engine
 from app.engines.costs import CostModel
 from app.engines.food import FoodEngine, _dish_allowed, city_popular_dishes
@@ -101,7 +101,8 @@ class ItineraryService:
         self._validate_mode(req)
         warnings: list[str] = []
         city = self.city(req.destination_city)
-        city_data = self.providers.extras["cities"].get(city) if "cities" in self.providers.extras else None
+        cities = self.providers.extras.get("cities")
+        city_data = cities.get(city) if cities is not None else None
         if city_data:
             warnings += city_data.warnings
         acc, acc_warn = self.geo.resolve_accommodation(req.accommodation, city)
@@ -171,7 +172,7 @@ class ItineraryService:
                 attributions.append("Ratings and reviews marked 'Google' from Google Maps Platform")
 
         itinerary = Itinerary(
-            data_source=self.source, generated_at=dt.datetime.now(dt.timezone.utc), request=req, accommodation=home,
+            data_source=self.source, generated_at=utc_now(), request=req, accommodation=home,
             days=result.days, food_recommendations=food.recommendations(10),
             popular_dishes=self._dishes(food, city_data, req),
             budget=budget, unscheduled=result.unscheduled,
@@ -185,7 +186,7 @@ class ItineraryService:
     def _plan(self, ctx: ScoringContext, home: Place, city: CityContext, food: FoodEngine, attractions: list[Place],
               constraints: PlanConstraints, weights: TransportWeights | None) -> PlanResult:
         transport = self.transport_for(ctx.req, city, weights, ctx.costs)
-        engine = ItineraryEngine(ctx, home, transport, food, self.source, constraints)
+        engine = ItineraryEngine(ctx, home, transport, food, constraints)
         return engine.build(attractions)
 
     def _enrich(self, days: list[DayPlan], food: FoodEngine, city: CityContext) -> tuple[str, bool] | None:

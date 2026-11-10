@@ -3,11 +3,8 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState } fro
 import { CircleCheck, CircleX, Info, X } from "lucide-react";
 
 type Tone = "success" | "error" | "info";
-interface Toast { id: number; tone: Tone; message: string; actionLabel?: string; onAction?: () => void; ms: number }
-interface ToastApi {
-  show: (t: Omit<Toast, "id" | "ms"> & { ms?: number }) => number;
-  dismiss: (id: number) => void;
-}
+interface Toast { id: number; tone: Tone; message: string; actionLabel?: string; onAction?: () => void }
+interface ToastApi { show: (t: Omit<Toast, "id"> & { ms?: number }) => void }
 
 const ToastContext = createContext<ToastApi | null>(null);
 const ICON = { success: CircleCheck, error: CircleX, info: Info };
@@ -23,15 +20,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     timers.current.delete(id);
   }, []);
 
-  const show = useCallback<ToastApi["show"]>((t) => {
+  const show = useCallback<ToastApi["show"]>(({ ms, ...t }) => {
     const id = nextId.current++;
-    const ms = t.ms ?? (t.tone === "error" ? 7000 : 5000);
-    setToasts((all) => [...all.slice(-2), { ...t, id, ms }]);
-    timers.current.set(id, window.setTimeout(() => dismiss(id), ms));
-    return id;
+    setToasts((all) => [...all.slice(-2), { ...t, id }]);
+    timers.current.set(id, window.setTimeout(() => dismiss(id), ms ?? (t.tone === "error" ? 7000 : 5000)));
   }, [dismiss]);
 
-  const value = useMemo(() => ({ show, dismiss }), [show, dismiss]);
+  const value = useMemo(() => ({ show }), [show]);
 
   return (
     <ToastContext.Provider value={value}>

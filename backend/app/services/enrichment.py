@@ -8,18 +8,16 @@ place keeps "no rating". The schedule itself is not changed.
 """
 from __future__ import annotations
 
-import logging
 import re
 
 from app.core.errors import TripAuraError
 from app.core.geo import haversine_km
+from app.core.text import fold
 from app.providers.base import CityContext, PlaceQuery
 from app.providers.google.places import GooglePlacesProvider
-from app.providers.open.wikimedia import fold
 from app.schemas.common import DataSource
 from app.schemas.place import Place
 
-log = logging.getLogger(__name__)
 MAX_DISTANCE_KM = 0.25
 
 
@@ -38,7 +36,6 @@ def names_match(a: str, b: str) -> bool:
 class GoogleEnricher:
     def __init__(self, places: GooglePlacesProvider):
         self.places = places
-        self.calls = 0
         self.matched = 0
         self.errors: list[str] = []
 
@@ -48,7 +45,6 @@ class GoogleEnricher:
         local_name = place.name.split(" (")[0]
         ctx = CityContext(name=city.name, center=place.location, country_code=city.country_code, radius_km=0.3,
                           has_metro=None, source=city.source)
-        self.calls += 1
         try:
             results = self.places.search(ctx, PlaceQuery(text=local_name, tag="enrich", kind="food" if place.diet else
                                                          "attraction", max_results=3))

@@ -130,6 +130,14 @@ def test_budget_and_date_helpers():
     assert parse_date("tomorrow", TODAY) == dt.date(2026, 11, 8)
 
 
+def test_parser_typo_interests_keep_text_order():
+    # the single-word typo pass used to iterate a set, so the order depended on the hash seed
+    res = parse_trip_text("3 days of architecure, musuems and wildlfe")
+    assert res.fields["interests"] == ["architecture", "museums", "wildlife"]
+    assert res.notes[:3] == ["Read 'architecure' as 'architecture'.", "Read 'musuems' as 'museums'.",
+                             "Read 'wildlfe' as 'wildlife'."]
+
+
 # ------------------------------------------------------------------ interests
 def test_interest_normalisation():
     assert normalise_interest("musuems") == (["museums"], "museums")

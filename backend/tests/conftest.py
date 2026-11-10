@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import uuid
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -109,43 +110,47 @@ def login(c, mailer: FakeMailer, email: str = USER_EMAIL, auto_idempotency: bool
 
 
 @pytest.fixture
+def client(tmp_path, monkeypatch):
+    """Test client on a fresh SQLite database (the app's startup creates the tables)."""
+    from fastapi.testclient import TestClient
+
+    from app.core.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.db'}")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        yield c
+    get_settings.cache_clear()
+
+
+@pytest.fixture
 def new_client(client):
     """Factory for extra clients (own cookie jar) on the same app and database."""
     from fastapi.testclient import TestClient
 
     from app.main import app
 
-    def make(**kwargs):
-        return TestClient(app, **kwargs)
-    return make
+    return partial(TestClient, app)
+
+
+def _signed_in(c, mailer: FakeMailer, email: str):
+    c.session_info = login(c, mailer, email)
+    return c
 
 
 @pytest.fixture
 def auth_client(client, mailer):
     """`client` signed in as an ordinary user."""
-    client.session_info = login(client, mailer)
-    return client
+    return _signed_in(client, mailer, USER_EMAIL)
 
 
 @pytest.fixture
 def admin_client(new_client, mailer):
-    c = new_client()
-    c.session_info = login(c, mailer, ADMIN_EMAIL)
-    return c
+    return _signed_in(new_client(), mailer, ADMIN_EMAIL)
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.db'}")
-    from app.core.config import get_settings
-
-    get_settings.cache_clear()
-    from fastapi.testclient import TestClient
-
-    from app.db import database
-    from app.main import app
-
-    database.init_engine(f"sqlite:///{tmp_path / 'test.db'}")
-    with TestClient(app) as c:
-        yield c
-    get_settings.cache_clear()
+def other_client(new_client, mailer):
+    """A second ordinary user with their own cookie jar."""
+    return _signed_in(new_client(), mailer, "other@example.com")

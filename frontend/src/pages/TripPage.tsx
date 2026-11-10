@@ -9,17 +9,19 @@ import MapView from "../components/map/MapView";
 import type { MapMarker, MapPolyline } from "../components/map/types";
 import PlaceDetails from "../components/PlaceDetails";
 import RestaurantList from "../components/RestaurantList";
+import RetryNotice from "../components/ui/RetryNotice";
 import Sheet from "../components/ui/Sheet";
 import { Skeleton, SkeletonLines } from "../components/ui/Skeleton";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { usePageMeta } from "../lib/meta";
+import { prefersReducedMotion } from "../lib/platform";
 import { mutate, seed, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useScrollMotion } from "../lib/useScrollMotion";
 import { api, ApiError, newIdempotencyKey } from "../services/api";
 import type { Itinerary, ItineraryItem } from "../types";
-import { DAY_COLORS } from "../utils";
+import { dataSourceLabel, dayColor } from "../utils";
 import NotFoundPage from "./NotFoundPage";
 
 function useIsNarrow(query = "(max-width: 960px)") {
@@ -73,7 +75,7 @@ export default function TripPage() {
     markers.push({ id: "home", position: it.accommodation.location, label: "H", kind: "home", color: "#2f3a33",
                    title: `${it.accommodation.name} (your accommodation)` });
     for (const d of days) {
-      const color = DAY_COLORS[(d.day_number - 1) % DAY_COLORS.length];
+      const color = dayColor(d.day_number);
       let n = 0;
       for (const i of d.items) {
         if (i.type === "travel" && i.travel) {
@@ -96,10 +98,13 @@ export default function TripPage() {
     .filter((i) => (i.type === "activity" || i.type === "meal") && i.place)
     .map((i) => ({ id: i.id, label: `${i.start} ${i.title}` })) ?? [], [it, liveDay]);
 
-  const selectById = (mid: string) => {
+  // stable map props: the Google renderer rebuilds its overlays and refits the view whenever these change
+  const selectById = useCallback((mid: string) => {
     const item = it?.days.flatMap((d) => d.items).find((i) => i.id === mid);
     if (item) setSelected(item);
-  };
+  }, [it]);
+  const current = useMemo(() => (geo.position ? { position: geo.position, accuracy: geo.accuracy } : null),
+    [geo.position, geo.accuracy]);
 
   const regenerate = useCallback(async () => {
     if (!key) return;
@@ -121,7 +126,7 @@ export default function TripPage() {
   const showDay = useCallback((n: number | "all") => {
     const apply = () => setDayFilter(n);
     const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-    if (doc.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) doc.startViewTransition(apply);
+    if (doc.startViewTransition && !prefersReducedMotion()) doc.startViewTransition(apply);
     else apply();
   }, []);
 
@@ -139,10 +144,7 @@ export default function TripPage() {
   if (trip.error && !it) {
     return (
       <div className="narrow">
-        <div className="notice notice-error" role="alert">
-          Couldn't load this trip: {trip.error.message}{" "}
-          <button className="link" onClick={() => void trip.refresh()}>Try again</button>
-        </div>
+        <RetryNotice message={`Couldn't load this trip: ${trip.error.message}`} onRetry={() => void trip.refresh()} />
       </div>
     );
   }
@@ -166,10 +168,10 @@ export default function TripPage() {
       <header className="tile trip-summary">
         <div>
           <p className="eyebrow">Itinerary</p>
-          <h1 className="h1 balance">{r.num_days} days in {r.destination_city}</h1>
+          <h1 className="h1">{r.num_days} days in {r.destination_city}</h1>
           <p className="muted small">
             From {it.accommodation.name} · <span className="num">{r.travelers}</span> traveller{r.travelers > 1 ? "s" : ""} · {r.pace} pace
-            {" · "}<span className="badge">{it.data_source === "mock" ? "Demo data" : "Open data"}</span>
+            {" · "}<span className="badge">{dataSourceLabel(it.data_source)}</span>
           </p>
         </div>
         <div className="row gap-s wrap">
@@ -206,7 +208,7 @@ export default function TripPage() {
         {it.days.map((d) => (
           <button key={d.day_number} role="tab" aria-selected={dayFilter === d.day_number}
                   className={`seg ${dayFilter === d.day_number ? "is-on" : ""}`}
-                  style={{ "--day": DAY_COLORS[(d.day_number - 1) % DAY_COLORS.length] } as React.CSSProperties}
+                  style={{ "--day": dayColor(d.day_number) } as React.CSSProperties}
                   onClick={() => showDay(d.day_number)}>
             <span className="day-dot" aria-hidden />Day {d.day_number}
           </button>
@@ -217,7 +219,7 @@ export default function TripPage() {
         <div className="stack-m days-col">
           {days.map((d) => (
             <div key={d.day_number} data-reveal>
-              <DayCard day={d} color={DAY_COLORS[(d.day_number - 1) % DAY_COLORS.length]}
+              <DayCard day={d} color={dayColor(d.day_number)}
                        currency={it.budget.currency} selectedId={selected?.id ?? null} onSelect={setSelected} />
             </div>
           ))}
@@ -236,7 +238,7 @@ export default function TripPage() {
           <div className="sticky stack-m">
             <div className="tile tile-map">
               <MapView markers={markers} polylines={polylines} selectedId={selected?.id ?? null} onSelect={selectById}
-                       current={geo.position ? { position: geo.position, accuracy: geo.accuracy } : null} />
+                       current={current} />
             </div>
             {!narrow && details}
             <LiveLocationPanel enabled={liveOn} onToggle={setLiveOn} geo={geo} progress={live.progress}

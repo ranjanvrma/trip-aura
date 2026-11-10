@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../services/api";
 import type {
-  AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, Pace, ParsedTrip, TransportMode, TripRequest,
+  AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, ParsedTrip, TransportMode, TripRequest,
 } from "../types";
 import { MODE_LABEL, pretty } from "../utils";
 import Autocomplete from "./Autocomplete";
@@ -186,7 +186,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
       <fieldset className="field">
         <legend>Pace</legend>
         <div className="chips">
-          {options.paces.map((p: Pace) => (
+          {options.paces.map((p) => (
             <button type="button" key={p} className={`chip ${req.pace === p ? "chip-on" : ""}`}
                     aria-pressed={req.pace === p} onClick={() => set("pace", p)}>{pretty(p)}</button>
           ))}

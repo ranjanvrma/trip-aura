@@ -1,23 +1,15 @@
 """Geocoding service: resolves the destination city and the user's accommodation."""
 from __future__ import annotations
 
-import logging
-
 from app.core.geo import haversine_km
 from app.providers.base import CityContext, GeocodeResult, GeocodingProvider
 from app.schemas.common import DataSource
 from app.schemas.trip import AccommodationInput
 
-log = logging.getLogger(__name__)
-
 
 class GeocodingService:
     def __init__(self, provider: GeocodingProvider):
         self._p = provider
-
-    @property
-    def source(self):
-        return self._p.source
 
     def resolve_city(self, name: str) -> CityContext:
         return self._p.resolve_city(name)

@@ -8,8 +8,8 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import CsrfError, NotAuthenticatedError, RateLimitedError
-from app.core.ratelimit import limiter
+from app.core.errors import CsrfError, NotAuthenticatedError
+from app.core.ratelimit import enforce
 from app.core.security import UNSAFE_METHODS
 from app.db.database import get_db
 from app.db.models import AuthSession, User
@@ -40,26 +40,20 @@ class Auth:
         return self.user.role == "admin"
 
 
-def optional_auth(request: Request, db: Session = Depends(get_db)) -> Auth | None:
-    found = load_session(db, request.cookies.get(SESSION_COOKIE))
-    return Auth(user=found[1], session=found[0]) if found else None
-
-
-def require_auth(request: Request, auth: Auth | None = Depends(optional_auth)) -> Auth:
+def require_auth(request: Request, db: Session = Depends(get_db)) -> Auth:
     """A valid session; unsafe methods must also echo its CSRF token in X-CSRF-Token."""
-    if auth is None:
+    found = load_session(db, request.cookies.get(SESSION_COOKIE))
+    if found is None:
         raise NotAuthenticatedError("Sign in to continue")
+    session, user = found
     if request.method.upper() in UNSAFE_METHODS:
         sent = request.headers.get("x-csrf-token", "")
-        if not sent or not hmac.compare_digest(sent.encode(), auth.session.csrf_token.encode()):
+        if not sent or not hmac.compare_digest(sent.encode(), session.csrf_token.encode()):
             raise CsrfError("Missing or invalid CSRF token")
-    return auth
+    return Auth(user=user, session=session)
 
 
-def generation_limit(auth: Auth = Depends(require_auth)) -> Auth:
-    """Trip generation (create / preview / regenerate): 6 per minute per user."""
-    if get_settings().rate_limit_enabled:
-        wait = limiter.hit("generate", f"user:{auth.user.id}")
-        if wait:
-            raise RateLimitedError(wait, "Too many trips generated in a short time, please wait a moment")
-    return auth
+def generation_limit(auth: Auth) -> None:
+    """Trip generation (create / preview / regenerate): 6 per minute per user. Called inside the
+    handlers, after request validation, so invalid requests don't use up the allowance."""
+    enforce("generate", f"user:{auth.user.id}", "Too many trips generated in a short time, please wait a moment")

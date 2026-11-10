@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from fastapi import Request
 
 from app.core.config import Settings, get_settings
+from app.core.errors import RateLimitedError
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,14 @@ class RateLimiter:
 
 
 limiter = RateLimiter()
+
+
+def enforce(route_class: str, key: str, message: str) -> None:
+    """Take a token for `key` or raise RateLimitedError (no-op when RATE_LIMIT_ENABLED=false)."""
+    if get_settings().rate_limit_enabled:
+        wait = limiter.hit(route_class, key)
+        if wait:
+            raise RateLimitedError(wait, message)
 
 
 def client_ip(request: Request, settings: Settings | None = None) -> str:

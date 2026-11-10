@@ -4,7 +4,6 @@ import type { LatLng } from "../types";
 export interface GeoState {
   position: LatLng | null;
   accuracy: number | null;
-  timestamp: number | null;
   error: string | null;
   permission: PermissionState | "unsupported" | "unknown";
 }
@@ -15,7 +14,7 @@ export interface GeoState {
  */
 export function useGeolocation(enabled: boolean): GeoState {
   const [state, setState] = useState<GeoState>({
-    position: null, accuracy: null, timestamp: null, error: null, permission: "unknown",
+    position: null, accuracy: null, error: null, permission: "unknown",
   });
   const watchId = useRef<number | null>(null);
 
@@ -38,14 +37,14 @@ export function useGeolocation(enabled: boolean): GeoState {
         navigator.geolocation.clearWatch(watchId.current);
         watchId.current = null;
       }
-      setState((s) => ({ ...s, position: null, accuracy: null, timestamp: null, error: null }));
+      setState((s) => ({ ...s, position: null, accuracy: null, error: null }));
       return;
     }
     watchId.current = navigator.geolocation.watchPosition(
       (pos) => setState((s) => ({
         ...s, error: null, permission: "granted",
         position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-        accuracy: pos.coords.accuracy, timestamp: pos.timestamp,
+        accuracy: pos.coords.accuracy,
       })),
       (err) => setState((s) => ({
         ...s,

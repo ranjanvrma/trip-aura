@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Circle, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import type { LatLng } from "../../types";
 import type { MapViewProps } from "./types";
 
 function pin(label: string, color: string, big: boolean) {
@@ -14,16 +15,19 @@ function pin(label: string, color: string, big: boolean) {
   });
 }
 
-function FitBounds({ points, selected }: { points: [number, number][]; selected: [number, number] | null }) {
+function FitBounds({ points, selected }: { points: [number, number][]; selected: LatLng | null }) {
   const map = useMap();
   const key = points.map((p) => p.join(",")).join("|");
   useEffect(() => {
     if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 15 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  // keyed on the coordinates, not the object, so unrelated re-renders don't pull the view back
+  const lat = selected?.lat;
+  const lng = selected?.lng;
   useEffect(() => {
-    if (selected) map.setView(selected, Math.max(map.getZoom(), 15));
-  }, [selected, map]);
+    if (lat !== undefined && lng !== undefined) map.setView([lat, lng], Math.max(map.getZoom(), 15));
+  }, [lat, lng, map]);
   return null;
 }
 
@@ -36,7 +40,7 @@ export default function LeafletMap({ markers, polylines, current, selectedId, on
     <MapContainer center={center} zoom={13} className="map" scrollWheelZoom>
       <TileLayer attribution='&copy; OpenStreetMap contributors'
                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <FitBounds points={points} selected={sel ? [sel.position.lat, sel.position.lng] : null} />
+      <FitBounds points={points} selected={sel?.position ?? null} />
       {polylines.map((p) => (
         <Polyline key={p.id} positions={p.path.map((x) => [x.lat, x.lng])}
                   pathOptions={{ color: p.color, weight: 4, opacity: 0.75, dashArray: p.dashed ? "6 8" : undefined }} />

@@ -4,14 +4,10 @@ always included so the itinerary can suggest places outside the user's interests
 """
 from __future__ import annotations
 
-import logging
-
 from app.core.geo import haversine_km
 from app.providers.base import CityContext, PlaceQuery, PlacesProvider
 from app.schemas.place import Place, PlaceKind
 from app.schemas.trip import TripRequest
-
-log = logging.getLogger(__name__)
 
 INTEREST_QUERIES = {
     "museums": "museums", "monuments": "historical monuments", "cultural_centres": "cultural centres",
@@ -34,10 +30,6 @@ FOOD_CATEGORY_QUERIES = {
 class PlacesService:
     def __init__(self, provider: PlacesProvider):
         self._p = provider
-
-    @property
-    def source(self):
-        return self._p.source
 
     def _run(self, city: CityContext, queries: list[PlaceQuery]) -> list[Place]:
         seen: dict[str, Place] = {}
@@ -93,6 +85,3 @@ class PlacesService:
                 queries.append(PlaceQuery(text=f"{phrase} in {cname}", tag=c, kind="food"))
         places = self._run(city, queries)
         return [p for p in places if p.kind in (PlaceKind.RESTAURANT, PlaceKind.CAFE)]
-
-    def get_place(self, place_id: str) -> Place:
-        return self._p.get_place(place_id)

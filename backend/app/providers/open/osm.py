@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import re
 
+from app.core.geo import degree_span
 from app.core.urls import safe_http_url, wikidata_qid
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, OpeningHours, Place, PlaceKind, TimeRange
@@ -24,8 +25,10 @@ ATTRACTION_FILTERS = [
     'nwr["shop"="mall"]["name"]',
     'nwr["natural"="beach"]["name"]',
 ]
-FOOD_FILTER = 'nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"]'
-STATION_FILTERS = ['node["railway"="station"]', 'node["station"~"^(subway|light_rail|monorail)$"]']
+FOOD_AMENITIES = ("restaurant", "cafe", "fast_food", "food_court", "ice_cream")
+FOOD_FILTER = f'nwr["amenity"~"^({"|".join(FOOD_AMENITIES)})$"]["name"]'
+METRO_STATIONS = ("subway", "light_rail", "monorail")
+STATION_FILTERS = ['node["railway"="station"]', f'node["station"~"^({"|".join(METRO_STATIONS)})$"]']
 
 
 def _finite(*values: float) -> tuple[float, ...]:
@@ -38,8 +41,7 @@ def _finite(*values: float) -> tuple[float, ...]:
 
 def _bbox(lat: float, lng: float, radius_km: float) -> str:
     lat, lng, radius_km = _finite(lat, lng, radius_km)
-    dlat = radius_km / 111.0
-    dlng = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+    dlat, dlng = degree_span(lat, radius_km)
     return f"{lat - dlat:.5f},{lng - dlng:.5f},{lat + dlat:.5f},{lng + dlng:.5f}"
 
 
@@ -58,6 +60,8 @@ def build_queries(lat: float, lng: float, radius_km: float, food_radius_km: floa
 _DAYS = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
 _DAY_TOKEN = re.compile(r"^(mo|tu|we|th|fr|sa|su)(-(mo|tu|we|th|fr|sa|su))?$")
 _TIME_RANGE = re.compile(r"^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\+?$")
+# rules are split on ';' or '||', and on ', ' between a time and a new weekday ("... 18:00, Sa 10:00-14:00")
+_RULE_SPLIT = re.compile(r"\s*(?:;|\|\|)\s*|(?<=\d),\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su)\b)")
 
 
 def _day_set(spec: str) -> set[int] | None:
@@ -111,20 +115,16 @@ def parse_opening_hours(value: str | None) -> OpeningHours:
     v = value.strip()
     if v == "24/7":
         return OpeningHours(known=True, weekly={d: [TimeRange(open="00:00", close="24:00")] for d in range(7)}, source=SRC)
-    # split rules on ';' or '||', and on ', ' between a time and a new weekday ("... 18:00, Sa 10:00-14:00")
-    rules = re.split(r"\s*(?:;|\|\|)\s*|(?<=\d),\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su)\b)", v)
+    rules = _RULE_SPLIT.split(v)
     weekly: dict[int, list[TimeRange]] = {}
     overflow: dict[int, list[TimeRange]] = {}
     for rule in filter(None, (r.strip() for r in rules)):
         parts = rule.split(None, 1)
-        days: set[int] | None
-        if _day_set(parts[0]) is not None and re.match(r"^[A-Za-z]", parts[0]):
-            days = _day_set(parts[0])
+        days = _day_set(parts[0]) if re.match(r"[A-Za-z]", parts[0]) else None
+        if days is not None:
             rest = parts[1].strip() if len(parts) > 1 else ""
-        else:
+        else:   # no weekday prefix: the rule applies to every day
             days, rest = set(range(7)), rule
-        if days is None:
-            return OpeningHours(known=False, weekly={}, source=SRC)
         if rest.lower() in ("off", "closed"):
             for d in days:
                 weekly[d] = []
@@ -141,8 +141,7 @@ def parse_opening_hours(value: str | None) -> OpeningHours:
             for o, c in spill:
                 overflow.setdefault((d + 1) % 7, []).append(TimeRange(open=o, close=c))
     for d, extra in overflow.items():
-        weekly.setdefault(d, [])
-        weekly[d] = sorted(weekly[d] + extra, key=lambda r: r.open)
+        weekly[d] = sorted(weekly.get(d, []) + extra, key=lambda r: r.open)
     return OpeningHours(known=True, weekly=weekly, source=SRC)
 
 
@@ -173,8 +172,7 @@ def parse_fee(tags: dict[str, str]) -> Money | None:
 
 
 # ------------------------------------------------------------------------ categories
-def interest_tags(tags: dict[str, str]) -> list[str]:
-    t = tags
+def interest_tags(t: dict[str, str]) -> list[str]:
     out: list[str] = []
 
     def add(*xs: str) -> None:
@@ -185,8 +183,7 @@ def interest_tags(tags: dict[str, str]) -> list[str]:
     tourism, historic, leisure, amenity = t.get("tourism"), t.get("historic"), t.get("leisure"), t.get("amenity")
     if tourism == "museum":
         add("museums", "history")
-        kind = t.get("museum", "")
-        if kind in ("art",):
+        if t.get("museum") == "art":
             add("art")
     if tourism == "gallery":
         add("art", "museums")
@@ -293,7 +290,7 @@ def element_to_place(el: dict, local_cuisines: set[str]) -> Place | None:
     hours = parse_opening_hours(tags.get("opening_hours"))
     website = safe_http_url(tags.get("website") or tags.get("contact:website"))   # http(s) only
 
-    if amenity in ("restaurant", "cafe", "fast_food", "food_court", "ice_cream"):
+    if amenity in FOOD_AMENITIES:
         cuisines = _cuisines(tags)
         cats: list[str] = []
         if amenity in ("cafe", "ice_cream"):
@@ -302,16 +299,14 @@ def element_to_place(el: dict, local_cuisines: set[str]) -> Place | None:
             cats += ["street_food", "budget_restaurants"]
         if amenity == "restaurant" and (set(cuisines) & local_cuisines or "regional" in cuisines or "local" in cuisines):
             cats.append("local_cuisine")
-        level = {"cafe": 1, "ice_cream": 1, "fast_food": 1, "food_court": 1}.get(amenity, 2)
+        level = 2 if amenity == "restaurant" else 1
         meals = ["breakfast", "lunch"] if amenity == "cafe" else ["lunch", "dinner"]
-        if amenity == "fast_food":
-            meals = ["lunch", "dinner"]
         if hours.known and any(r.open <= "08:30" for rs in hours.weekly.values() for r in rs) and amenity != "cafe":
             meals = ["breakfast"] + meals
         return Place(
             id=f"osm:{osm_id}", name=name, kind=PlaceKind.CAFE if amenity in ("cafe", "ice_cream") else PlaceKind.RESTAURANT,
             categories=["food"] + cats, location=LatLng(lat=lat, lng=lon), address=_address(tags),
-            description=(website or None), price_level=level, price_level_estimated=True,
+            description=website, price_level=level, price_level_estimated=True,
             typical_visit_minutes=60, opening_hours=hours, best_time=meals,
             diet=diet_from_tags(tags, cuisines), food_categories=cats, cuisines=cuisines,
             external_ids=ext, source=SRC,
@@ -331,7 +326,7 @@ def element_to_place(el: dict, local_cuisines: set[str]) -> Place | None:
         ["morning", "afternoon"] if kind == PlaceKind.PARK else [])
     return Place(
         id=f"osm:{osm_id}", name=name, kind=kind, categories=cats, location=LatLng(lat=lat, lng=lon),
-        address=_address(tags), description=tags.get("description") or (website or None),
+        address=_address(tags), description=tags.get("description") or website,
         entry_fee=parse_fee(tags), typical_visit_minutes=visit, opening_hours=hours, best_time=best,
         external_ids=ext, source=SRC,
     )
@@ -342,11 +337,12 @@ def parse_elements(elements: list[dict], local_cuisines: set[str]) -> tuple[list
     stations: list[dict] = []
     for el in elements:
         tags = el.get("tags") or {}
-        if tags.get("railway") == "station" or tags.get("station") in ("subway", "light_rail", "monorail"):
+        is_metro = tags.get("station") in METRO_STATIONS
+        if tags.get("railway") == "station" or is_metro:
             if el.get("lat") is None:
                 continue
-            kind = "metro" if (tags.get("station") in ("subway", "light_rail", "monorail") or tags.get("subway") == "yes"
-                               or tags.get("light_rail") == "yes") else "train"
+            metro = is_metro or tags.get("subway") == "yes" or tags.get("light_rail") == "yes"
+            kind = "metro" if metro else "train"
             stations.append({"name": tags.get("name", "station"), "lat": el["lat"], "lng": el["lon"], "kind": kind})
             continue
         p = element_to_place(el, local_cuisines)

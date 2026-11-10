@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import logging
+from collections.abc import Iterator
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
-
 
 log = logging.getLogger(__name__)
 

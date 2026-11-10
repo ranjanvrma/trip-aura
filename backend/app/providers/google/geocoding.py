@@ -5,8 +5,10 @@ Docs: https://developers.google.com/maps/documentation/geocoding/requests-geocod
 from __future__ import annotations
 
 import logging
+import time
 
 from app.core.errors import LocationNotFoundError, ProviderRequestError
+from app.core.geo import haversine_km
 from app.providers.base import CityContext, GeocodeResult
 from app.providers.google.client import GoogleClient
 from app.schemas.common import DataSource, LatLng
@@ -38,7 +40,6 @@ class GoogleGeocodingProvider:
         viewport = r["geometry"].get("viewport")
         radius = 20.0
         if viewport:
-            from app.core.geo import haversine_km
             ne, sw = viewport["northeast"], viewport["southwest"]
             radius = max(5.0, min(40.0, haversine_km(ne["lat"], ne["lng"], sw["lat"], sw["lng"]) / 2))
         return CityContext(name=r.get("formatted_address", city_name), center=LatLng(lat=loc["lat"], lng=loc["lng"]),
@@ -47,8 +48,6 @@ class GoogleGeocodingProvider:
 
     def _utc_offset(self, lat: float, lng: float) -> int | None:
         """Time Zone API lookup so planned departure times are sent to Routes in the right zone."""
-        import time
-
         try:
             data = self._c.get(TIMEZONE_URL, {"location": f"{lat},{lng}", "timestamp": int(time.time()), "key": self._c.key})
         except ProviderRequestError as exc:

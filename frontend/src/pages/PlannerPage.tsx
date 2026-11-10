@@ -4,10 +4,11 @@ import { ArrowRight, Trash } from "lucide-react";
 import DescribeTrip from "../components/DescribeTrip";
 import Globe from "../components/globe/Globe";
 import TripForm from "../components/TripForm";
+import RetryNotice from "../components/ui/RetryNotice";
 import { Kbd, SkeletonLines } from "../components/ui/Skeleton";
 import { useAuth } from "../lib/auth";
 import { usePageMeta } from "../lib/meta";
-import { modKey } from "../lib/safeUrl";
+import { modKey } from "../lib/platform";
 import { invalidate, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useDeleteTrip } from "../lib/trips";
@@ -146,10 +147,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
                     prefill={prefill} initial={initial} onDraftChange={onDraftChange} onCityLocation={setCityLoc}
                     signedIn={!!user} />
         ) : options.error ? (
-          <div className="notice notice-error" role="alert">
-            Couldn't load the form options: {options.error.message}{" "}
-            <button className="link" onClick={() => void options.refresh()}>Try again</button>
-          </div>
+          <RetryNotice message={`Couldn't load the form options: ${options.error.message}`} onRetry={() => void options.refresh()} />
         ) : (
           <div className="stack-m"><SkeletonLines lines={2} /><SkeletonLines lines={3} /><SkeletonLines lines={3} /></div>
         )}

@@ -1,15 +1,12 @@
-"""Routes service: wraps the routes provider with caching and logging."""
+"""Routes service: wraps the routes provider with a short-lived cache."""
 from __future__ import annotations
 
 import datetime as dt
-import logging
 import time
 
 from app.providers.base import CityContext, RouteResult, RoutesProvider
 from app.schemas.common import LatLng
 from app.schemas.trip import TransportMode
-
-log = logging.getLogger(__name__)
 
 
 class RoutesService:
@@ -17,11 +14,6 @@ class RoutesService:
         self._p = provider
         self._ttl = ttl_seconds
         self._cache: dict[tuple, tuple[float, RouteResult]] = {}
-        self.calls = 0
-
-    @property
-    def source(self):
-        return self._p.source
 
     def route(self, origin: LatLng, destination: LatLng, mode: TransportMode,
               departure: dt.datetime | None, city: CityContext, *, fresh: bool = False) -> RouteResult:
@@ -31,7 +23,6 @@ class RoutesService:
         hit = self._cache.get(key)
         if hit and not fresh and time.monotonic() - hit[0] < self._ttl:
             return hit[1]
-        self.calls += 1
         result = self._p.compute_route(origin, destination, mode, departure, city)
         self._cache[key] = (time.monotonic(), result)
         return result

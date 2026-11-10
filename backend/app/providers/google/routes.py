@@ -7,15 +7,13 @@ Google returns them (verified=True).
 from __future__ import annotations
 
 import datetime as dt
-import logging
 
 from app.core.errors import ProviderRequestError
 from app.providers.base import CityContext, RouteResult
-from app.providers.google.client import GoogleClient
+from app.providers.google.client import GoogleClient, money_amount
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.trip import TransportMode
 
-log = logging.getLogger(__name__)
 ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 FIELD_MASK = ("routes.distanceMeters,routes.duration,routes.staticDuration,"
               "routes.polyline.encodedPolyline,routes.travelAdvisory.transitFare")
@@ -99,8 +97,7 @@ class GoogleRoutesProvider:
         data = self._c.post(ROUTES_URL, body, FIELD_MASK)
         routes = data.get("routes") or []
         if not routes:
-            return RouteResult(mode, 0, 0, None, False, [], self.source, available=False,
-                               note=f"Google found no {mode.value} route")
+            return RouteResult.unavailable(mode, self.source, f"Google found no {mode.value} route")
         r = routes[0]
         try:
             dist_km = r.get("distanceMeters", 0) / 1000
@@ -114,7 +111,7 @@ class GoogleRoutesProvider:
         fare = None
         tf = (r.get("travelAdvisory") or {}).get("transitFare")
         if tf:
-            fare = Money(amount=float(tf.get("units", 0)) + tf.get("nanos", 0) / 1e9, currency=tf.get("currencyCode", ""),
+            fare = Money(amount=money_amount(tf), currency=tf.get("currencyCode", ""),
                          verified=True, source=self.source, note="Transit fare returned by Google Routes API")
         poly = (r.get("polyline") or {}).get("encodedPolyline")
         return RouteResult(

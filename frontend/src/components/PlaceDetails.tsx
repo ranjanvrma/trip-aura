@@ -18,11 +18,12 @@ export default function PlaceDetails({ item, onClose, embedded = false }: { item
   const maps = safeExternalUrl(p.google_maps_uri);
   const wikidata = p.external_ids?.wikidata && /^Q\d+$/.test(p.external_ids.wikidata) ? p.external_ids.wikidata : null;
   const osm = p.external_ids?.osm && /^[nwr]\d+$/.test(p.external_ids.osm) ? p.external_ids.osm : null;
+  const tags = p.categories.filter((c) => !c.startsWith("search:") && c !== "food");
   return (
     <aside className={embedded ? "details" : "tile details"} aria-label={`Details for ${p.name}`}>
       {!embedded && (
         <div className="tile-head">
-          <h2 className="h3 balance">{p.name}</h2>
+          <h2 className="h3">{p.name}</h2>
           <button className="icon-btn hit" onClick={onClose} aria-label="Close details"><X size={18} aria-hidden /></button>
         </div>
       )}
@@ -56,8 +57,7 @@ export default function PlaceDetails({ item, onClose, embedded = false }: { item
         {fee && <li>{item.type === "meal" ? "Avg. cost per person" : "Entry fee per person"}: {moneyLabel(fee)}
           {" "}<span className="muted">({fee.verified ? "verified" : fee.note ?? "estimate"})</span></li>}
         {!fee && item.type === "activity" && <li>Entry fee: not published - {moneyLabel(item.cost)} assumed</li>}
-        {p.categories.filter((c) => !c.startsWith("search:")).length > 0 &&
-          <li>Tags: {p.categories.filter((c) => !c.startsWith("search:") && c !== "food").map(pretty).join(", ")}</li>}
+        {tags.length > 0 && <li>Tags: {tags.map(pretty).join(", ")}</li>}
         {p.cuisines.length > 0 && <li>Cuisine: {p.cuisines.map(pretty).join(", ")}</li>}
       </ul>
 

@@ -10,7 +10,7 @@ export default function NotFoundPage({ what = "page" }: { what?: "page" | "trip"
       <section className="tile empty">
         <span className="empty-icon" aria-hidden><Compass size={26} /></span>
         <p className="eyebrow">404</p>
-        <h1 className="h2 balance">{what === "trip" ? "We couldn't find that trip" : "This page doesn't exist"}</h1>
+        <h1 className="h2">{what === "trip" ? "We couldn't find that trip" : "This page doesn't exist"}</h1>
         <p className="muted">
           {what === "trip"
             ? "It may have been deleted, or it belongs to another account."

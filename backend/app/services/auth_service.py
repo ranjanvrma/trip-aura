@@ -10,7 +10,6 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
-import logging
 import re
 import secrets
 from dataclasses import dataclass
@@ -20,9 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import InvalidCodeError
+from app.core.timeutil import as_utc, utc_now
 from app.db.models import AuthSession, IdempotencyRecord, LoginCode, Trip, User
-
-log = logging.getLogger(__name__)
 
 CODE_TTL_SECONDS = 600
 CODE_MAX_ATTEMPTS = 5
@@ -42,15 +40,6 @@ def normalise_email(value: str) -> str:
     return v
 
 
-def now() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
-
-
-def aware(t: dt.datetime) -> dt.datetime:
-    """SQLite returns naive datetimes; everything is stored in UTC."""
-    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
-
-
 def code_hash(settings: Settings, email: str, code: str) -> str:
     return hmac.new(settings.signing_key, f"{email}:{code}".encode(), hashlib.sha256).hexdigest()
 
@@ -59,16 +48,12 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def new_code() -> str:
-    return f"{secrets.randbelow(1_000_000):06d}"
-
-
 def issue_code(db: Session, settings: Settings, email: str) -> str:
     """Create a fresh code for `email` (replacing earlier unused ones) and return it in clear text."""
-    t = now()
+    t = utc_now()
     db.execute(delete(LoginCode).where(LoginCode.email == email))
     db.execute(delete(LoginCode).where(LoginCode.expires_at < t - dt.timedelta(days=1)))
-    code = new_code()
+    code = f"{secrets.randbelow(1_000_000):06d}"
     db.add(LoginCode(email=email, code_hash=code_hash(settings, email, code), created_at=t,
                      expires_at=t + dt.timedelta(seconds=CODE_TTL_SECONDS)))
     db.commit()
@@ -79,7 +64,7 @@ def check_code(db: Session, settings: Settings, email: str, code: str) -> None:
     """Consume the code or raise InvalidCodeError (same message for wrong, expired, used, exhausted)."""
     row = db.scalars(select(LoginCode).where(LoginCode.email == email, LoginCode.used_at.is_(None))
                      .order_by(LoginCode.id.desc()).limit(1)).first()
-    if row is None or aware(row.expires_at) <= now() or row.attempts >= CODE_MAX_ATTEMPTS:
+    if row is None or as_utc(row.expires_at) <= utc_now() or row.attempts >= CODE_MAX_ATTEMPTS:
         raise InvalidCodeError(INVALID_CODE_MESSAGE)
     # Conditional updates keep the attempt limit and single use exact under concurrent requests.
     counted = db.execute(update(LoginCode).where(LoginCode.id == row.id, LoginCode.used_at.is_(None),
@@ -89,7 +74,7 @@ def check_code(db: Session, settings: Settings, email: str, code: str) -> None:
     if not counted or not hmac.compare_digest(row.code_hash, code_hash(settings, email, code)):
         raise InvalidCodeError(INVALID_CODE_MESSAGE)
     used = db.execute(update(LoginCode).where(LoginCode.id == row.id, LoginCode.used_at.is_(None))
-                      .values(used_at=now())).rowcount
+                      .values(used_at=utc_now())).rowcount
     db.commit()
     if not used:
         raise InvalidCodeError(INVALID_CODE_MESSAGE)
@@ -101,7 +86,7 @@ def upsert_user(db: Session, settings: Settings, email: str) -> User:
         user = User(email=email)
         db.add(user)
     user.role = "admin" if email in settings.admin_email_set else "user"
-    user.last_login_at = now()
+    user.last_login_at = utc_now()
     db.commit()
     return user
 
@@ -113,7 +98,7 @@ class NewSession:
 
 
 def create_session(db: Session, settings: Settings, user: User) -> NewSession:
-    t = now()
+    t = utc_now()
     db.execute(delete(AuthSession).where(AuthSession.expires_at < t))   # housekeeping
     token = secrets.token_urlsafe(32)
     rec = AuthSession(token_hash=token_hash(token), csrf_token=secrets.token_urlsafe(32), user_id=user.id,
@@ -130,14 +115,12 @@ def load_session(db: Session, token: str | None) -> tuple[AuthSession, User] | N
     rec = db.scalars(select(AuthSession).where(AuthSession.token_hash == token_hash(token))).first()
     if rec is None:
         return None
-    if aware(rec.expires_at) <= now():
+    if as_utc(rec.expires_at) <= utc_now():
         db.delete(rec)
         db.commit()
         return None
     user = db.get(User, rec.user_id)
-    if user is None:
-        return None
-    return rec, user
+    return (rec, user) if user is not None else None
 
 
 def delete_session(db: Session, rec: AuthSession) -> None:
@@ -166,6 +149,3 @@ def clear_session_cookie(response, settings: Settings) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, secure=settings.cookie_secure_effective,
                            samesite=settings.cookie_samesite)
 
-
-def user_dict(user: User) -> dict:
-    return {"id": user.id, "email": user.email, "role": user.role}

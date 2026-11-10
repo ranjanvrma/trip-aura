@@ -8,12 +8,12 @@ hours or fees; those stay unknown unless OSM or Google supply them.
 from __future__ import annotations
 
 import logging
-import math
 import re
 import threading
 
 import httpx
 
+from app.core.geo import degree_span
 from app.core.urls import safe_http_url
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, OpeningHours, Place, PlaceKind
@@ -89,8 +89,7 @@ def latest_release(user_agent: str) -> str:
 
 
 def bbox(lat: float, lng: float, radius_km: float) -> tuple[float, float, float, float]:
-    dlat = radius_km / 111.0
-    dlng = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+    dlat, dlng = degree_span(lat, radius_km)
     return lng - dlng, lng + dlng, lat - dlat, lat + dlat
 
 
@@ -169,11 +168,11 @@ def fetch(lat: float, lng: float, radius_km: float, food_radius_km: float, relea
     xmin, xmax, ymin, ymax = bbox(lat, lng, radius_km)
     fx0, fx1, fy0, fy1 = bbox(lat, lng, food_radius_km)
     release = safe_release(release)
-    categories = sorted(FOOD) + sorted(set(ATTRACTIONS) | STATIONS)
-    if not all(_CATEGORY.match(c) for c in categories):   # constants, but they become SQL literals
+    food_categories, other_categories = sorted(FOOD), sorted(set(ATTRACTIONS) | STATIONS)
+    if not all(_CATEGORY.match(c) for c in food_categories + other_categories):   # constants, but they become SQL literals
         raise ValueError("invalid Overture category constant")
-    food = ",".join(f"'{c}'" for c in sorted(FOOD))
-    other = ",".join(f"'{c}'" for c in sorted(set(ATTRACTIONS) | STATIONS))
+    food = ",".join(f"'{c}'" for c in food_categories)
+    other = ",".join(f"'{c}'" for c in other_categories)
     xmin, xmax, ymin, ymax, fx0, fx1, fy0, fy1 = (float(v) for v in (xmin, xmax, ymin, ymax, fx0, fx1, fy0, fy1))
     con = _database(memory_limit, threads).cursor()   # cursor = own connection, shared caches
     try:

@@ -6,12 +6,11 @@ interface Props {
   options: string[];
   value: string[];
   onChange: (v: string[]) => void;
-  allowCustom?: boolean;
   placeholder?: string;
 }
 
-/** Multi-select chips with optional free-text custom entries. */
-export default function ChipSelect({ label, options, value, onChange, allowCustom = true, placeholder }: Props) {
+/** Multi-select chips plus free-text custom entries. */
+export default function ChipSelect({ label, options, value, onChange, placeholder }: Props) {
   const [custom, setCustom] = useState("");
   const all = [...options, ...value.filter((v) => !options.includes(v))];
   const toggle = (o: string) => onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o]);
@@ -31,13 +30,11 @@ export default function ChipSelect({ label, options, value, onChange, allowCusto
           </button>
         ))}
       </div>
-      {allowCustom && (
-        <div className="row gap-s mt-s">
-          <input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder={placeholder ?? "Add your own"}
-                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} />
-          <button type="button" className="btn btn-light" onClick={addCustom} disabled={!custom.trim()}>Add</button>
-        </div>
-      )}
+      <div className="row gap-s mt-s">
+        <input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder={placeholder ?? "Add your own"}
+               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} />
+        <button type="button" className="btn" onClick={addCustom} disabled={!custom.trim()}>Add</button>
+      </div>
     </fieldset>
   );
 }

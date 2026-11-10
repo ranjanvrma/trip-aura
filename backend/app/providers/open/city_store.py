@@ -20,10 +20,12 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from app.core.config import Settings
 from app.core.errors import ProviderRequestError
 from app.core.geo import haversine_km
+from app.core.text import fold
 from app.providers.base import CityContext
 from app.providers.open import osm
 from app.providers.open.http import OpenHttp
@@ -69,19 +71,22 @@ def city_key(city: CityContext) -> str:
 
 
 # ------------------------------------------------------------------------- merging
+_NON_ALNUM = re.compile(r"[^a-z0-9]")
+_BILINGUAL = re.compile(r"^(.*?)\s*\((.*)\)$")
+
+
 def _norm(name: str) -> str:
-    from app.providers.open.wikimedia import fold
-
-    return re.sub(r"[^a-z0-9]", "", fold(name))
+    return _NON_ALNUM.sub("", fold(name))
 
 
-def _keys(name: str) -> set[str]:
+@lru_cache(maxsize=16384)   # merging compares each place with its neighbours, so names repeat a lot
+def _keys(name: str) -> frozenset[str]:
     """Normalised name variants; 'English (Local)' yields both."""
     out = {_norm(name)}
-    m = re.match(r"^(.*?)\s*\((.*)\)$", name)
+    m = _BILINGUAL.match(name)
     if m:
         out |= {_norm(m.group(1)), _norm(m.group(2))}
-    return {k for k in out if len(k) >= 3}
+    return frozenset(k for k in out if len(k) >= 3)
 
 
 def _same(a: Place, b: Place, max_m: float) -> bool:
@@ -141,17 +146,8 @@ def merge_places(base: list[Place], extra: list[Place], max_m: float = 150) -> l
         grid.setdefault(cell(p), []).append(p)
     for e in extra:
         cx, cy = cell(e)
-        match = None
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                for b in grid.get((cx + dx, cy + dy), []):
-                    if _compatible(b.kind, e.kind) and _same(b, e, max_m):
-                        match = b
-                        break
-                if match:
-                    break
-            if match:
-                break
+        match = next((b for dx in (-1, 0, 1) for dy in (-1, 0, 1) for b in grid.get((cx + dx, cy + dy), [])
+                      if _compatible(b.kind, e.kind) and _same(b, e, max_m)), None)
         if match is not None:
             _absorb(match, e)
         else:

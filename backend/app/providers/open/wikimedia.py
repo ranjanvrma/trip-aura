@@ -5,41 +5,17 @@ short quoted snippet and an attribution link.
 """
 from __future__ import annotations
 
-import logging
 import math
 import re
 
+from app.core.text import fold
 from app.core.urls import wikidata_qid
 from app.providers.open.http import OpenHttp
-from app.schemas.common import DataSource
+from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.itinerary import DishSuggestion
+from app.schemas.place import OpeningHours, Place, PlaceKind
 
-log = logging.getLogger(__name__)
-WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 WIKIVOYAGE_API = "https://en.wikivoyage.org/w/api.php"
-
-
-def wikidata_details(http: OpenHttp, qids: list[str]) -> dict[str, dict]:
-    """{qid: {"sitelinks": int (Wikipedia editions), "description": str|None, "label": str|None}}"""
-    out: dict[str, dict] = {}
-    unique = list(dict.fromkeys(q for q in (wikidata_qid(x) for x in qids) if q))
-    for i in range(0, len(unique), 50):
-        batch = unique[i:i + 50]
-        data = http.get_json(WIKIDATA_API, {"action": "wbgetentities", "ids": "|".join(batch), "format": "json",
-                                            "props": "sitelinks|descriptions|labels", "languages": "en"},
-                             what="Wikidata")
-        for qid, ent in (data.get("entities") or {}).items():
-            links = ent.get("sitelinks") or {}
-            wikipedias = sum(1 for k in links if k.endswith("wiki") and k not in ("commonswiki", "specieswiki",
-                                                                                     "wikidatawiki", "metawiki"))
-            out[qid] = {
-                "sitelinks": wikipedias,
-                "description": ((ent.get("descriptions") or {}).get("en") or {}).get("value"),
-                "label": ((ent.get("labels") or {}).get("en") or {}).get("value"),
-            }
-    return out
-
-
 SPARQL_URL = "https://query.wikidata.org/sparql"
 # Wikidata "instance of" label keywords -> interest tags. Items whose types match none are skipped.
 TYPE_TAGS: list[tuple[tuple[str, ...], list[str], int]] = [
@@ -93,9 +69,6 @@ def _classify(type_labels: list[str]) -> tuple[list[str], int] | None:
 def wikidata_notable_places(http: OpenHttp, lat: float, lng: float, radius_km: float,
                             min_links: int = 5, limit: int = 400) -> list[Place]:
     """Notable visitable places near a point, ranked by Wikipedia coverage (prominence)."""
-    from app.schemas.common import LatLng, Money
-    from app.schemas.place import OpeningHours, Place, PlaceKind
-
     # Only validated numbers are interpolated into the SPARQL text; nothing user-typed reaches it.
     lat, lng, radius_km = float(lat), float(lng), float(radius_km)
     if not all(math.isfinite(v) for v in (lat, lng, radius_km)):
@@ -120,11 +93,12 @@ SELECT ?item ?itemLabel ?desc ?lat ?lon ?links (GROUP_CONCAT(DISTINCT ?typeLabel
         if not qid or qid in seen or not name or name == qid:
             continue
         seen.add(qid)
-        cls = _classify(b.get("types", {}).get("value", "").split("|"))
+        types = b.get("types", {}).get("value", "")
+        cls = _classify(types.split("|"))
         if cls is None:
             continue
         tags, minutes = cls
-        labels = b.get("types", {}).get("value", "").lower()
+        labels = types.lower()
         free = any(k in labels for k in FREE_KEYS) and not any(k in labels for k in CHARGED_KEYS)
         kind = PlaceKind.PARK if "parks" in tags and "museums" not in tags else PlaceKind.ATTRACTION
         out.append(Place(
@@ -175,13 +149,6 @@ _NOT_DISHES = {"couvert", "prato do dia", "pratos do dia", "menu", "menu do dia"
                "happy hour", "brunch", "buffet", "street food", "fast food", "set menu", "a la carte"}
 
 
-def fold(s: str) -> str:
-    """Lower-case, accent-stripped form for matching ('Pastéis' -> 'pasteis')."""
-    import unicodedata
-
-    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).lower()
-
-
 def extract_dishes(wikitext: str, lexicon: set[str]) -> list[tuple[str, str]]:
     """(dish name, evidence sentence) pairs from an Eat section.
 
@@ -199,16 +166,16 @@ def extract_dishes(wikitext: str, lexicon: set[str]) -> list[tuple[str, str]]:
     for m in re.finditer(r"(?<!')''([^'\n]{3,40}?)''(?!')|'''([^'\n]{3,40}?)'''", text):
         italic, bold = m.group(1), m.group(2)
         term = (italic or bold or "").strip(" ,.:;()")
-        words = term.split()
-        if not (1 <= len(words) <= 4) or any(ch.isdigit() for ch in term) or fold(term) in _STOP_WORDS \
-                or fold(term) in _NOT_DISHES:
+        key = fold(term)
+        if not (1 <= len(term.split()) <= 4) or any(ch.isdigit() for ch in term) or key in _STOP_WORDS \
+                or key in _NOT_DISHES:
             continue
         if bold and term[:1].isupper():
             continue  # bold Title Case = usually a venue or district
         sentence = _sentence(text, term)
         if not sentence or not _FOOD_WORDS.search(sentence):
             continue
-        found.setdefault(fold(term), sentence)
+        found.setdefault(key, sentence)
     # collapse plural/alias spellings onto one name ("pasteis de nata" -> "pastel de nata")
     out: dict[str, str] = {}
     for k, v in found.items():
@@ -218,7 +185,7 @@ def extract_dishes(wikitext: str, lexicon: set[str]) -> list[tuple[str, str]]:
 
 
 DISH_ALIASES = {"pasteis de nata": "pastel de nata", "pasteis de belem": "pastel de nata", "momos": "momo",
-                "tacos": "tacos", "dumpling": "dumplings", "crepes": "crepe", "churro": "churros"}
+                "dumpling": "dumplings", "crepes": "crepe", "churro": "churros"}
 
 
 def wikivoyage_dishes(http: OpenHttp, city_name: str, lexicon: set[str]) -> tuple[list[DishSuggestion], str | None]:

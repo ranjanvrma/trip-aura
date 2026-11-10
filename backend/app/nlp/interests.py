@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from rapidfuzz import fuzz, process
 
-from app.providers.open.wikimedia import fold
+from app.core.text import fold
 from app.schemas.trip import PRESET_INTERESTS
 
 # phrase -> preset interests it implies
@@ -29,21 +29,25 @@ THESAURUS: dict[str, list[str]] = {
 }
 
 
+# "religious sites" -> "religious_sites": presets as they appear in free text
+PRESETS_SPACED: dict[str, str] = {p.replace("_", " "): p for p in PRESET_INTERESTS}
+_VOCABULARY = list(PRESETS_SPACED) + list(THESAURUS)
+
+
 def normalise_interest(raw: str) -> tuple[list[str], str | None]:
     """-> (preset interests it maps to, corrected preset if it was a typo of one)."""
     t = fold(raw.replace("_", " ")).strip()
     if not t:
         return [], None
-    presets_spaced = {p.replace("_", " "): p for p in PRESET_INTERESTS}
-    if t in presets_spaced:
-        return [presets_spaced[t]], None
+    if t in PRESETS_SPACED:
+        return [PRESETS_SPACED[t]], None
     if t in THESAURUS:
         return list(THESAURUS[t]), None
-    best = process.extractOne(t, list(presets_spaced) + list(THESAURUS), scorer=fuzz.ratio, score_cutoff=82)
+    best = process.extractOne(t, _VOCABULARY, scorer=fuzz.ratio, score_cutoff=82)
     if best:
         key = best[0]
-        if key in presets_spaced:
-            return [presets_spaced[key]], presets_spaced[key]
+        if key in PRESETS_SPACED:
+            return [PRESETS_SPACED[key]], PRESETS_SPACED[key]
         return list(THESAURUS[key]), None
     return [], None
 

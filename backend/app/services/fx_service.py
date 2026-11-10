@@ -55,7 +55,3 @@ class FxService:
         if src.upper() == dst.upper():
             return amount
         return amount / self.usd_to(src) * self.usd_to(dst)
-
-    @property
-    def rate_date(self) -> str | None:
-        return self._date

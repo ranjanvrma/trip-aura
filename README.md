@@ -101,7 +101,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (159 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (161 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration

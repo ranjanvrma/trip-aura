@@ -5,11 +5,8 @@ import datetime as dt
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.timeutil import utc_now
 from app.db.database import Base
-
-
-def _now() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
 
 
 class CityDataset(Base):
@@ -19,7 +16,7 @@ class CityDataset(Base):
 
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
-    built_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    built_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     version: Mapped[int] = mapped_column(Integer, default=1)
     payload: Mapped[dict] = mapped_column(JSON)
 
@@ -30,8 +27,8 @@ class Trip(Base):
     __tablename__ = "trips"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     title: Mapped[str] = mapped_column(String(200))
     destination: Mapped[str] = mapped_column(String(120), index=True)
     num_days: Mapped[int] = mapped_column(Integer)
@@ -50,7 +47,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
     role: Mapped[str] = mapped_column(String(10), default="user")   # "user" | "admin"
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -62,7 +59,7 @@ class LoginCode(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(254), index=True)
     code_hash: Mapped[str] = mapped_column(String(64))
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -77,7 +74,7 @@ class AuthSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     csrf_token: Mapped[str] = mapped_column(String(64))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
@@ -96,4 +93,4 @@ class IdempotencyRecord(Base):
     body_hash: Mapped[str] = mapped_column(String(64))
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)

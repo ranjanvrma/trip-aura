@@ -28,8 +28,8 @@ def status() -> dict:
         "data_mode": mode.value,
         "google": {
             "configured": s.google_configured,
-            "active": (mode == DataMode.LIVE and s.google_configured)
-                      or (mode == DataMode.OPEN and s.google_configured and s.google_enrichment),
+            "active": s.google_configured and (mode == DataMode.LIVE
+                                               or (mode == DataMode.OPEN and s.google_enrichment)),
             "role": {"live": "all places, ratings and routes", "open": "ratings/reviews enrichment",
                      "mock": "not used"}[mode.value],
             "services": {"places": "Places API (New)", "routes": "Routes API", "geocoding": "Geocoding API",
@@ -52,11 +52,10 @@ def status() -> dict:
 
 
 def _nlp_status() -> dict:
-    from app.nlp.registry import get_city_index, get_semantic
+    from app.nlp.registry import get_city_index, get_semantic   # looked up per call (tests patch the registry)
 
-    sem = get_semantic()
     return {
-        "semantic_matching": sem.status,
+        "semantic_matching": get_semantic().status,
         "city_index": "ready" if get_city_index().ready else "loads on first search",
         "features": ["city autocomplete", "address suggestions", "trip description parser",
                      "typo-tolerant interests", "semantic interest matching", "review sentiment"],

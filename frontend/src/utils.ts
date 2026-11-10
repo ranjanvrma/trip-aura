@@ -30,4 +30,8 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 }
 
 // muted, distinguishable day colours (readable on the warm map tiles and as white-text pins)
-export const DAY_COLORS = ["#4f7a5c", "#b0693f", "#4d6f91", "#9a5a6e", "#7d7038", "#5e6294", "#3f7f7a"];
+const DAY_COLORS = ["#4f7a5c", "#b0693f", "#4d6f91", "#9a5a6e", "#7d7038", "#5e6294", "#3f7f7a"];
+export const dayColor = (dayNumber: number) => DAY_COLORS[(dayNumber - 1) % DAY_COLORS.length];
+
+/** Honesty label for where a trip's places came from. */
+export const dataSourceLabel = (source: string) => (source === "mock" ? "Demo data" : "Open data");

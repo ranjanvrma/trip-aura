@@ -11,7 +11,7 @@ from app.core.errors import NotFoundError
 from app.core.geo import haversine_km
 from app.core.timeutil import hm_to_min
 from app.engines.transport import LABEL, TransportEngine, choose
-from app.schemas.itinerary import Itinerary, ItemType, ItineraryItem
+from app.schemas.itinerary import Itinerary, ItemType, ItineraryItem, TransportOption
 from app.schemas.location import LiveProgressRequest, LiveProgressResponse, TransportAlert
 
 BETTER_RATIO = 0.75       # alternative must be at least 25% faster ...
@@ -44,28 +44,36 @@ def _planned_mode(items: list[ItineraryItem], target: ItineraryItem):
     return None
 
 
+def _response(it: Itinerary, checked_at: str, alerts: list[TransportAlert], target: ItineraryItem | None = None,
+              km: float | None = None, options: list[TransportOption] | None = None,
+              recommended: TransportOption | None = None) -> LiveProgressResponse:
+    place = target.place if target is not None else None
+    return LiveProgressResponse(
+        next_item_id=target.id if place else None, next_place_name=place.name if place else None,
+        next_location=place.location if place else None, straight_line_km=None if km is None else round(km, 3),
+        options=options or [], recommended=recommended, alerts=alerts, checked_at=checked_at,
+        data_source=it.data_source.value)
+
+
 def progress(it: Itinerary, req: LiveProgressRequest, transport: TransportEngine) -> LiveProgressResponse:
     day = next((d for d in it.days if d.day_number == req.day_number), None)
     if day is None:
         raise NotFoundError(f"Day {req.day_number} not in this itinerary")
     target = _next_item(day.items, req)
     now = dt.datetime.now()
+    checked_at = now.isoformat(timespec="seconds")
     alerts: list[TransportAlert] = []
     if req.accuracy_m and req.accuracy_m > 200:
         alerts.append(TransportAlert(kind="low_accuracy",
                                      message=f"Location accuracy is low (~{req.accuracy_m:.0f} m); estimates may be off."))
     if target is None or target.place is None:
-        return LiveProgressResponse(next_item_id=None, next_place_name=None, next_location=None, straight_line_km=None,
-                                    options=[], recommended=None, alerts=alerts, checked_at=now.isoformat(timespec="seconds"),
-                                    data_source=it.data_source.value)
+        return _response(it, checked_at, alerts)
 
     dest = target.place.location
     km = haversine_km(req.current.lat, req.current.lng, dest.lat, dest.lng)
     if km <= ARRIVED_KM:
         alerts.append(TransportAlert(kind="arrived", message=f"You have arrived at {target.place.name}."))
-        return LiveProgressResponse(next_item_id=target.id, next_place_name=target.place.name, next_location=dest,
-                                    straight_line_km=round(km, 3), options=[], recommended=None, alerts=alerts,
-                                    checked_at=now.isoformat(timespec="seconds"), data_source=it.data_source.value)
+        return _response(it, checked_at, alerts, target, km)
 
     options = transport.options(req.current, dest, now, fresh=True)
     recommended, _ = choose(options, transport.preferred)
@@ -92,8 +100,4 @@ def progress(it: Itinerary, req: LiveProgressRequest, transport: TransportEngine
                 message=(f"Travel time to {target.place.name} is now {ref.duration_min:.0f} min "
                          f"({abs(change) * 100:.0f}% {direction} than before)."),
             ))
-    return LiveProgressResponse(
-        next_item_id=target.id, next_place_name=target.place.name, next_location=dest,
-        straight_line_km=round(km, 3), options=options, recommended=recommended, alerts=alerts,
-        checked_at=now.isoformat(timespec="seconds"), data_source=it.data_source.value,
-    )
+    return _response(it, checked_at, alerts, target, km, options, recommended)

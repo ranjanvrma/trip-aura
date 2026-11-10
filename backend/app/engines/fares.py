@@ -26,6 +26,7 @@ MODE_PROFILES: dict[TransportMode, ModeProfile] = {
     TransportMode.PERSONAL_VEHICLE: ModeProfile(25, 6, 1.3, True, False, 5),
 }
 
+
 def simulated_traffic_multiplier(minute_of_day: int) -> float:
     """Deterministic time-of-day congestion used ONLY in mock mode (labelled as simulated)."""
     h = minute_of_day / 60

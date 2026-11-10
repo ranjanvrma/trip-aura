@@ -5,8 +5,6 @@ Everything returned here is labelled DataSource.MOCK. Ratings are exposed as
 """
 from __future__ import annotations
 
-import logging
-
 from app.core.errors import LocationNotFoundError, NotFoundError, UnsupportedInMockModeError
 from app.providers.base import CityContext, GeocodeResult, PlaceQuery
 from app.providers.heuristic_routes import HeuristicRoutesProvider
@@ -14,7 +12,6 @@ from app.providers.mock import dataset as ds
 from app.schemas.common import DataSource, LatLng, Money
 from app.schemas.place import DietInfo, ExternalRating, OpeningHours, Place, PlaceKind, Review, TimeRange
 
-log = logging.getLogger(__name__)
 SRC = DataSource.MOCK
 MOCK_RATING_LABEL = "Demo rating (mock data, not from Google)"
 
@@ -123,13 +120,13 @@ class MockPlacesProvider:
         if query.kind == "food":
             pool = [p for p in places if p.kind in (PlaceKind.RESTAURANT, PlaceKind.CAFE)]
             if tag in ("all", "restaurants"):
-                return list(pool)[: query.max_results]
+                return pool[: query.max_results]
             return [p for p in pool if tag in p.food_categories or tag in p.cuisines][: query.max_results]
         pool = [p for p in places if p.kind in (PlaceKind.ATTRACTION, PlaceKind.PARK)]
         if tag == "famous":
             return [p for p in pool if p.is_famous][: query.max_results]
         if tag == "all":
-            return list(pool)[: query.max_results]
+            return pool[: query.max_results]
         words = set(tag.split("_"))
         return [p for p in pool if tag in p.categories
                 or any(w in (p.description or "").lower() or w in p.name.lower() for w in words if len(w) > 3)

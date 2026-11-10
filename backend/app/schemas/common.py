@@ -35,11 +35,6 @@ class Money(BaseModel):
     note: str | None = None
 
     @classmethod
-    def estimate(
-        cls,
-        amount: float,
-        currency: str,
-        note: str | None = None,
-        source: DataSource = DataSource.ESTIMATE,
-    ) -> "Money":
+    def estimate(cls, amount: float, currency: str, note: str | None = None,
+                 source: DataSource = DataSource.ESTIMATE) -> Money:
         return cls(amount=round(max(amount, 0.0), 2), currency=currency, verified=False, source=source, note=note)

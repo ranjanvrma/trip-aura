@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from app.engines.fares import MODE_PROFILES
 from app.schemas.common import Money
 from app.schemas.trip import TransportMode
 
@@ -33,7 +34,7 @@ US_FARES: dict[TransportMode, FareRow] = {
 US_MEAL_BY_LEVEL = {0: 6.0, 1: 14.0, 2: 28.0, 3: 60.0, 4: 110.0}
 US_UNKNOWN_ENTRY_FEE = 15.0
 
-# Hand-curated local tables: (country, currency) -> tables in local currency.
+# Hand-curated local tables: country -> prices in that table's own currency.
 CURATED: dict[str, dict] = {
     "IN": {
         "currency": "INR",
@@ -114,13 +115,12 @@ class CostModel:
         )
 
     @classmethod
-    def india_inr(cls) -> "CostModel":
-        return cls.build("IN", "INR")
+    def fallback(cls, currency: str) -> "CostModel":
+        """Used when a caller passes no cost model: the curated India table for INR trips, US prices otherwise."""
+        return cls.build("IN" if currency == "INR" else "US", currency)
 
     # ---- estimates --------------------------------------------------------------
     def fare(self, mode: TransportMode, distance_km: float, travelers: int = 1) -> Money:
-        from app.engines.fares import MODE_PROFILES
-
         base, per_km, minimum, maximum = self.fares[mode]
         unit = 0.0 if mode == TransportMode.WALKING else max(minimum, base + per_km * distance_km)
         if maximum is not None:
