@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** README author names link to contributor GitHub profiles
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** restored the tested Azure deployment files from commit `8443341`
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -159,7 +159,7 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 8. Deployment status
 
-**Current state: not deployed. The method is known and proven; the real deployment is the next step.** CI (`ci.yml`) still runs tests + frontend build on every push.
+**Current state: not deployed.** The tested Azure deployment files from `8443341` have been restored. No cloud resources have been recreated. Commit and push the restored files to `main` to build and publish the GHCR image; then continue with Neon, Azure, GitHub secrets, and Vercel below. CI (`ci.yml`) still runs tests + frontend build on every push.
 
 **How we learned it (trial on 2026-11-08):**
 - **Built:** the backend image on GHCR, the Azure Container App (Central India, 1 vCPU / 2 GiB, scale to zero), and a Neon Postgres database.
@@ -199,7 +199,7 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 9. Open tasks / next steps
 
-1. **Deploy** following §8 (restore files from `8443341`, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then run the full deploy-day test list (§8 step 7).
+1. **Deploy** following §8 (push restored files, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then run the full deploy-day test list (§8 step 7).
 2. **UI redesign** (requested by the owners):
    - premium, product-grade look with animations, transitions, micro-interactions and a responsive layout
    - keep the `types/index.ts` contract and the honesty labels: rating source badges, "estimate" tags, attributions footer
@@ -241,7 +241,8 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-10 | (this commit) | README: link author names to their GitHub profiles |
+| 2026-11-10 | (this commit) | Restore the tested Azure deployment files and resume the deployment plan |
+| 2026-11-10 | `b9ffe2b` | README: link author names to their GitHub profiles |
 | 2026-11-10 | `6da2943` | README: fix backend/frontend startup working directories and clarify local-only commits |
 | 2026-11-08 | `8ccf288` | Docs: deployment method is known and proven; added deploy-day full re-test checklist (§8 step 7) |
 | 2026-11-08 | `665e0ba` | Deployment trial torn down: all cloud resources deleted; removed Dockerfile, deploy scripts, deploy workflows, `modal_app.py`, `render.yaml`, `vercel.json` (restore from `8443341`); README gains *Project status* + *Deployment plan*; HANDOFF §8 is now the redeploy plan |
