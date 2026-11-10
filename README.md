@@ -170,6 +170,6 @@ The exact steps, how to restore the deployment files from git history, and the f
 
 ## Authors
 
-**Ranjan Verma** and **Chinmay Dahiya**
+[Ranjan Verma](https://github.com/ranjanvrma) and [Chinmay Dahiya](https://github.com/dahiyachinmay15)
 
 Data © OpenStreetMap contributors (ODbL), Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Every itinerary lists its sources.
