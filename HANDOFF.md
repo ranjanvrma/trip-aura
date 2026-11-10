@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** production CSP allows Google Maps; live deployment checked, backend still on the old image (see §8 \"Live check 2026-11-10\")
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** documents the live deployment and remaining production sign-in setup (see §8)
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -36,8 +36,7 @@
   - **email one-time-code sign-in** (Resend), private per-user trips, account deletion, security hardening (CSRF, rate limits, idempotency keys, security headers, input limits)
   - **redesigned frontend**: light-mode bento layout, 3D globe, command menu, sheets, toasts with undo, Terms/Privacy/404 pages
   - **159 backend tests pass**, the frontend builds, and CI runs on every push
-- **Not deployed yet, but we know exactly how.** On 2026-11-08 a trial run proved the whole free setup works (Vercel + Azure for Students + GHCR + Neon). It was then **deliberately removed** (cloud resources deleted, deployment files taken out of the repo) so the real deployment starts clean. The method is in [§8](#8-deployment-status).
-- **Next:** deploy following §8 and **re-run every test and check on deploy day** (the trial results are not a substitute), including the new sign-in settings in §8 ("Sign-in changes").
+- **Deployed:** the public Vercel site and Azure backend are live (see [§8](#8-deployment-status)). Email sign-in still needs production configuration; do not treat authenticated trip planning as verified until that is complete.
 
 ---
 
@@ -98,7 +97,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Auth and security | `routers/auth.py` (request-code, verify, me, logout, `DELETE /api/auth/account`), `services/auth_service.py` (HMAC-hashed 6-digit codes: 10 min, 5 attempts, single use; sessions = SHA-256 of a random cookie token + CSRF token, 7 days), `services/email_service.py` (Resend; dev mode prints codes to the console), `services/idempotency.py` (`X-Idempotency-Key` on create/regenerate, 24 h), `core/security.py` (security headers, Origin check, per-IP limits), `core/ratelimit.py` (in-memory token buckets; client IP counted from the right of `X-Forwarded-For`), `core/urls.py` (http(s)-only URLs, QID checks), `routers/deps.py` (`require_auth` + CSRF). Trips are owner-only (others get 404); admins (`ADMIN_EMAILS`) can read/list/delete any |
 | Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (Layout: header, mobile menu sheet, footer, scroll progress, route chunk preloading; AccountMenu with a safe-triangle submenu), `pages/` (Planner bento, Trip, Trips, SignIn, LegalPages, NotFound), `components/` (CommandMenu `Ctrl/Cmd+K`, `globe/` three.js lazy chunk, `ui/Sheet` swipe-to-dismiss, `ui/Skeleton` + Kbd, TripForm, DayCard, PlaceDetails, map/*...), `lib/` (auth context, toast with undo, `swr.ts` stale-while-revalidate cache, `meta.ts` page titles/descriptions, `useBackToClose` predictive back, `useScrollMotion` GSAP reveals/parallax, `trips.ts` optimistic delete + undo, `safeUrl.ts`), `services/api.ts` (cookies, CSRF header, idempotency keys), `index.css` (design tokens, light mode only). `vite.config.ts` adds a production CSP meta tag and pre-renders per-route `<head>` files (`dist/terms/index.html`, `404.html`...) |
 | Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
-| Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; deployment files removed (see §8 to restore) |
+| Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; Azure deployment files and workflow are present; live deployment details are in §8 |
 
 ---
 
@@ -147,16 +146,16 @@ npm run build
 
 Settings: `backend/app/core/config.py` (main ones in README → *Configuration*). Frontend: `VITE_API_BASE_URL` (backend URL in production; empty locally), optional `VITE_GOOGLE_MAPS_API_KEY`.
 
-Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`). **There are no live secrets right now:** all cloud accounts' project resources were deleted. When redeploying, they go to:
-| Secret | Where (planned) |
+Secrets are never committed (`.gitignore` blocks `.env*` except `*.env.example`). Live credentials belong only in provider settings; never copy their values into this file. Current deployment configuration:
+| Setting / secret | Where |
 |---|---|
-| Postgres `DATABASE_URL` (Neon, pooled) | Azure Container App secret `database-url` |
-| `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`, `OPEN_USER_AGENT`, `DATA_MODE` | Container App env vars |
-| `AZURE_CREDENTIALS` (service principal JSON, scoped to the resource group) | GitHub Actions secret, plus variable `AZURE_ENABLED=true` |
-| `VITE_API_BASE_URL` | Vercel env var |
+| Postgres `DATABASE_URL` (Neon, pooled) | Azure Container App secret |
+| `CORS_ORIGINS`, `OPEN_USER_AGENT`, `DATA_MODE` | Azure Container App environment |
+| `AZURE_CREDENTIALS` (service principal JSON) | GitHub Actions secret; `AZURE_ENABLED=true` is a repository variable |
+| `VITE_API_BASE_URL` | Vercel environment variable, set to the Azure backend URL |
 | Google / LLM keys | optional, unused (`ANTHROPIC_MODEL` has no default) |
 
-New for sign-in (all backend, see `backend/.env.example`): `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters, required in production), `RESEND_API_KEY` (secret), `EMAIL_FROM` (address on a domain verified in Resend), `ADMIN_EMAILS`, `COOKIE_SECURE`/`COOKIE_SAMESITE` (defaults true/lax are right), `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_COUNT`, `RATE_LIMIT_ENABLED`, `DOCS_ENABLED` (off in production by default), `SESSION_DAYS`.
+Still required to enable production sign-in (see `backend/.env.example`): `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters, required in production), `RESEND_API_KEY` (secret), `EMAIL_FROM` (address on a domain verified in Resend), `ADMIN_EMAILS`, `COOKIE_SECURE`/`COOKIE_SAMESITE` (defaults true/lax are right), `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_COUNT`, `RATE_LIMIT_ENABLED`, `DOCS_ENABLED` (off in production by default), `SESSION_DAYS`.
 
 Lesson from the trial: **never screenshot or paste connection strings or the service-principal JSON.** Both leaked once and had to be rotated.
 
@@ -164,80 +163,31 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 8. Deployment status
 
-**Current state: partly deployed (checked 2026-11-10 by Ranjan's session).**
-- Frontend: Vercel at `https://trip-aura-il6q.vercel.app` (note `-il6q.vercel.app`, not `.il6q.vercel.com`), running the redesign (`c55f12c`).
-- Backend: Azure Container App in **Korea Central**, `https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io`. `/api/health` is ok, but it runs the **old image** (no `auth` block in `/api/meta/status`, no security headers, `google.configured: false`).
+**Live, checked 2026-11-10.**
+- Website: [https://trip-aura-il6q.vercel.app/](https://trip-aura-il6q.vercel.app/), hosted on Vercel.
+- Backend: [Azure Container Apps](https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io), Korea Central. The image built from `c55f12c` was deployed successfully by GitHub Actions after Azure credentials were corrected.
+- `GET /api/health` and `GET /api/meta/status` respond successfully. The website loads and its API requests pass CORS. Security response headers are present.
+- The API reports `email_configured=false` and `dev_codes_in_console=true`. Email sign-in is therefore **not ready in production**. The website and API are reachable, but authenticated trip creation and saved-trip flows have not been verified end to end.
+- Google Maps enrichment is optional and currently off; open-data mode is active.
 
-**Live check 2026-11-10: what's broken and how to fix it (deployer):**
-1. **The site hangs on "Connecting to the TripAura server".** The new frontend sends requests with cookies (`credentials: "include"`), and the old backend doesn't answer with `Access-Control-Allow-Credentials`, so the browser blocks every reply. Deploying the new backend image fixes it.
-2. **New image never rolled out.** In GitHub Actions, *Deploy backend (Azure)* built and pushed `ghcr.io/ranjanvrma/trip-aura-api:c55f12c...` fine, but the `deploy` job was **skipped** on the push (variable `AZURE_ENABLED` not `true` yet) and **failed at `azure/login`** on the manual re-run (secret `AZURE_CREDENTIALS` missing or not the JSON printed by `setup.sh`). Fix the secret and re-run, or roll out by hand in Cloud Shell: `az containerapp update -n trip-aura-api -g trip-aura --image ghcr.io/ranjanvrma/trip-aura-api:latest`.
-3. **Set the sign-in env vars before or with that rollout** (see "Sign-in changes" below). Important: `APP_ENV=production` without `SECRET_KEY` stops the app at startup on purpose.
-4. **Cookies need same-origin.** Vercel currently has `VITE_API_BASE_URL` set to the Azure URL, so the browser talks to Azure directly (cross-site), and the `SameSite=Lax` session cookie won't be sent. Add the `/api` rewrite to `frontend/vercel.json` (snippet below, destination = the Azure URL above), **remove** `VITE_API_BASE_URL` in Vercel, and redeploy.
-5. **Google:** add the server key on Azure (secret, env `GOOGLE_MAPS_API_KEY=secretref:...`), and `VITE_GOOGLE_MAPS_API_KEY` (the browser key) in Vercel, then redeploy. Add `https://trip-aura-il6q.vercel.app/*` to the browser key's website list in Google Cloud. The production CSP for Google Maps was tested locally with a production build (map, tiles, controls, fonts, ratings all load).
+**Remaining production setup — sign-in:**
+1. Configure Azure Container App `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters), `RESEND_API_KEY` (secret), `EMAIL_FROM` (on a verified Resend domain), `ADMIN_EMAILS`, `TRUST_PROXY_HEADERS=true`, `TRUSTED_PROXY_COUNT=2`, and `CORS_ORIGINS=https://trip-aura-il6q.vercel.app`. Keep secrets in Azure settings only. Without `RESEND_API_KEY`, production code requests return `503 email_not_configured`.
+2. In `frontend/vercel.json`, add a rewrite from `/api/:path*` to `https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io/api/:path*` before the SPA fallback. Set Vercel `VITE_API_BASE_URL` to empty and redeploy. This makes the session cookie first-party (`SameSite=Lax`). The current Vercel setting calls Azure directly, which is cross-site.
+3. After deployment, verify requesting and receiving a sign-in code, sign-in/out, account deletion, trip save/list, account isolation, and `/terms`, `/privacy`, and 404 routes. Check browser console and response headers too.
+
+**Deployment resources:** Vercel hosts the frontend; Azure Container Apps runs the backend (1 vCPU / 2 GiB, scale-to-zero, max one replica); GitHub Actions builds and deploys the image to GHCR; Neon provides Postgres. Never commit or paste provider secrets.
+
+**Earlier deployment trial (2026-11-08):** its resources were deleted before the current deployment. Its old restoration steps are historical and should not be rerun; current deployment files are already in the repository.
+
+**Other follow-ups:**
+- Owners to review the Terms and Privacy pages (`frontend/src/pages/LegalPages.tsx`); they describe real data flows but have not been lawyer-reviewed.
+- Place photos and BlurHash placeholders (Wikidata P18 / Wikimedia Commons are possible sources).
+- A true per-stage progress indicator for first-time city loading needs async backend loading.
+- Lottie is not used; current animation uses Motion, GSAP and CSS.
+- Credit Chinmay in GitHub contributors by using his GitHub email or a `Co-authored-by` trailer if desired.
+- Nice to have: async city loading, real routing, GTFS transit, a LICENSE file, and testing Google enrichment with a real key.
 
 CI (`ci.yml`) runs tests and the frontend build on every push.
-
-**How we learned it (trial on 2026-11-08):**
-- **Built:** the backend image on GHCR, the Azure Container App (Central India, 1 vCPU / 2 GiB, scale to zero), and a Neon Postgres database.
-- **Verified:** `/api/health` ok, semantic model loaded, city search ok, a new Lisbon trip in 35 s saved to Postgres, and a cached repeat in 0.4 s.
-- **Torn down:** the Azure resource group `trip-aura` and service principal `trip-aura-github`, the GHCR package `trip-aura-api`, the Neon project, and the Vercel project were all deleted by Ranjan.
-
-**How to deploy (free, no card):**
-1. **Restore the tested files from git history:**
-   ```bash
-   git checkout 8443341 -- backend/Dockerfile backend/.dockerignore backend/scripts deploy/azure .github/workflows/deploy-backend-azure.yml frontend/vercel.json
-   ```
-   Also available in that commit: `backend/modal_app.py` + `deploy-backend-modal.yml` (Modal, needs a card), `deploy/oracle/` + `deploy-backend-oracle.yml` (any VPS: Docker Compose + Caddy HTTPS), and `render.yaml` (paid).
-2. **Neon:** create a project and copy the **pooled** connection string.
-3. **Image:** push to `main`. The Azure workflow's image job publishes `ghcr.io/<owner>/trip-aura-api`. It is public automatically for a public repo (check: an anonymous manifest request returns 200).
-4. **Azure for Students** (college email, no card; the credit renews yearly while a student): in Cloud Shell (Bash) run `deploy/azure/setup.sh` from raw GitHub.
-   - It asks for the Neon URL.
-   - It **auto-picks an allowed region**: the trial subscription allowed `centralindia eastasia koreacentral malaysiawest southeastasia`, and East US was rejected.
-   - It creates the environment (`--logs-destination none`) and the app (`--min-replicas 0 --max-replicas 1`), then prints the backend URL and the service-principal JSON.
-5. **GitHub:** secret `AZURE_CREDENTIALS` (that JSON) + variable `AZURE_ENABLED=true`, so later pushes roll out automatically.
-6. **Vercel:** root `frontend`, env `VITE_API_BASE_URL` = backend URL. Then `az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://<site>.vercel.app`.
-
-7. **Re-test everything on deploy day.** Treat it as a fresh deployment and do every check again:
-   - locally first: `pytest -q` (all tests pass) and `npm run build`
-   - GitHub Actions: CI green, and the image job green
-   - backend: `GET /api/health` is ok; `GET /api/meta/status` shows the data mode and semantic model; `GET /api/geo/cities?q=lis` returns cities
-   - a new trip for an uncached city (about 30–60 s) is saved to Postgres; repeating it is fast (cache hit)
-   - frontend on Vercel: autocomplete, "describe your trip", generate, map, budget and saved trips all work; no CORS errors in the browser console
-   - cold start: after the app scales to zero, the first request wakes it and the frontend's retry message clears
-   - secrets: nothing secret is committed, and none is pasted into chats or screenshots
-
-**Sign-in changes (new after the trial, for the deployer):** the session cookie must be first-party, so the frontend calls the API **same-origin through a Vercel rewrite** instead of calling the Azure URL directly.
-- `frontend/vercel.json` needs the `/api` rewrite **before** the SPA fallback, plus the page security headers (CSP `frame-ancestors`, HSTS and X-Frame-Options can't be set from HTML). Static files win over rewrites, so the pre-rendered `/terms`, `/privacy`, `/signin`, `/trips` heads and `404.html` keep working:
-  ```json
-  {
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "framework": "vite",
-    "buildCommand": "npm run build",
-    "outputDirectory": "dist",
-    "rewrites": [
-      { "source": "/api/:path*", "destination": "https://<backend-host>/api/:path*" },
-      { "source": "/((?!api/).*)", "destination": "/index.html" }
-    ],
-    "headers": [{ "source": "/(.*)", "headers": [
-      { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
-      { "key": "X-Frame-Options", "value": "DENY" },
-      { "key": "X-Content-Type-Options", "value": "nosniff" },
-      { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-      { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(self)" },
-      { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" }
-    ]}]
-  }
-  ```
-- Vercel env: leave **`VITE_API_BASE_URL` empty** (same-origin). Keep `geolocation=(self)` or live location breaks.
-- Container App env: `APP_ENV=production`, `TRUST_PROXY_HEADERS=true`, `TRUSTED_PROXY_COUNT=2` (Vercel and Azure ingress both append to `X-Forwarded-For`), `CORS_ORIGINS=https://<site>` (required even same-origin: the backend checks the browser's `Origin` on every POST/DELETE, otherwise 403 `csrf_failed`), `EMAIL_FROM`, `ADMIN_EMAILS`; secrets `SECRET_KEY` and `RESEND_API_KEY`. `deploy/azure/setup.sh` doesn't set these yet.
-- Resend: until a domain is verified, `onboarding@resend.dev` only delivers to the Resend account's own address. Without `RESEND_API_KEY` in production, sign-in returns 503 `email_not_configured`.
-- Rate limits are in memory per replica: fine with max 1 replica, and they reset when the app scales to zero.
-- Deploy-day checks to add to step 7: request a code and sign in; a second account can't open the first account's trip (404); sign out; delete account; `/terms`, `/privacy` and a bad URL (404 page) load; response headers present (`curl -I`).
-
-**Gotchas from the trial (already fixed in commit `8443341`):**
-- The Dockerfile must `mkdir` + `chown` the app folder as root before `USER user`.
-- `az containerapp revision restart` fails while the app is scaled to zero. To apply a new secret, create a new revision with `az containerapp update ... --set-env-vars SECRET_ROTATED_AT=$(date +%s)`.
-- Delete leftovers with `az group delete -n trip-aura --yes` and `az ad app delete --id <appId>` (the service principal). A hidden `ME_*` resource group may also need deleting.
 
 ---
 
@@ -289,7 +239,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-10 | (this commit) | Production CSP: allow the Maps JavaScript API hosts (fonts, tiles, scripts) when a Google browser key is set; HANDOFF §8 records the live check (backend still on the old image, deploy job failing at Azure login, cookie/rewrite fixes) |
+| 2026-11-10 | (this commit) | README and HANDOFF: document the live deployment, verified health/connectivity, and remaining production sign-in setup |
+| 2026-11-10 | `368143f` | Production CSP allows Google Maps hosts; records the live deployment check |
 | 2026-11-10 | `c55f12c` | UI redesign (light-mode bento, globe, command menu, sheets, toasts with undo, legal and 404 pages, favicons, per-route heads, CSP); email-code sign-in, per-user trips, account deletion; CSRF, idempotency keys, rate limits, security headers, input limits, injection audit; React Router 7.18.5 |
 | 2026-11-10 | `2bf9321` | Restore the tested Azure deployment files and resume the deployment plan |
 | 2026-11-10 | `b9ffe2b` | README: link author names to their GitHub profiles |

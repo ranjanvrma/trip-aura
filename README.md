@@ -119,40 +119,15 @@ Everything works without keys. The main settings, set in `backend/.env` (full li
 | `APP_ENV` | `development` | `production` requires `SECRET_KEY` and turns off API docs |
 | `RESEND_API_KEY` | empty | Sends sign-in codes. Empty in development: codes are printed in the backend console |
 
-Frontend: leave `VITE_API_BASE_URL` empty. Locally the Vite proxy forwards `/api`; in production a Vercel rewrite does, so the sign-in cookie stays first-party.
+Frontend: locally, leave `VITE_API_BASE_URL` empty and use the Vite `/api` proxy. The live Vercel deployment currently points `VITE_API_BASE_URL` directly at Azure. Production email sign-in still needs configuration and a same-origin `/api` rewrite; see [HANDOFF.md](HANDOFF.md#8-deployment-status).
 
 ## Project status
 
-**Done (Nov 2026):**
-- **Planning engines:** itinerary (day anchor, greedy ordering, 2-opt, opening hours, meals, rests), 0–5 suitability scoring, diet-aware food with evidence-based dishes, transport legs with alternatives, budget with savings and fit-to-budget.
-- **Worldwide open data:** Overture, Wikidata, OpenStreetMap and Wikivoyage, loaded in parallel and cached per city. A first trip to a new city takes about 37 s for Rome, down from 245 s; a cached trip takes about 1 s.
-- **NLP / AI:** city autocomplete, address suggestions, "describe your trip" parser, typo-tolerant and semantic interests, review sentiment.
-- **Product features:** live location updates, worldwide cost model with 31 currencies, honest source labels.
-- **Accounts and security:** email one-time-code sign-in, private trips, account deletion, CSRF protection, rate limits, idempotency keys and security headers.
-- **Interface:** light-mode bento layout with a 3D globe, command menu (`Ctrl/Cmd+K`), swipe-down sheets, undo toasts, Terms, Privacy and 404 pages.
-- **Quality:** 159 offline tests, CI on every push, a HANDOFF document kept current by a commit hook.
-- **Deployment method worked out:** a trial run proved the free setup below works end to end. It was then removed on purpose so the real deployment starts clean.
+**The public app is deployed.** The [TripAura website](https://trip-aura-il6q.vercel.app/) is live on Vercel, and its backend runs on Azure Container Apps. The backend health check responds successfully, and the deployed website can reach it.
 
-**Next:** deploy with the plan below, re-running every test on deploy day. Sign-in needs a few extra settings (Resend key, secret key, a Vercel `/api` rewrite), listed in HANDOFF §8.
+The planner and API are live, but production email sign-in is not configured yet. The backend reports email delivery as unavailable, so users cannot currently receive sign-in codes and complete authenticated trip planning. Google Maps enrichment is optional and is not configured; the app uses open data by default.
 
-## Deployment plan (not deployed yet)
-
-We now know how to deploy. This free setup needs no credit card and has been proven in a trial run:
-
-| Part | Service | Notes |
-|---|---|---|
-| Frontend | **Vercel** (Hobby, free) | Root directory `frontend`; set `VITE_API_BASE_URL` to the backend URL |
-| Backend | **Azure Container Apps** via **Azure for Students** (college email, no card) | 1 vCPU / 2 GiB, scale to zero, max 1 replica, no paid log workspace. The monthly free allowance covers about 50 active hours; the $100 student credit is only a backup, and the account can't be billed |
-| Image | **GitHub Container Registry** | Built by GitHub Actions; public images are free |
-| Database | **Neon** Postgres (free) | Pooled connection string as `DATABASE_URL` |
-
-What we learned:
-- **Memory:** the backend needs about 750 MB of RAM. Free 512 MB tiers (Render, Koyeb) are too small.
-- **Other hosts:** Hugging Face Docker is now paid; Modal and Oracle need a card.
-- **Regions:** student subscriptions only allow some regions. Ours allowed Central India and East Asia, not East US, so pick from the allowed list.
-- **User-Agent:** `OPEN_USER_AGENT` must contain a contact URL, or Wikimedia returns 403.
-
-The exact steps, how to restore the deployment files from git history, and the full test checklist for deploy day are in [HANDOFF.md](HANDOFF.md#8-deployment-status).
+See [HANDOFF.md](HANDOFF.md#8-deployment-status) for deployment details and the remaining production setup.
 
 ## API
 
