@@ -23,7 +23,7 @@ APP="${APP:-trip-aura-api}"
 say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 
 read -rp "Neon DATABASE_URL (paste): " DATABASE_URL
-read -rp "Vercel URL, e.g. https://trip-aura.vercel.app (Enter to set later): " CORS
+read -rp "Vercel URL, e.g. https://trip-aura-cr.vercel.app (Enter to set later): " CORS
 CORS="${CORS:-http://localhost:5173}"
 CORS="${CORS%/}"
 
@@ -93,7 +93,7 @@ Next:
       secret   AZURE_CREDENTIALS = the JSON below (copy all of it)
       variable AZURE_ENABLED     = true
  3. When you know the Vercel URL:
-      az containerapp update -n ${APP} -g ${RG} --set-env-vars CORS_ORIGINS=https://<your-app>.vercel.app
+      az containerapp update -n ${APP} -g ${RG} --set-env-vars CORS_ORIGINS=https://trip-aura-cr.vercel.app
 =====================================================================
 ${CREDS}
 EOF

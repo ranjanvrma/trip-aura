@@ -123,7 +123,7 @@ Frontend: locally, leave `VITE_API_BASE_URL` empty and use the Vite `/api` proxy
 
 ## Project status
 
-**The public app is deployed.** The [TripAura website](https://trip-aura-il6q.vercel.app/) is live on Vercel, and its backend runs on Azure Container Apps. The backend health check responds successfully, and the deployed website can reach it.
+**The public app is deployed.** The [TripAura website](https://trip-aura-cr.vercel.app/) is the current Vercel address, and its backend runs on Azure Container Apps. The backend health check was verified; after changing the frontend domain, verify that API requests from this new address succeed. Azure must allow `https://trip-aura-cr.vercel.app` in `CORS_ORIGINS`.
 
 The planner and API are live, but production email sign-in is not configured yet. The backend reports email delivery as unavailable, so users cannot currently receive sign-in codes and complete authenticated trip planning. Google Maps enrichment is optional and is not configured; the app uses open data by default.
 

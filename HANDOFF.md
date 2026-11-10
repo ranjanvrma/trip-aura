@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** documents the live deployment and remaining production sign-in setup (see §8)
+**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** records the new Vercel domain and its Azure CORS update (see §8)
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -164,16 +164,17 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 ## 8. Deployment status
 
 **Live, checked 2026-11-10.**
-- Website: [https://trip-aura-il6q.vercel.app/](https://trip-aura-il6q.vercel.app/), hosted on Vercel.
+- Website: [https://trip-aura-cr.vercel.app/](https://trip-aura-cr.vercel.app/), hosted on Vercel.
 - Backend: [Azure Container Apps](https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io), Korea Central. The image built from `c55f12c` was deployed successfully by GitHub Actions after Azure credentials were corrected.
 - `GET /api/health` and `GET /api/meta/status` respond successfully. The website loads and its API requests pass CORS. Security response headers are present.
-- The API reports `email_configured=false` and `dev_codes_in_console=true`. Email sign-in is therefore **not ready in production**. The website and API are reachable, but authenticated trip creation and saved-trip flows have not been verified end to end.
+- The API reports `email_configured=false` and `dev_codes_in_console=true`. Email sign-in is therefore **not ready in production**. The website and API were reachable at the previous Vercel domain, but the new domain has not yet been checked against the live API. Authenticated trip creation and saved-trip flows have not been verified end to end.
 - Google Maps enrichment is optional and currently off; open-data mode is active.
 
 **Remaining production setup — sign-in:**
-1. Configure Azure Container App `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters), `RESEND_API_KEY` (secret), `EMAIL_FROM` (on a verified Resend domain), `ADMIN_EMAILS`, `TRUST_PROXY_HEADERS=true`, `TRUSTED_PROXY_COUNT=2`, and `CORS_ORIGINS=https://trip-aura-il6q.vercel.app`. Keep secrets in Azure settings only. Without `RESEND_API_KEY`, production code requests return `503 email_not_configured`.
-2. In `frontend/vercel.json`, add a rewrite from `/api/:path*` to `https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io/api/:path*` before the SPA fallback. Set Vercel `VITE_API_BASE_URL` to empty and redeploy. This makes the session cookie first-party (`SameSite=Lax`). The current Vercel setting calls Azure directly, which is cross-site.
-3. After deployment, verify requesting and receiving a sign-in code, sign-in/out, account deletion, trip save/list, account isolation, and `/terms`, `/privacy`, and 404 routes. Check browser console and response headers too.
+1. Update Azure for the new Vercel domain: run `az containerapp update -n trip-aura-api -g trip-aura --set-env-vars CORS_ORIGINS=https://trip-aura-cr.vercel.app` (keep any other allowed origins if they are still needed). Then open the new site and check that `/api/meta/status` loads without a connection/CORS error.
+2. Configure Azure Container App `APP_ENV=production`, `SECRET_KEY` (secret, at least 32 random characters), `RESEND_API_KEY` (secret), `EMAIL_FROM` (on a verified Resend domain), `ADMIN_EMAILS`, `TRUST_PROXY_HEADERS=true`, `TRUSTED_PROXY_COUNT=2`, and `CORS_ORIGINS=https://trip-aura-cr.vercel.app`. Azure must be updated to include this exact origin; the old domain may still be configured there. Keep secrets in Azure settings only. Without `RESEND_API_KEY`, production code requests return `503 email_not_configured`.
+3. In `frontend/vercel.json`, add a rewrite from `/api/:path*` to `https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io/api/:path*` before the SPA fallback. Set Vercel `VITE_API_BASE_URL` to empty and redeploy. This makes the session cookie first-party (`SameSite=Lax`). The current Vercel setting calls Azure directly, which is cross-site.
+4. After deployment, verify requesting and receiving a sign-in code, sign-in/out, account deletion, trip save/list, account isolation, and `/terms`, `/privacy`, and 404 routes. Check browser console and response headers too.
 
 **Deployment resources:** Vercel hosts the frontend; Azure Container Apps runs the backend (1 vCPU / 2 GiB, scale-to-zero, max one replica); GitHub Actions builds and deploys the image to GHCR; Neon provides Postgres. Never commit or paste provider secrets.
 
@@ -239,7 +240,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-10 | (this commit) | README and HANDOFF: document the live deployment, verified health/connectivity, and remaining production sign-in setup |
+| 2026-11-10 | `146b756` | Update the Vercel domain to `trip-aura-cr.vercel.app`; document Azure CORS and domain verification steps |
+| 2026-11-10 | `d65f949` | README and HANDOFF: document the live deployment, verified health/connectivity, and remaining production sign-in setup |
 | 2026-11-10 | `368143f` | Production CSP allows Google Maps hosts; records the live deployment check |
 | 2026-11-10 | `c55f12c` | UI redesign (light-mode bento, globe, command menu, sheets, toasts with undo, legal and 404 pages, favicons, per-route heads, CSP); email-code sign-in, per-user trips, account deletion; CSRF, idempotency keys, rate limits, security headers, input limits, injection audit; React Router 7.18.5 |
 | 2026-11-10 | `2bf9321` | Restore the tested Azure deployment files and resume the deployment plan |
