@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-10 · **Branch:** `main` · **Latest change:** removed the leftover sign-in code and fixed CI; trips save in the browser; deployment remains Vercel + Azure
+**Last updated:** 2026-11-12 · **Branch:** `main` · **Latest change:** corrected project status and follow-up tasks after auditing the tracked repository files
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -11,7 +11,7 @@
 ## 0. If you are an AI agent, read this first
 
 1. Read this whole file, then `README.md` (architecture + setup), then run `git log --oneline -15`.
-2. Run the tests before and after changes: `cd backend && .venv/Scripts/python -m pytest -q` (must stay **112+ passing, offline**) and `cd frontend && npm run build`.
+2. CI runs the offline backend suite and frontend production build. The latest known backend result is **130 passing**; the frontend build also passed in CI.
 3. **Rules:**
    - Update **HANDOFF.md in every commit** (header, affected sections, change-log row). The hook `.githooks/pre-commit` enforces it once `git config core.hooksPath .githooks` is set.
    - **No AI attribution anywhere:** no `Co-Authored-By` lines for AI tools, no assistant or tool names in code, docs or commit messages.
@@ -133,7 +133,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 ```bash
 cd backend && python -m venv .venv && .venv/Scripts/pip install -r requirements.txt && cp .env.example .env
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000     # http://127.0.0.1:8000/docs
-.venv/Scripts/python -m pytest -q                                      # 112 passed, offline
+.venv/Scripts/python -m pytest -q                                      # 130 passed, offline (last recorded CI run)
 cd frontend && npm install && npm run dev                               # http://localhost:5173 (proxies /api)
 npm run build
 ```
@@ -164,14 +164,14 @@ Lesson from the trial: **never screenshot or paste connection strings or the ser
 
 ## 8. Deployment status
 
-**Live, checked 2026-11-10.**
+**Live; last checked 2026-11-10.**
 - Website: [https://trip-aura-cr.vercel.app/](https://trip-aura-cr.vercel.app/), hosted on Vercel.
-- Backend: [Azure Container Apps](https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io), Korea Central. The image built from `c55f12c` was deployed successfully by GitHub Actions after Azure credentials were corrected.
+- Backend: [Azure Container Apps](https://trip-aura-api.ambitiousocean-4195e155.koreacentral.azurecontainerapps.io), Korea Central. The image built from `c55f12c` was deployed successfully by GitHub Actions after Azure credentials were corrected. This is the last deployment revision recorded here; verify whether later backend commits, including current `main`, have rolled out.
 - `GET /api/health` and `GET /api/meta/status` respond successfully. The website loads and its API requests pass CORS. Security response headers are present.
 - The owner confirmed the public site can reach the API after the Azure CORS update. The API health and status endpoints responded successfully.
 - Google Maps enrichment is optional and currently off; open-data mode is active.
 
-**After this code is pushed:** redeploy the frontend and backend so the browser-only trip storage and public preview API are active. No Resend domain, API key, or email sender is needed. Ensure Vercel `VITE_API_BASE_URL` is blank so `/api/*` uses the same-origin rewrite. Trips remain in each user's browser and do not sync across devices.
+The backend workflow builds and deploys on pushes to `main` that change `backend/**` or the workflow itself, when `AZURE_ENABLED=true` and `AZURE_CREDENTIALS` are configured. The frontend uses Vercel's same-origin `/api/*` rewrite; `VITE_API_BASE_URL` should remain blank for that setup. Trips remain in each user's browser and do not sync across devices.
 
 **Deployment resources:** Vercel hosts the frontend; Azure Container Apps runs the backend (1 vCPU / 2 GiB, scale-to-zero, max one replica); GitHub Actions builds and deploys the image to GHCR; Neon provides Postgres. Never commit or paste provider secrets.
 
@@ -191,7 +191,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 ## 9. Open tasks / next steps
 
-1. **Deploy** following §8 (push restored files, Neon, image, Azure `setup.sh`, GitHub secret/variable, Vercel, CORS), then run the full deploy-day test list (§8 step 7).
+1. **Verify the current production revision.** Confirm whether the Azure deployment workflow completed for the latest backend changes after `c55f12c`; if not, run the workflow or redeploy through the configured pipeline, then check `/api/health`, `/api/meta/status`, and a browser API request from the Vercel site. Do not recreate Azure, Neon, or Vercel resources; they are already configured.
 2. **UI follow-ups** (the redesign itself is done):
    - **Owners to review the Terms and Privacy pages** (`frontend/src/pages/LegalPages.tsx`). They describe the real data flows but aren't lawyer-reviewed. Contact is via GitHub issues; there's no public email or phone yet, so "clickable email/phone" is not implemented.
    - Place photos (and BlurHash placeholders for them): the data has no images yet; Wikidata P18 / Wikimedia Commons is the free source. Only the globe uses a blurred placeholder today.
@@ -237,7 +237,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-10 | (this commit) | Remove the leftover sign-in code after `7113855`: auth/email/idempotency/live-location routers, services, models, errors and settings, the saved-trip API (only `POST /api/trips/preview` remains), CORS credentials; tests rewritten for the public flow (`test_security.py`), CI green again; unused frontend CSS removed. 130 tests |
+| 2026-11-12 | (this commit) | Audit tracked repository files and reconcile README/HANDOFF status, test count, deployment verification, and next steps. |
+| 2026-11-10 | `e6de362` | Remove the leftover sign-in code after `7113855`: auth/email/idempotency/live-location routers, services, models, errors and settings, the saved-trip API (only `POST /api/trips/preview` remains), CORS credentials; tests rewritten for the public flow (`test_security.py`), CI green again; unused frontend CSS removed. 130 tests |
 | 2026-11-10 | `7113855` | Remove sign-in and save generated itineraries in browser storage; update privacy, deployment, and setup docs |
 | 2026-11-10 | `34ddc15` | Add Vercel security headers and long-lived cache for hashed assets; dependency audits clean |
 | 2026-11-10 | `fa15814` | Whole-codebase cleanup, no behaviour change: dead code, unused settings paths and duplicated logic removed, shared helpers added (see §4 "Shared helpers"), regexes compiled once, faster city merging and fuzzy search. Bugs fixed: trip parser listed corrected interests in random order; address suggestions returned 500 for Photon features without coordinates; frontend sheet stole focus on re-render, Google/Leaflet maps re-fit or re-centred on every re-render, empty "Tags:" row. 161 tests |
