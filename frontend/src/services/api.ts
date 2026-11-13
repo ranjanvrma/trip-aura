@@ -39,9 +39,11 @@ export const api = {
     request<Itinerary>("/api/trips/preview", { method: "POST", body: JSON.stringify(req) }),
   citySuggestions: (q: string, signal?: AbortSignal) =>
     request<{ results: CitySuggestion[] }>(`/api/geo/cities?q=${encodeURIComponent(q)}`, { signal }),
-  addressSuggestions: (q: string, near?: LatLng | null, signal?: AbortSignal) =>
+  // `city` keeps results in the destination: typing "inn" finds the inns there, not a river abroad
+  addressSuggestions: (q: string, near?: LatLng | null, city?: string, signal?: AbortSignal) =>
     request<{ results: AddressSuggestion[] }>(
-      `/api/geo/addresses?q=${encodeURIComponent(q)}${near ? `&lat=${near.lat}&lng=${near.lng}` : ""}`, { signal }),
+      `/api/geo/addresses?q=${encodeURIComponent(q)}${near ? `&lat=${near.lat}&lng=${near.lng}` : ""}`
+        + (city ? `&city=${encodeURIComponent(city)}` : ""), { signal }),
   parseTrip: (text: string) =>
     request<ParsedTrip>("/api/nlp/parse-trip", { method: "POST", body: JSON.stringify({ text }) }),
 };

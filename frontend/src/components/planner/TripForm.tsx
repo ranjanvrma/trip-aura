@@ -66,8 +66,10 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
   const fetchCities = useCallback(
     (q: string, signal: AbortSignal) => api.citySuggestions(q, signal).then((r) => r.results), []);
+  const city = cityLoc ? req.destination_city : "";   // only once a real city is chosen
   const fetchAddresses = useCallback(
-    (q: string, signal: AbortSignal) => api.addressSuggestions(q, cityLoc, signal).then((r) => r.results), [cityLoc]);
+    (q: string, signal: AbortSignal) => api.addressSuggestions(q, cityLoc, city, signal).then((r) => r.results),
+    [cityLoc, city]);
 
   const set = <K extends keyof TripRequest>(k: K, v: TripRequest[K]) => setReq((r) => ({ ...r, [k]: v }));
   const toggleMode = (m: TransportMode) =>

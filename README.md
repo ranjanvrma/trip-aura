@@ -19,6 +19,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Honest numbers.** Every rating and price says where it came from, estimates are labelled, and the fit score never uses outside ratings.
 - **Any currency, local one first.** Plan in any of 150 currencies. Pick a city and the form offers the one used there (EUR for Lisbon, PKR for Karachi) in one click. Rates come from the European Central Bank where it publishes them, and from ExchangeRate-API otherwise.
 - **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
+- **Finds your hotel.** The hotel search stays in your destination and matches a word anywhere in a name, so "inn" finds Holiday Inn and Golden Inn, with places to stay listed first.
 - **Easy to read.** A 3D globe that turns to your destination, a ticket-style summary of each plan, a ribbon showing how each day's time is split, and charts of where the budget goes.
 - **No account.** Plans are saved in your browser on this device. They do not sync, and clearing site data removes them.
 
@@ -129,7 +130,7 @@ See [HANDOFF.md](HANDOFF.md#8-deployment-status) for deployment details and outs
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/trips/preview` | Generate an itinerary without saving it on the server |
-| GET | `/api/geo/cities?q=` · `/api/geo/addresses?q=` | City and hotel autocomplete |
+| GET | `/api/geo/cities?q=` · `/api/geo/addresses?q=&lat=&lng=&city=` | City and hotel autocomplete |
 | POST | `/api/nlp/parse-trip` | Free-text description → form fields |
 | GET | `/api/meta/status` · `/api/health` | Configuration status · health check |
 

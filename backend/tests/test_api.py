@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 
@@ -97,3 +98,30 @@ def test_address_suggestions_skip_features_without_coordinates(client, monkeypat
     results = r.json()["results"]
     # the nameless point is dropped too: it would show as an empty suggestion
     assert [(x["label"], x["lat"]) for x in results] == [("Rossio, Lisbon", 38.7139)]
+
+
+def test_address_search_matches_inside_names_and_stays_local(client, monkeypatch):
+    from app.routers import geo
+
+    def feat(name, kind, lng, lat):
+        props = {"name": name, "osm_value": kind, "city": "Jaipur"}
+        return {"properties": props, "geometry": {"coordinates": [lng, lat]}}
+
+    calls = []
+
+    def fake_get(url, params=None, **kw):
+        calls.append(params)
+        if "bbox" in params:          # the search limited to the destination area is down
+            raise httpx.ConnectError("down")
+        feats = [feat("Inn", "river", 10.5, 47.3), feat("Innovation Street", "street", 75.80, 26.92),
+                 feat("Holiday Inn", "hotel", 75.79, 26.91), feat("Holiday Inn", "hotel", 75.79, 26.91),
+                 feat("Golden Inn", "hotel", 75.81, 26.90), feat("City Mall", "mall", 75.78, 26.93)]
+        return httpx.Response(200, json={"features": feats}, request=httpx.Request("GET", "https://photon.test"))
+
+    monkeypatch.setattr(geo.httpx, "get", fake_get)
+    r = client.get("/api/geo/addresses", params={"q": "inn", "lat": 26.91, "lng": 75.79, "city": "Jaipur, India"})
+    assert r.status_code == 200
+    names = [x["name"] for x in r.json()["results"]]
+    # hotels with "inn" anywhere in the name first, the duplicate merged, the river 6,000 km away dropped
+    assert names == ["Holiday Inn", "Golden Inn", "Innovation Street", "City Mall"]
+    assert {c["q"] for c in calls} == {"inn", "inn Jaipur"}
