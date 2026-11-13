@@ -158,3 +158,20 @@ def test_trip_style_scores_meals_for_the_style():
     assert budget.meal_fit(allowance) < mid.meal_fit(allowance) == 1.0       # a full-price meal stretches a cheap trip
     assert premium.meal_fit(allowance * 0.1) < mid.meal_fit(allowance * 0.1)  # the cheapest places suit premium less
     assert premium.meal_fit(allowance) == 1.0
+
+
+def test_auto_rickshaws_only_where_they_exist():
+    from app.engines.transport import NO_AUTO_NOTE, local_modes
+    from app.schemas.trip import TransportMode as M
+
+    assert local_modes([M.WALKING, M.AUTO, M.METRO], "PT") == ([M.WALKING, M.CAB, M.METRO], NO_AUTO_NOTE)
+    assert local_modes([M.AUTO, M.CAB], "jp") == ([M.CAB], NO_AUTO_NOTE)          # no duplicate cab
+    assert local_modes([M.WALKING, M.AUTO], "IN") == ([M.WALKING, M.AUTO], None)  # India keeps its autos
+    assert local_modes([M.WALKING, M.AUTO], None) == ([M.WALKING, M.AUTO], None)  # unknown country: as asked
+    assert local_modes([M.WALKING, M.METRO], "PT") == ([M.WALKING, M.METRO], None)
+
+
+def test_jaipur_demo_still_plans_autos(client, base_request):
+    data = client.post("/api/trips/preview", json=base_request).json()
+    modes = {i["travel"]["chosen"]["mode"] for d in data["days"] for i in d["items"] if i.get("travel")}
+    assert "auto" in modes and data["request"]["transport_modes"] == base_request["transport_modes"]

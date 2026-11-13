@@ -32,6 +32,20 @@ LABEL = {
 }
 FALLBACK_ORDER = [TransportMode.AUTO, TransportMode.CAB, TransportMode.BUS]
 
+# Where auto-rickshaws, tuk-tuks, keke or moto-taxis are an everyday ride. Elsewhere (Lisbon, Kyoto...) the planner
+# books cabs instead, even when the request asks for autos. Unknown country: left as asked.
+AUTO_COUNTRIES = frozenset(
+    "IN PK BD LK NP BT MV TH KH LA MM ID PH TL EG SD ET KE TZ UG RW NG GH MZ MG PE GT HN NI".split())
+NO_AUTO_NOTE = "Auto-rickshaws are not a usual way to get around here, so cabs are planned instead."
+
+
+def local_modes(modes: list[TransportMode], country_code: str | None) -> tuple[list[TransportMode], str | None]:
+    """The requested modes as they exist at the destination, and a note when something was swapped."""
+    if TransportMode.AUTO not in modes or country_code is None or country_code.upper() in AUTO_COUNTRIES:
+        return modes, None
+    swapped = [TransportMode.CAB if m == TransportMode.AUTO else m for m in modes]
+    return list(dict.fromkeys(swapped)), NO_AUTO_NOTE
+
 
 @dataclass
 class TransportWeights:
@@ -87,6 +101,8 @@ class TransportEngine:
                  weights: TransportWeights | None = None, costs: CostModel | None = None):
         self.routes = routes
         self.city = city
+        auto_ok = city.country_code is None or city.country_code.upper() in AUTO_COUNTRIES
+        self.fallback = FALLBACK_ORDER if auto_ok else [m for m in FALLBACK_ORDER if m != TransportMode.AUTO]
         self.req = req
         self.pace = pace
         style = PROFILES[req.trip_style]
@@ -108,8 +124,8 @@ class TransportEngine:
                 continue
             _, minutes = heuristic_duration_min(mode, km, 1.15)
             best = minutes if best is None else min(best, minutes)
-        if best is None:  # only walking preferred and too far: assume a fallback auto/cab
-            _, best = heuristic_duration_min(TransportMode.AUTO, km, 1.15)
+        if best is None:  # only walking preferred and too far: assume the first fallback ride
+            _, best = heuristic_duration_min(self.fallback[0], km, 1.15)
         return best
 
     # ---- provider-backed options ----------------------------------------------
@@ -153,7 +169,7 @@ class TransportEngine:
         modes = self._candidate_modes(haversine_km(origin.lat, origin.lng, dest.lat, dest.lng))
         out = [option(mode) for mode in modes]
         if include_fallback and not any(o.practical for o in out):
-            for mode in FALLBACK_ORDER:
+            for mode in self.fallback:
                 if mode not in modes:
                     opt = option(mode)
                     opt.note = (opt.note + "; " if opt.note else "") + "not in your preferences"

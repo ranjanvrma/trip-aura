@@ -39,7 +39,8 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
     interests: ["museums", "monuments", "photography"],
     food_preferences: ["vegetarian"],
     food_categories: ["local_cuisine", "street_food"],
-    transport_modes: ["walking", "auto", "metro"],
+    // auto-rickshaws only by default for the Jaipur demo; elsewhere the planner swaps them for cabs anyway
+    transport_modes: mock ? ["walking", "auto", "metro"] : ["walking", "metro", "bus"],
     pace: "moderate",
     return_to_accommodation: true,
     fit_to_budget: false,

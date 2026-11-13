@@ -14,7 +14,7 @@ from app.engines.itinerary import ItineraryEngine, PlanConstraints, PlanResult, 
 from app.engines.pace import profile_for
 from app.engines.recommendation import ScoringContext
 from app.engines.style import PROFILES as STYLES
-from app.engines.transport import TransportEngine, TransportWeights
+from app.engines.transport import TransportEngine, TransportWeights, local_modes
 from app.providers.base import CityContext
 from app.schemas.common import DataSource
 from app.schemas.itinerary import DayPlan, DishSuggestion, Itinerary, ItemType, ItineraryItem
@@ -114,6 +114,11 @@ class ItineraryService:
         weekdays = [(start + dt.timedelta(days=i)).weekday() for i in range(req.num_days)]
         costs = self.costs_for(req, city)
         warnings += costs.notes
+        asked = req   # the itinerary keeps the request as made; planning uses the modes that exist locally
+        modes, mode_note = local_modes(req.transport_modes, city.country_code)
+        if mode_note:
+            warnings.append(mode_note)
+            req = req.model_copy(update={"transport_modes": modes})
         ctx = ScoringContext(req=req, origin=home.location, weekdays=weekdays, costs=costs)
 
         # NLP: typo-correct and expand interests ("musuems" -> museums, "temples" -> religious sites)
@@ -178,7 +183,7 @@ class ItineraryService:
             attributions.append(OPEN_ER_ATTRIBUTION)
 
         itinerary = Itinerary(
-            data_source=self.source, generated_at=utc_now(), request=req, accommodation=home,
+            data_source=self.source, generated_at=utc_now(), request=asked, accommodation=home,
             days=result.days, food_recommendations=food.recommendations(10),
             popular_dishes=self._dishes(food, city_data, req),
             budget=budget, unscheduled=result.unscheduled,
