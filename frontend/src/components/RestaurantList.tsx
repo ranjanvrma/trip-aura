@@ -38,7 +38,7 @@ export default function RestaurantList({ recs, popular }: { recs: FoodRecommenda
               </span>
             </div>
             <div className="row wrap gap-s mt-xs">
-              <ExternalRatingBadge rating={r.place.external_rating} />
+              <ExternalRatingBadge rating={r.place.external_rating} hideEmpty />
               <SuitabilityBadge score={r.suitability} />
             </div>
             <p className="small muted mt-xs">

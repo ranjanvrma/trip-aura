@@ -1,9 +1,13 @@
 import { Star } from "lucide-react";
 import type { ExternalRating, SuitabilityScore } from "../types";
 
-/** External (Google or demo) rating. Always shown separately from our suitability score. */
-export function ExternalRatingBadge({ rating }: { rating?: ExternalRating | null }) {
+/**
+ * External (Google or demo) rating. Always shown separately from our suitability score.
+ * In lists, `hideEmpty` leaves unrated places without a badge (the place details still say "No rating").
+ */
+export function ExternalRatingBadge({ rating, hideEmpty = false }: { rating?: ExternalRating | null; hideEmpty?: boolean }) {
   if (!rating || rating.rating == null) {
+    if (hideEmpty) return null;
     return (
       <span className="badge badge-muted" title={rating?.label ?? "Open data has no ratings and no Google match was found"}>
         No rating

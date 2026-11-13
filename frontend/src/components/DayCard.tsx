@@ -1,5 +1,5 @@
 import type { DayPlan, ItineraryItem } from "../types";
-import { MODE_LABEL, fmtMoney, moneyLabel } from "../utils";
+import { MODE_LABEL, fmtDay, fmtDuration, fmtMoney, moneyLabel } from "../utils";
 import { type LucideIcon, ArrowRight, Coffee, House, Sun } from "lucide-react";
 import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
 
@@ -51,12 +51,23 @@ function TravelRow({ item }: { item: ItineraryItem }) {
   );
 }
 
+/**
+ * Notes not already said by the line above them. The backend repeats the diet check in both the fit reasons
+ * and the notes ("Diet info: unverified" next to "No verified vegetarian information"); each fact shows once.
+ */
+function extraNotes(it: ItineraryItem): string[] {
+  const said = new Set(it.suitability?.reasons.slice(0, 2) ?? []);   // only what the line above actually shows
+  const unverifiedSaid = [...said, ...it.notes].some((t) => /^No verified /.test(t));
+  return it.notes.filter((n, i) =>
+    !said.has(n) && it.notes.indexOf(n) === i && !(unverifiedSaid && n === "Diet info: unverified"));
+}
+
 export default function DayCard({ day, color, currency, selectedId, onSelect }: Props) {
   let stop = 0;
   return (
     <section className="tile day" id={`day-${day.day_number}`} style={{ "--day": color } as React.CSSProperties}>
       <header className="day-head">
-        <h2 className="h3"><span className="day-dot" aria-hidden />Day {day.day_number} <span className="muted day-date">{day.weekday}, {day.date}</span></h2>
+        <h2 className="h3"><span className="day-dot" aria-hidden />Day {day.day_number} <span className="muted day-date">{fmtDay(day.date)}</span></h2>
         <span className="day-total" title={`Verified ${fmtMoney(day.budget.verified_amount, currency)} · estimated ${fmtMoney(day.budget.estimated_amount, currency)}`}>
           {fmtMoney(day.budget.total, currency)}
         </span>
@@ -80,12 +91,13 @@ export default function DayCard({ day, color, currency, selectedId, onSelect }: 
                       {isStop || it.place ? (
                         <button className="link" onClick={() => onSelect(it)}>{it.title}</button>
                       ) : <span>{it.title}</span>}
-                      {it.type !== "start" && it.type !== "end" && <span className="muted small">{it.start}-{it.end}</span>}
-                      <span className={`period period-${it.period}`}>{it.period}</span>
+                      {it.type !== "start" && it.type !== "end" && (
+                        <span className="muted small num" title={`${it.start} to ${it.end}`}>{fmtDuration(it.duration_min)}</span>
+                      )}
                     </div>
                     {isStop && it.place && (
                       <div className="row wrap gap-s mt-xs">
-                        <ExternalRatingBadge rating={it.place.external_rating} />
+                        <ExternalRatingBadge rating={it.place.external_rating} hideEmpty />
                         <SuitabilityBadge score={it.suitability} />
                         <CostTag item={it} />
                         {it.suitability?.discovery && <span className="badge badge-discovery">Beyond your interests</span>}
@@ -93,7 +105,7 @@ export default function DayCard({ day, color, currency, selectedId, onSelect }: 
                     )}
                     {it.type === "rest" && it.cost && it.cost.amount > 0 && <CostTag item={it} />}
                     {it.suitability && <p className="small muted mt-xs">{it.suitability.reasons.slice(0, 2).join(" · ")}</p>}
-                    {it.notes.map((n) => <p key={n} className="small note">{n}</p>)}
+                    {extraNotes(it).map((n) => <p key={n} className="small note">{n}</p>)}
                   </>
                 )}
               </div>

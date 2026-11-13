@@ -19,7 +19,7 @@ import { useScrollMotion } from "../lib/useScrollMotion";
 import { getSavedTrip, listSavedTrips, saveTrip } from "../lib/localTrips";
 import { api, ApiError } from "../services/api";
 import type { ItineraryItem } from "../types";
-import { dataSourceLabel, dayColor } from "../utils";
+import { dataSourceLabel, dayColor, fmtDay } from "../utils";
 import NotFoundPage from "./NotFoundPage";
 
 function useIsNarrow(query = "(max-width: 960px)") {
@@ -112,7 +112,7 @@ export default function TripPage() {
   const commands = useMemo<Command[]>(() => !it ? [] : [
     { id: "all-days", label: "Show all days", group: "This trip", icon: CalendarDays, run: () => showDay("all") },
     ...it.days.map<Command>((d) => ({
-      id: `day-${d.day_number}`, label: `Show day ${d.day_number}`, hint: `${d.weekday} ${d.date}`, group: "This trip",
+      id: `day-${d.day_number}`, label: `Show day ${d.day_number}`, hint: fmtDay(d.date), group: "This trip",
       icon: CalendarDays, run: () => showDay(d.day_number),
     })),
     { id: "regen", label: "Regenerate this itinerary", group: "This trip", icon: RotateCcw, run: () => void regenerate() },
@@ -140,6 +140,9 @@ export default function TripPage() {
   }
 
   const r = it.request;
+  const notes = it.disclaimers.filter((d) => !d.startsWith("DEMO"));
+  // a source failed or returned nothing: say so in one plain sentence, with the specifics one click away
+  const missing = it.warnings.some((w) => /unavailable|missing|no .* data/i.test(w));
   const details = selected && <PlaceDetails item={selected} onClose={() => setSelected(null)} embedded={narrow} />;
 
   return (
@@ -162,16 +165,17 @@ export default function TripPage() {
       </header>
 
       {it.disclaimers.filter((d) => d.startsWith("DEMO")).map((d) => <p key={d} className="notice notice-warn small">{d}</p>)}
-      {it.disclaimers.some((d) => !d.startsWith("DEMO")) && (
-        <details className="about-data">
-          <summary>About this data</summary>
+      {(notes.length > 0 || it.warnings.length > 0) && (
+        <details className="data-notes">
+          <summary>
+            {missing ? "Some opening hours, fees or diet details may be missing from this plan" : "About this plan's data"}
+            <span className="muted"> · details</span>
+          </summary>
           <ul className="small muted">
-            {it.disclaimers.filter((d) => !d.startsWith("DEMO")).map((d) => <li key={d}>{d}</li>)}
+            {it.warnings.map((w) => <li key={w}>{w}</li>)}
+            {notes.map((d) => <li key={d}>{d}</li>)}
           </ul>
         </details>
-      )}
-      {it.warnings.length > 0 && (
-        <div className="notice notice-warn small"><ul>{it.warnings.map((w) => <li key={w}>{w}</li>)}</ul></div>
       )}
       {it.ai_summary && (
         <section className="tile">
@@ -220,7 +224,6 @@ export default function TripPage() {
                        current={null} />
             </div>
             {!narrow && details}
-            <p className="tile small muted">Live location updates aren’t available for trips saved only in this browser.</p>
             <BudgetSummary b={it.budget} />
           </div>
         </div>

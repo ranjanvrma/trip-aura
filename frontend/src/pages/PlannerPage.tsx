@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Trash } from "lucide-react";
 import DescribeTrip from "../components/DescribeTrip";
+import GeneratingPanel from "../components/GeneratingPanel";
 import Globe from "../components/globe/Globe";
 import TripForm from "../components/TripForm";
 import RetryNotice from "../components/ui/RetryNotice";
@@ -27,6 +28,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const deleteTrip = useDeleteTrip();
 
   const [submitting, setSubmitting] = useState(false);
+  const [pendingCity, setPendingCity] = useState("");
   const [prefill, setPrefill] = useState<{ parsed: ParsedTrip; version: number } | null>(null);
   const [error, setError] = useState<{ message: string; details?: unknown } | null>(null);
   const [cityLoc, setCityLoc] = useState<LatLng | null>(null);
@@ -49,7 +51,11 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
 
   const submit = async (req: TripRequest) => {
     setSubmitting(true);
+    setPendingCity(req.destination_city);
     setError(null);
+    // The form is long and the progress panel that replaces it is short, so jump to the top of the tile
+    // once the panel has rendered (an instant jump: the content under the pointer is changing anyway).
+    window.setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: "auto", block: "start" }), 0);
     try {
       const it = await api.previewTrip(req);
       const saved = saveTrip(it);
@@ -64,8 +70,6 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
       setSubmitting(false);
     }
   };
-
-  const loadingCity = submitting && status?.data_mode === "open";
 
   return (
     <div className="bento planner" ref={root}>
@@ -111,14 +115,13 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
             )}
           </div>
         )}
-        {loadingCity && (
-          <div className="notice notice-info" role="status">
-            Loading map data for this city. The first trip to a new city can take up to a minute; later trips there are quick.
-          </div>
-        )}
+        {submitting && <GeneratingPanel city={pendingCity} firstVisitHint={status?.data_mode === "open"} />}
         {options.data && status ? (
-          <TripForm options={options.data} status={status} submitting={submitting} onSubmit={(r) => void submit(r)}
-                    prefill={prefill} onCityLocation={setCityLoc} />
+          // kept mounted (hidden) while generating, so the details are still there if the request fails
+          <div hidden={submitting}>
+            <TripForm options={options.data} status={status} submitting={submitting} onSubmit={(r) => void submit(r)}
+                      prefill={prefill} onCityLocation={setCityLoc} />
+          </div>
         ) : options.error ? (
           <RetryNotice message={`Couldn't load the form options: ${options.error.message}`} onRetry={() => void options.refresh()} />
         ) : (

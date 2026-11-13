@@ -215,7 +215,7 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
     if n:
         days = n + 1 if m.group(2).startswith("night") else n
         f["num_days"] = max(1, min(14, days))
-        res.understood.append(f"{f['num_days']} day(s)")
+        res.understood.append(f"{f['num_days']} day{'' if f['num_days'] == 1 else 's'}")
     elif _has(t, "long weekend"):
         f["num_days"] = 3
         res.understood.append("3 days (long weekend)")
@@ -244,7 +244,7 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
         f["travelers"] = 1
     if "travelers" in f:
         f["travelers"] = max(1, min(20, f["travelers"]))
-        res.understood.append(f"{f['travelers']} traveller(s)")
+        res.understood.append(f"{f['travelers']} traveller{'' if f['travelers'] == 1 else 's'}")
 
     # budget
     b = parse_budget(raw)

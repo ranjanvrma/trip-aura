@@ -223,3 +223,12 @@ def test_api_parse_and_city_endpoints(client, monkeypatch):
     body = r.json()
     assert r.status_code == 200 and body["fields"]["destination_city"] == "Barcelona, Spain"
     assert body["fields"]["food_preferences"] == ["vegan"] and body["understood"]
+
+
+def test_parser_understood_uses_real_plurals():
+    from app.nlp.trip_parser import parse_trip_text
+
+    one = parse_trip_text("1 day in Jaipur, solo trip", None).understood
+    many = parse_trip_text("4 days in Jaipur with my partner", None).understood
+    assert "1 day" in one and "4 days" in many and "2 travellers" in many
+    assert not any("(s)" in u for u in one + many)

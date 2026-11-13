@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-12 · **Branch:** `main` · **Latest change:** corrected project status and follow-up tasks after auditing the tracked repository files
+**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** ten interface polish fixes (form, trip page, waiting panel, plain-language notices); all links re-checked
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -11,7 +11,7 @@
 ## 0. If you are an AI agent, read this first
 
 1. Read this whole file, then `README.md` (architecture + setup), then run `git log --oneline -15`.
-2. CI runs the offline backend suite and frontend production build. The latest known backend result is **130 passing**; the frontend build also passed in CI.
+2. CI runs the offline backend suite and frontend production build. The latest known backend result is **131 passing**; the frontend build also passed in CI.
 3. **Rules:**
    - Update **HANDOFF.md in every commit** (header, affected sections, change-log row). The hook `.githooks/pre-commit` enforces it once `git config core.hooksPath .githooks` is set.
    - **No AI attribution anywhere:** no `Co-Authored-By` lines for AI tools, no assistant or tool names in code, docs or commit messages.
@@ -35,7 +35,7 @@
   - budget
   - browser-local saved trips (no account or email needed), security headers and request limits
   - **redesigned frontend**: light-mode bento layout, 3D globe, command menu, sheets, toasts with undo, Terms/Privacy/404 pages
-  - **130 backend tests pass**, the frontend builds, and CI runs on every push
+  - **131 backend tests pass**, the frontend builds, and CI runs on every push
 - **Deployed:** the public Vercel site and Azure backend are live (see [§8](#8-deployment-status)). Trip generation uses the public preview endpoint; the browser stores saved plans locally.
 
 ---
@@ -133,7 +133,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 ```bash
 cd backend && python -m venv .venv && .venv/Scripts/pip install -r requirements.txt && cp .env.example .env
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000     # http://127.0.0.1:8000/docs
-.venv/Scripts/python -m pytest -q                                      # 130 passed, offline (last recorded CI run)
+.venv/Scripts/python -m pytest -q                                      # 131 passed, offline (last recorded CI run)
 cd frontend && npm install && npm run dev                               # http://localhost:5173 (proxies /api)
 npm run build
 ```
@@ -237,7 +237,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-12 | (this commit) | Audit tracked repository files and reconcile README/HANDOFF status, test count, deployment verification, and next steps. |
+| 2026-11-13 | (this commit) | Interface polish, ten fixes: Generate button no longer floats over the form; open-data banner is one quiet line (demo-mode and error banners unchanged); trip warnings and disclaimers fold into one plain sentence with details (`data-notes`); removed the dead live-location tile; dates read "Sat, 12 Dec" (`fmtDay`); stops show a duration instead of a repeated time range and period tag, and each diet fact appears once (`extraNotes` in `DayCard`); unrated places show no badge in lists (`hideEmpty`, place details still say "No rating"); parser plurals ("4 days", "2 travellers", tested); custom chips use an "Add your own" chip instead of three input rows; a `GeneratingPanel` replaces the form while a plan is built (elapsed time, no fake percentage). All routes and external links re-checked. 131 tests |
+| 2026-11-12 | `635eb3d` | Audit tracked repository files and reconcile README/HANDOFF status, test count, deployment verification, and next steps. |
 | 2026-11-10 | `e6de362` | Remove the leftover sign-in code after `7113855`: auth/email/idempotency/live-location routers, services, models, errors and settings, the saved-trip API (only `POST /api/trips/preview` remains), CORS credentials; tests rewritten for the public flow (`test_security.py`), CI green again; unused frontend CSS removed. 130 tests |
 | 2026-11-10 | `7113855` | Remove sign-in and save generated itineraries in browser storage; update privacy, deployment, and setup docs |
 | 2026-11-10 | `34ddc15` | Add Vercel security headers and long-lived cache for hashed assets; dependency audits clean |
