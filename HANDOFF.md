@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** added `CLAUDE.md`, the working guide; README and this file point to it
+**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** reconciled handoff with the latest GitHub interface and parser changes
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -47,7 +47,7 @@ git pull
 git log --oneline -15
 git config core.hooksPath .githooks     # once per clone
 ```
-1. Read §8 (deployment plan) and §9 (what's next).
+1. Read §8 (deployment status) and §9 (what's next).
 2. Run the app and tests (§6). If a fresh clone fails, fix that first.
 
 ---
@@ -69,7 +69,7 @@ git config core.hooksPath .githooks     # once per clone
 - **Food:** recommendations with evidence-based dishes.
 - **Budget:** per day and per category, with savings suggestions.
 - **Also:** unscheduled-but-good places, warnings, disclaimers and data attributions.
-- **Live mode:** next-stop distance, refreshed estimates and alerts.
+- **Visuals and summary:** a map, place details and an optional AI-written overview based only on the generated itinerary facts.
 
 **Original brief rules that still govern decisions:**
 - modular providers; demo mode clearly labelled
@@ -180,7 +180,7 @@ The backend workflow builds and deploys on pushes to `main` that change `backend
 **Other follow-ups:**
 - Owners to review the Terms and Privacy pages (`frontend/src/pages/LegalPages.tsx`); they describe real data flows but have not been lawyer-reviewed.
 - Place photos and BlurHash placeholders (Wikidata P18 / Wikimedia Commons are possible sources).
-- A true per-stage progress indicator for first-time city loading needs async backend loading.
+- The planner now shows an indeterminate generation panel with elapsed time and explanatory steps. A true per-stage progress indicator still needs async backend loading and status polling.
 - Lottie is not used; current animation uses Motion, GSAP and CSS.
 - Credit Chinmay in GitHub contributors by using his GitHub email or a `Co-authored-by` trailer if desired.
 - Nice to have: async city loading, real routing, GTFS transit, a LICENSE file, and testing Google enrichment with a real key.
@@ -195,10 +195,10 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 2. **UI follow-ups** (the redesign itself is done):
    - **Owners to review the Terms and Privacy pages** (`frontend/src/pages/LegalPages.tsx`). They describe the real data flows but aren't lawyer-reviewed. Contact is via GitHub issues; there's no public email or phone yet, so "clickable email/phone" is not implemented.
    - Place photos (and BlurHash placeholders for them): the data has no images yet; Wikidata P18 / Wikimedia Commons is the free source. Only the globe uses a blurred placeholder today.
-   - A true per-stage progress indicator for first-time city loading (needs async loading on the backend).
+   - The current generation panel explains the work and shows elapsed time, but cannot report actual backend stages. True per-stage progress needs async loading and status polling.
    - Lottie: not used. Animations are Motion (sheets, toasts, menus), GSAP (scroll reveals, parallax, globe turns) and CSS. Add Lottie only with self-made or properly licensed animation files.
 3. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email (his email is still unknown).
-4. **Dependabot PRs:** merge the green ones (#1–#3 GitHub Actions bumps, #5/#7/#9 backend minimums). Close #4 (React 19), #6 (react-leaflet 5) and #8 (Vite plugin 6): those are major upgrades that need their own change. React Router was moved to 7.18.5 in the redesign (fixes an open-redirect advisory). Majors are now ignored by `dependabot.yml`.
+4. **Dependabot:** review the currently open dependency PRs in GitHub. Minor and patch upgrades are grouped; major upgrades are ignored and should be considered separately with any required code changes.
 5. **Nice to have:**
    - async city loading with progress polling
    - real routing (`ROUTING_ENGINE=osrm` exists; it uses public demo servers)
@@ -237,7 +237,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-13 | (this commit) | Add `CLAUDE.md`, the working guide (what the project is, folder map, commands, coding, design, honesty and security rules, known pitfalls, done checklist); README and HANDOFF §0 point to it; docs rule now allows this third file |
+| 2026-11-13 | (this commit) | Reconcile HANDOFF with the latest GitHub changes: remove stale live-location output, describe the indeterminate generation panel accurately, and replace outdated Dependabot PR numbers with a current review task. |
+| 2026-11-13 | `c705060` | Add `CLAUDE.md`, the working guide (what the project is, folder map, commands, coding, design, honesty and security rules, known pitfalls, done checklist); README and HANDOFF §0 point to it; docs rule now allows this third file |
 | 2026-11-13 | `6c3d0f0` | Interface polish, ten fixes: Generate button no longer floats over the form; open-data banner is one quiet line (demo-mode and error banners unchanged); trip warnings and disclaimers fold into one plain sentence with details (`data-notes`); removed the dead live-location tile; dates read "Sat, 12 Dec" (`fmtDay`); stops show a duration instead of a repeated time range and period tag, and each diet fact appears once (`extraNotes` in `DayCard`); unrated places show no badge in lists (`hideEmpty`, place details still say "No rating"); parser plurals ("4 days", "2 travellers", tested); custom chips use an "Add your own" chip instead of three input rows; a `GeneratingPanel` replaces the form while a plan is built (elapsed time, no fake percentage). All routes and external links re-checked. 131 tests |
 | 2026-11-12 | `635eb3d` | Audit tracked repository files and reconcile README/HANDOFF status, test count, deployment verification, and next steps. |
 | 2026-11-10 | `e6de362` | Remove the leftover sign-in code after `7113855`: auth/email/idempotency/live-location routers, services, models, errors and settings, the saved-trip API (only `POST /api/trips/preview` remains), CORS credentials; tests rewritten for the public flow (`test_security.py`), CI green again; unused frontend CSS removed. 130 tests |
