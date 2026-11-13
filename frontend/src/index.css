@@ -196,6 +196,11 @@ code { font-size: .9em; background: var(--surface-2); border: 1px solid var(--li
 .footer .logo { border-radius: 9px; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--on-primary) 40%, transparent); }
 .footer .muted { color: color-mix(in srgb, var(--on-primary) 70%, transparent); }
 .footer-brand p { margin-top: 10px; max-width: 42ch; }
+.footer-people { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
+.footer-people li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.footer-people span { color: var(--on-primary); font-weight: 560; min-width: 8.5em; }
+.footer-people a { color: color-mix(in srgb, var(--on-primary) 72%, transparent); font-size: .84rem; text-decoration: none; }
+.footer-people a:hover { color: var(--on-primary); text-decoration: underline; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 6px 22px; align-content: start; }
 .footer-links a { color: var(--on-primary); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; opacity: .9; }
 .footer-links a:hover { opacity: 1; text-decoration: underline; color: var(--on-primary); }

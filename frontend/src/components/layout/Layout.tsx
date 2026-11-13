@@ -10,6 +10,11 @@ import Logo from "./Logo";
 
 export const REPO_URL = "https://github.com/ranjanvrma/trip-aura";
 
+const AUTHORS = [
+  { name: "Ranjan Verma", github: "https://github.com/ranjanvrma", linkedin: "https://www.linkedin.com/in/ranjan-vrma/" },
+  { name: "Chinmay Dahiya", github: "https://github.com/dahiyachinmay15", linkedin: "https://www.linkedin.com/in/chinmaydahiya/" },
+];
+
 /** Warm the route's code chunk on hover or focus, so the next page appears without a wait. */
 const preload: Record<string, () => Promise<unknown>> = {
   "/trips": () => import("../../pages/TripsPage"),
@@ -79,7 +84,16 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
         <div className="footer-inner">
           <div className="footer-brand">
             <Link to="/" className="brand"><Logo /> <span>TripAura</span></Link>
-            <p className="muted small">Day-by-day trip plans from open map data. Built by Ranjan Verma and Chinmay Dahiya.</p>
+            <p className="muted small">Day-by-day trip plans from open map data.</p>
+            <ul className="footer-people" aria-label="Made by">
+              {AUTHORS.map((a) => (
+                <li key={a.name}>
+                  <span>{a.name}</span>
+                  <a href={a.github} target="_blank" rel="noopener noreferrer" aria-label={`${a.name} on GitHub`}>GitHub</a>
+                  <a href={a.linkedin} target="_blank" rel="noopener noreferrer" aria-label={`${a.name} on LinkedIn`}>LinkedIn</a>
+                </li>
+              ))}
+            </ul>
           </div>
           <nav className="footer-links" aria-label="Footer">
             <Link to="/terms" onPointerEnter={warm("/terms")}>Terms of use</Link>

@@ -141,6 +141,7 @@ See [HANDOFF.md](HANDOFF.md#8-deployment-status) for deployment details and outs
 
 ## Authors
 
-[Ranjan Verma](https://github.com/ranjanvrma) and [Chinmay Dahiya](https://github.com/dahiyachinmay15)
+- **Ranjan Verma**: [GitHub](https://github.com/ranjanvrma) · [LinkedIn](https://www.linkedin.com/in/ranjan-vrma/)
+- **Chinmay Dahiya**: [GitHub](https://github.com/dahiyachinmay15) · [LinkedIn](https://www.linkedin.com/in/chinmaydahiya/)
 
 Data © OpenStreetMap contributors (ODbL), Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Every itinerary lists its sources.

@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** **v1.0.1**: interface pass to remove template-looking elements, quick-start cities on the home page, components grouped by feature, quieter motion
+**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** **v1.0.2**: footer credits both authors with GitHub and LinkedIn; the dev server restarts itself when package.json changes, so a version bump shows up locally
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -238,7 +238,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-13 | (this commit) | **v1.0.1.** Interface pass: removed template tells (uppercase tile labels, dash eyebrows, icon fact list, Keyboard and How-it's-built tiles, shortcut badges inside fields, pinned data banner); sentence-case serif headings; plainer copy; quick-start cities in the hero (looked up in the city index, fill the form and turn the globe); data note moved under the submit button; home layout is now hero, planning column, side column; quiet entrance motion (ticket, day ribbons, budget ring and bars), smooth scrolling, all off under reduced motion. Components grouped by feature (`planner/`, `trip/`, `ui/`, `layout/`), `Kbd` in its own file, dead CSS removed. README rewritten without the "AI-powered" tagline, with app and release links |
+| 2026-11-13 | (this commit) | **v1.0.2.** Footer lists Ranjan Verma and Chinmay Dahiya with GitHub and LinkedIn links (README Authors too). `vite.config.ts` restarts the dev server when `package.json` changes, so a version bump reaches the footer without a manual restart (the version was frozen at server start, so v1.0.1 still showed 1.0.0 locally) |
+| 2026-11-13 | `55e787c` | **v1.0.1.** Interface pass: removed template tells (uppercase tile labels, dash eyebrows, icon fact list, Keyboard and How-it's-built tiles, shortcut badges inside fields, pinned data banner); sentence-case serif headings; plainer copy; quick-start cities in the hero (looked up in the city index, fill the form and turn the globe); data note moved under the submit button; home layout is now hero, planning column, side column; quiet entrance motion (ticket, day ribbons, budget ring and bars), smooth scrolling, all off under reduced motion. Components grouped by feature (`planner/`, `trip/`, `ui/`, `layout/`), `Kbd` in its own file, dead CSS removed. README rewritten without the "AI-powered" tagline, with app and release links |
 | 2026-11-13 | `ea37847` | **v1.0.0.** Complete redesign: travel-atlas palette (paper, deep teal, terracotta), full-width hero with a real 3D globe (Natural Earth land, live day/night from the sun's position, drag to turn, destination pin and saved-trip pins, lazy chunk; detailed coastline, lighter one on slow connections), ticket-style trip header with real totals, day ribbons, budget ring and per-day bars, seeded contour artwork on trip cards, dark teal footer with the version, new logo colours and icons. Version system added (§13), past milestones tagged |
 | 2026-11-13 | `712cc2b` | Reconcile HANDOFF with the latest GitHub changes: remove stale live-location output, describe the indeterminate generation panel accurately, and replace outdated Dependabot PR numbers with a current review task. |
 | 2026-11-13 | `c705060` | Add `CLAUDE.md`, the working guide (what the project is, folder map, commands, coding, design, honesty and security rules, known pitfalls, done checklist); README and HANDOFF §0 point to it; docs rule now allows this third file |
@@ -293,7 +294,8 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 
 | Version | Commit | Date | What it is |
 |---|---|---|---|
-| v1.0.1 | (this commit) | 2026-11-13 | Interface pass without template-looking elements, quick-start cities, components grouped by feature, quieter motion |
+| v1.0.2 | (this commit) | 2026-11-13 | Author credits with GitHub and LinkedIn; version shows correctly in local dev |
+| v1.0.1 | `55e787c` | 2026-11-13 | Interface pass without template-looking elements, quick-start cities, components grouped by feature, quieter motion |
 | v1.0.0 | `ea37847` | 2026-11-13 | Public-ready redesign: real 3D globe, atlas look, ticket header, day ribbons, budget charts; version system |
 | v0.7.1 | `6c3d0f0` | 2026-11-13 | Ten interface fixes (form, notices, dates, waiting panel) |
 | v0.7.0 | `e6de362` | 2026-11-10 | No accounts: trips saved in the browser; sign-in code removed |

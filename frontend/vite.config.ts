@@ -65,13 +65,31 @@ function prerenderHeads(): Plugin {
   };
 }
 
+/**
+ * The version shown in the footer is read from package.json when the dev server starts. Restart the server when
+ * package.json changes, so a version bump shows up locally without a manual restart.
+ */
+function restartOnPackageChange(): Plugin {
+  return {
+    name: "tripaura-restart-on-package-change",
+    apply: "serve",
+    configureServer(server) {
+      const pkg = resolve(server.config.root, "package.json");
+      server.watcher.add(pkg);
+      server.watcher.on("change", (file) => {
+        if (resolve(file) === pkg) void server.restart();
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const { version } = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as { version: string };
   return {
     // the release version (package.json), shown in the footer; bump it with every release (see HANDOFF, Versions)
     define: { __APP_VERSION__: JSON.stringify(version) },
-    plugins: [react(), contentSecurityPolicy(env.VITE_API_BASE_URL ?? "", !!env.VITE_GOOGLE_MAPS_API_KEY), prerenderHeads()],
+    plugins: [react(), restartOnPackageChange(), contentSecurityPolicy(env.VITE_API_BASE_URL ?? "", !!env.VITE_GOOGLE_MAPS_API_KEY), prerenderHeads()],
     build: {
       chunkSizeWarningLimit: 600,   // three.js (about 130 kB gzipped) loads lazily, only for the globe
       rollupOptions: {
