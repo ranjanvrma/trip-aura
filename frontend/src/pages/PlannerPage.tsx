@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Trash } from "lucide-react";
+import { ArrowRight, Earth, MapPin, Route, ScanSearch, Trash, Utensils, Wallet, Waypoints } from "lucide-react";
 import DescribeTrip from "../components/DescribeTrip";
 import GeneratingPanel from "../components/GeneratingPanel";
 import Globe from "../components/globe/Globe";
@@ -26,6 +26,10 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const options = useSWR(ready ? "options" : null, api.options, { dedupeMs: 60_000 });
   const trips = useSWR("localTrips", async () => listSavedTrips());
   const deleteTrip = useDeleteTrip();
+  // saved trips appear as pins on the globe (newest first, so the arc runs from the latest trip)
+  const pins = useMemo(() => (trips.data ?? []).slice(0, 12).map((t) => ({
+    lat: t.itinerary.accommodation.location.lat, lng: t.itinerary.accommodation.location.lng, label: t.title,
+  })), [trips.data]);
 
   const [submitting, setSubmitting] = useState(false);
   const [pendingCity, setPendingCity] = useState("");
@@ -73,26 +77,34 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
 
   return (
     <div className="bento planner" ref={root}>
-      <section className="tile tile-hero" data-reveal>
-        <p className="eyebrow">Day-by-day trip planner</p>
-        <h1 className="display">Plan each day of your trip, stop by stop.</h1>
-        <p className="lead">
-          Pick a city and where you're staying. TripAura orders the sights to cut travel time, checks opening hours,
-          adds meals that fit your diet and shows the cost of each day.
-        </p>
-        <div className="hero-actions">
-          <a href="#plan" className="btn btn-primary" onClick={(e) => {
-            e.preventDefault();
-            document.getElementById("plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
-            window.setTimeout(() => document.getElementById("city-input")?.focus({ preventScroll: true }), 450);
-          }}>Start planning <ArrowRight size={16} aria-hidden /></a>
-          <span className="small muted shortcut-hint">or press <Kbd>/</Kbd> to jump to the city field</span>
+      <section className="hero" aria-labelledby="hero-title">
+        <div className="hero-copy">
+          <p className="eyebrow">Day-by-day trip planner</p>
+          <h1 id="hero-title" className="display">
+            Every day of your trip, <em>planned stop by stop.</em>
+          </h1>
+          <p className="lead">
+            Pick a city and where you're staying. TripAura orders the sights to cut travel time, checks opening hours,
+            adds meals that fit your diet and shows what each day costs.
+          </p>
+          <div className="hero-actions">
+            <a href="#plan" className="btn btn-primary btn-lg" onClick={(e) => {
+              e.preventDefault();
+              document.getElementById("plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              window.setTimeout(() => document.getElementById("city-input")?.focus({ preventScroll: true }), 450);
+            }}>Start planning <ArrowRight size={18} aria-hidden /></a>
+            <span className="small muted shortcut-hint">or press <Kbd>/</Kbd></span>
+          </div>
+          <ul className="hero-facts" aria-label="What you get">
+            <li><Earth size={16} aria-hidden /> Over 34,000 cities</li>
+            <li><Waypoints size={16} aria-hidden /> Sights ordered to cut travel</li>
+            <li><Utensils size={16} aria-hidden /> Meals that fit your diet</li>
+            <li><Wallet size={16} aria-hidden /> A cost for every day</li>
+          </ul>
         </div>
-      </section>
-
-      <section className="tile tile-globe" data-reveal>
-        <div data-parallax="0.12" className="globe-wrap">
-          <Globe target={cityLoc} label={cityLoc ? "Your destination" : "Any city with open map data"} />
+        <div className="hero-globe" data-parallax="0.08">
+          <Globe target={cityLoc} pins={pins}
+                 label={cityLoc ? "Your destination on the globe" : "The globe, with your saved trips marked"} />
         </div>
       </section>
 
@@ -156,10 +168,10 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
       <section className="tile tile-steps" data-reveal aria-labelledby="how-title">
         <h2 id="how-title" className="tile-title">How a plan is built</h2>
         <ol className="steps">
-          <li><span><strong>Places.</strong> Overture Maps, Wikidata, OpenStreetMap and Wikivoyage are read for your city and cached for 30 days.</span></li>
-          <li><span><strong>Fit.</strong> Each place gets a 0 to 5 score for your interests, budget, distance, transport, time and pace.</span></li>
-          <li><span><strong>Order.</strong> Each day starts from its strongest sight and is reordered to shorten the walking and riding.</span></li>
-          <li><span><strong>Cost.</strong> Fares, meals and tickets are estimated from local price levels and marked as estimates.</span></li>
+          <li><span className="step-icon" aria-hidden><MapPin size={16} /></span><span><strong>Places.</strong> Overture Maps, Wikidata, OpenStreetMap and Wikivoyage are read for your city and cached for 30 days.</span></li>
+          <li><span className="step-icon" aria-hidden><ScanSearch size={16} /></span><span><strong>Fit.</strong> Each place gets a 0 to 5 score for your interests, budget, distance, transport, time and pace.</span></li>
+          <li><span className="step-icon" aria-hidden><Route size={16} /></span><span><strong>Order.</strong> Each day starts from its strongest sight and is reordered to shorten the walking and riding.</span></li>
+          <li><span className="step-icon" aria-hidden><Wallet size={16} /></span><span><strong>Cost.</strong> Fares, meals and tickets are estimated from local price levels and marked as estimates.</span></li>
         </ol>
       </section>
 

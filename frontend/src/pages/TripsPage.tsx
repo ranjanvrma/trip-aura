@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { CalendarDays, MapPinned, Plus, Trash } from "lucide-react";
+import ContourArt from "../components/art/ContourArt";
 import { usePageMeta } from "../lib/meta";
 import { listSavedTrips } from "../lib/localTrips";
 import { useSWR } from "../lib/swr";
@@ -39,6 +40,8 @@ export default function TripsPage() {
           {trips.data.map((trip) => (
             <li key={trip.id} className="tile trip-card">
               <Link to={`/trips/${trip.id}`} viewTransition className="trip-card-link">
+                <ContourArt seed={trip.destination} className="trip-card-art" />
+                <span className="trip-card-city">{trip.destination.split(",")[0]}</span>
                 <h2 className="h3">{trip.title}</h2>
                 <p className="small muted row gap-s"><CalendarDays size={14} aria-hidden />
                   <span className="num">{trip.num_days} day{trip.num_days > 1 ? "s" : ""}</span> · created {fmtDate(trip.created_at)}

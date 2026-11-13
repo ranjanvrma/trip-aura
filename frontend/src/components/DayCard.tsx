@@ -2,6 +2,7 @@ import type { DayPlan, ItineraryItem } from "../types";
 import { MODE_LABEL, fmtDay, fmtDuration, fmtMoney, moneyLabel } from "../utils";
 import { type LucideIcon, ArrowRight, Coffee, House, Sun } from "lucide-react";
 import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
+import DayRibbon from "./trip/DayRibbon";
 
 interface Props {
   day: DayPlan;
@@ -72,6 +73,7 @@ export default function DayCard({ day, color, currency, selectedId, onSelect }: 
           {fmtMoney(day.budget.total, currency)}
         </span>
       </header>
+      <DayRibbon day={day} />
       {day.warnings.map((w) => <p key={w} className="warn small">{w}</p>)}
       <ol className="timeline">
         {day.items.map((it) => {

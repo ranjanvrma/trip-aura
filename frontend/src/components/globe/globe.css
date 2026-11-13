@@ -1,0 +1,38 @@
+/* The hero globe. The parent sets the size (roughly square); the figure fills it. */
+.globe { position: relative; margin: 0; width: 100%; height: 100%; }
+
+.globe-canvas { position: absolute; inset: 0; cursor: grab; touch-action: pan-y; }
+.globe-canvas.is-dragging, .globe-canvas:active { cursor: grabbing; }
+.globe-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* soft shadow on the "ground" under the globe */
+.globe-shadow {
+  position: absolute; left: 18%; right: 18%; bottom: 2%; height: 9%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(21, 80, 92, .22), rgba(21, 80, 92, 0));
+  filter: blur(6px);
+}
+
+/* CSS stand-in shown until the first WebGL frame (and kept if WebGL is unavailable) */
+.globe-placeholder {
+  position: absolute; inset: 9%; border-radius: 50%; pointer-events: none;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .75), rgba(255, 255, 255, 0) 38%),
+    radial-gradient(circle at 60% 58%, #a9cbd4 0%, #9cc6d2 45%, #7fb0bd 100%);
+  box-shadow: 0 0 0 10px rgba(191, 225, 232, .35), 0 0 60px 18px rgba(191, 225, 232, .45);
+  transition: opacity 700ms var(--ease, ease);
+}
+.globe.is-ready .globe-placeholder { opacity: 0; }
+
+.globe-caption {
+  position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); display: grid; justify-items: center; gap: 2px;
+  text-align: center; pointer-events: none; white-space: nowrap; max-width: 100%;
+}
+.globe-caption-main {
+  font-size: .82rem; font-weight: 600; color: var(--primary, #15505c); background: color-mix(in srgb, var(--surface, #fffcf6) 88%, transparent);
+  border: 1px solid var(--line, #e4dac8); border-radius: 999px; padding: 4px 12px; box-shadow: 0 2px 8px rgba(28, 42, 44, .06);
+}
+.globe-caption-note { font-size: .7rem; color: var(--muted, #66706b); }
+
+@media (max-width: 640px) {
+  .globe-caption-note { white-space: normal; }
+}

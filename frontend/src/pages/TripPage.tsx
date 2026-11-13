@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { CalendarDays, Plus, RotateCcw } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { CalendarDays, RotateCcw } from "lucide-react";
 import BudgetSummary from "../components/BudgetSummary";
 import { type Command, usePageCommands } from "../components/CommandMenu";
 import DayCard from "../components/DayCard";
@@ -8,6 +8,8 @@ import MapView from "../components/map/MapView";
 import type { MapMarker, MapPolyline } from "../components/map/types";
 import PlaceDetails from "../components/PlaceDetails";
 import RestaurantList from "../components/RestaurantList";
+import { RibbonLegend } from "../components/trip/DayRibbon";
+import TripTicket from "../components/trip/TripTicket";
 import RetryNotice from "../components/ui/RetryNotice";
 import Sheet from "../components/ui/Sheet";
 import { Skeleton, SkeletonLines } from "../components/ui/Skeleton";
@@ -19,7 +21,7 @@ import { useScrollMotion } from "../lib/useScrollMotion";
 import { getSavedTrip, listSavedTrips, saveTrip } from "../lib/localTrips";
 import { api, ApiError } from "../services/api";
 import type { ItineraryItem } from "../types";
-import { dataSourceLabel, dayColor, fmtDay } from "../utils";
+import { dayColor, fmtDay } from "../utils";
 import NotFoundPage from "./NotFoundPage";
 
 function useIsNarrow(query = "(max-width: 960px)") {
@@ -130,7 +132,7 @@ export default function TripPage() {
   if (!it) {
     return (
       <div className="trip-layout" aria-busy="true" aria-label="Loading itinerary">
-        <div className="tile trip-summary"><Skeleton w="45%" h={28} /><Skeleton w="70%" /></div>
+        <div className="ticket ticket-loading"><div className="ticket-main"><Skeleton w="45%" h={34} /><Skeleton w="70%" /></div></div>
         <div className="trip-grid">
           <div className="stack-m">{[0, 1].map((i) => <div key={i} className="tile"><SkeletonLines lines={6} /></div>)}</div>
           <div className="tile"><Skeleton h={320} r={12} /></div>
@@ -139,7 +141,7 @@ export default function TripPage() {
     );
   }
 
-  const r = it.request;
+
   const notes = it.disclaimers.filter((d) => !d.startsWith("DEMO"));
   // a source failed or returned nothing: say so in one plain sentence, with the specifics one click away
   const missing = it.warnings.some((w) => /unavailable|missing|no .* data/i.test(w));
@@ -147,22 +149,7 @@ export default function TripPage() {
 
   return (
     <div className="trip-layout" ref={root}>
-      <header className="tile trip-summary">
-        <div>
-          <p className="eyebrow">Itinerary</p>
-          <h1 className="h1">{r.num_days} days in {r.destination_city}</h1>
-          <p className="muted small">
-            From {it.accommodation.name} · <span className="num">{r.travelers}</span> traveller{r.travelers > 1 ? "s" : ""} · {r.pace} pace
-            {" · "}<span className="badge">{dataSourceLabel(it.data_source)}</span>
-          </p>
-        </div>
-        <div className="row gap-s wrap">
-          <button className="btn btn-ghost" onClick={() => void regenerate()} disabled={regenerating}>
-            {regenerating ? <><span className="spinner" aria-hidden /> Regenerating</> : <><RotateCcw size={16} aria-hidden /> Regenerate</>}
-          </button>
-          <Link className="btn btn-primary" to="/" viewTransition><Plus size={16} aria-hidden /> New trip</Link>
-        </div>
-      </header>
+      <TripTicket it={it} regenerating={regenerating} onRegenerate={() => void regenerate()} />
 
       {it.disclaimers.filter((d) => d.startsWith("DEMO")).map((d) => <p key={d} className="notice notice-warn small">{d}</p>)}
       {(notes.length > 0 || it.warnings.length > 0) && (
@@ -185,6 +172,7 @@ export default function TripPage() {
         </section>
       )}
 
+      <div className="day-nav">
       <div className="day-tabs" role="tablist" aria-label="Days">
         <button role="tab" aria-selected={dayFilter === "all"} className={`seg ${dayFilter === "all" ? "is-on" : ""}`}
                 onClick={() => showDay("all")}>All days</button>
@@ -196,6 +184,8 @@ export default function TripPage() {
             <span className="day-dot" aria-hidden />Day {d.day_number}
           </button>
         ))}
+      </div>
+      <RibbonLegend />
       </div>
 
       <div className="trip-grid">

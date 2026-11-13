@@ -67,7 +67,10 @@ function prerenderHeads(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
+  const { version } = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as { version: string };
   return {
+    // the release version (package.json), shown in the footer; bump it with every release (see HANDOFF, Versions)
+    define: { __APP_VERSION__: JSON.stringify(version) },
     plugins: [react(), contentSecurityPolicy(env.VITE_API_BASE_URL ?? "", !!env.VITE_GOOGLE_MAPS_API_KEY), prerenderHeads()],
     build: {
       chunkSizeWarningLimit: 600,   // three.js (about 130 kB gzipped) loads lazily, only for the globe

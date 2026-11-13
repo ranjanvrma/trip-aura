@@ -86,6 +86,9 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
             <Link to="/privacy" onPointerEnter={warm("/privacy")}>Privacy policy</Link>
             <a href={REPO_URL} target="_blank" rel="noopener noreferrer"><CodeXml size={14} aria-hidden /> Source code</a>
             <a href={`${REPO_URL}/issues`} target="_blank" rel="noopener noreferrer">Contact and support</a>
+            <a href={`${REPO_URL}/releases`} target="_blank" rel="noopener noreferrer" className="footer-version">
+              Version {__APP_VERSION__}
+            </a>
           </nav>
           <p className="footer-legal small muted">
             © {new Date().getFullYear()} Ranjan Verma and Chinmay Dahiya. Map data © OpenStreetMap contributors (ODbL),
