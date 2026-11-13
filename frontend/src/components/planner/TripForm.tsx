@@ -3,7 +3,6 @@ import { api } from "../../services/api";
 import type {
   AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, ParsedTrip, TransportMode, TripRequest,
 } from "../../types";
-import { localCurrency } from "../../lib/localCurrency";
 import { MODE_LABEL, pretty } from "../../utils";
 import Autocomplete from "../ui/Autocomplete";
 import ChipSelect from "./ChipSelect";
@@ -45,8 +44,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
   // the destination country's own currency, offered as a one-click choice
   const [local, setLocal] = useState<{ currency: string; country: string } | null>(null);
   const suggestCurrency = useCallback((c: CitySuggestion) => {
-    const currency = localCurrency(c.country_code, options.currencies);
-    setLocal(currency ? { currency, country: c.country } : null);
+    setLocal(c.currency && options.currencies.includes(c.currency) ? { currency: c.currency, country: c.country } : null);
   }, [options.currencies]);
 
   useEffect(() => { onCityLocation?.(cityLoc); }, [cityLoc, onCityLocation]);

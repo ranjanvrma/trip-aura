@@ -180,6 +180,9 @@ class FakeFx:
     def convert(self, amount, src, dst):
         return amount / self.rates[src] * self.rates[dst]
 
+    def basis(self, src, dst):
+        return "ECB reference rate"
+
 
 def test_cost_model_scales_by_country_and_currency():
     us = CostModel.build("US", "USD")
@@ -211,3 +214,37 @@ def test_fx_service_parses_and_fails_loudly():
     bad = FxService("https://fx.test/latest", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
     with pytest.raises(ProviderRequestError):
         bad.usd_to("EUR")
+
+
+def _two_source_fx(ecb_ok: bool = True, open_ok: bool = True) -> FxService:
+    def handler(r: httpx.Request) -> httpx.Response:
+        if r.url.host == "ecb.test":
+            ok = httpx.Response(200, json={"date": "2026-11-13", "rates": {"EUR": 0.9}})
+            return ok if ecb_ok else httpx.Response(500)
+        return (httpx.Response(200, json={"result": "success", "rates": {"USD": 1, "EUR": 0.95, "PKR": 280}})
+                if open_ok else httpx.Response(503))
+    return FxService("https://ecb.test/latest", "https://open.test/latest/USD", transport=httpx.MockTransport(handler))
+
+
+def test_fx_covers_every_currency_and_prefers_ecb():
+    fx = _two_source_fx()
+    assert fx.usd_to("EUR") == 0.9                      # ECB wins over the open source
+    assert fx.usd_to("PKR") == 280                      # only the open source has it
+    assert fx.basis("USD", "EUR") == "ECB reference rate"
+    assert fx.basis("EUR", "PKR") == "ExchangeRate-API rate"
+    assert _two_source_fx(ecb_ok=False).usd_to("PKR") == 280 and _two_source_fx(open_ok=False).usd_to("EUR") == 0.9
+    with pytest.raises(ProviderRequestError):
+        _two_source_fx(ecb_ok=False, open_ok=False).usd_to("PKR")
+
+
+def test_every_country_currency_is_accepted():
+    from app.core.currencies import COUNTRY_CURRENCY, SUPPORTED_CURRENCIES, currency_for_country
+    from app.schemas.trip import TripRequest
+
+    assert currency_for_country("pk") == "PKR" and currency_for_country("FR") == "EUR"
+    assert currency_for_country("ZZ") is None
+    assert set(COUNTRY_CURRENCY.values()) == set(SUPPORTED_CURRENCIES)
+    assert len(SUPPORTED_CURRENCIES) == len(set(SUPPORTED_CURRENCIES)) > 140
+    req = TripRequest(destination_city="Karachi", accommodation={"type": "hotel", "name_or_address": "Saddar"},
+                      start_date="2026-12-01", num_days=2, travelers=1, budget=90000, currency="pkr")
+    assert req.currency == "PKR"

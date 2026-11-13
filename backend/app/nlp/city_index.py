@@ -17,6 +17,7 @@ from pathlib import Path
 import httpx
 from rapidfuzz import fuzz, process
 
+from app.core.currencies import currency_for_country
 from app.core.errors import ProviderRequestError
 from app.core.text import fold
 
@@ -47,7 +48,8 @@ class City:
     def to_dict(self) -> dict:
         return {"id": self.geoname_id, "name": self.name, "region": self.region, "country": self.country,
                 "country_code": self.country_code, "lat": self.lat, "lng": self.lng,
-                "population": self.population, "display": self.display, "query": self.query}
+                "population": self.population, "display": self.display, "query": self.query,
+                "currency": currency_for_country(self.country_code)}
 
 
 class CityIndex:

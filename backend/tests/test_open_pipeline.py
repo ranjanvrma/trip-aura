@@ -89,6 +89,9 @@ class FakeFx:
     def convert(self, a, s, d):
         return a / self.rates[s] * self.rates[d]
 
+    def basis(self, src, dst):
+        return "ECB reference rate"
+
 
 @pytest.fixture
 def open_service():

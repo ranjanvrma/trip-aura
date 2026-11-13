@@ -52,7 +52,8 @@ class Settings(BaseSettings):
     # time box for the best-effort OSM layer; its 3 queries run in parallel with the other sources
     osm_time_budget_seconds: float = 25.0
     open_http_timeout_seconds: float = 90.0
-    fx_url: str = "https://api.frankfurter.dev/v1/latest"
+    fx_url: str = "https://api.frankfurter.dev/v1/latest"           # ECB rates, about 30 currencies
+    fx_open_url: str = "https://open.er-api.com/v6/latest/USD"       # every other currency (empty turns it off)
 
     routing_engine: RoutingEngine = RoutingEngine.HEURISTIC
     osrm_driving_url: str = "https://router.project-osrm.org/route/v1/driving"

@@ -92,7 +92,7 @@ class TripRequest(BaseModel):
     def _currency(cls, v: str) -> str:
         v = v.strip().upper()
         if v not in SUPPORTED_CURRENCIES:
-            raise ValueError(f"currency must be one of {', '.join(SUPPORTED_CURRENCIES)}")
+            raise ValueError(f"{v} is not a supported currency code")
         return v
 
     @model_validator(mode="after")

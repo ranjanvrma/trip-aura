@@ -50,7 +50,8 @@ export function TermsPage() {
       <h2>Map data and licences</h2>
       <p>
         Place data remains under its original licences: OpenStreetMap (ODbL), Overture Maps Foundation, Wikidata (CC0),
-        Wikivoyage (CC BY-SA) and GeoNames (CC BY). Every itinerary lists its sources. The TripAura source code is
+        Wikivoyage (CC BY-SA) and GeoNames (CC BY). Exchange rates come from the European Central Bank (through
+        Frankfurter) and, for other currencies, ExchangeRate-API. Every itinerary lists its sources. The TripAura source code is
         available on <a href={REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>.
       </p>
 
@@ -114,7 +115,8 @@ export function PrivacyPage() {
         <li>
           <strong>Open-data lookups.</strong> To build a plan, our server queries services such as Overture Maps,
           Wikidata, OpenStreetMap (Overpass and Nominatim), Photon and Wikivoyage with the city or address you
-          typed. These requests don't include your email.
+          typed. These requests contain nothing that identifies you. Exchange rates are loaded from Frankfurter and
+          ExchangeRate-API, and those requests contain nothing about you or your trip.
         </li>
       </ul>
 

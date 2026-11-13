@@ -204,6 +204,7 @@ export interface ApiOptions {
 export interface CitySuggestion {
   id: number; name: string; region: string; country: string; country_code: string;
   lat: number; lng: number; population: number; display: string; query: string;
+  currency: string | null;   // the currency mostly used in that country
 }
 
 export interface AddressSuggestion { label: string; name: string; lat: number; lng: number; kind?: string | null }

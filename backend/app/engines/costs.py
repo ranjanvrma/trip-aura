@@ -4,7 +4,7 @@ How an estimate is built:
 1. If a hand-curated local table exists for the destination country (currently India, INR),
    it is used and converted to the trip currency.
 2. Otherwise US reference prices are scaled by an approximate country price index and
-   converted from USD to the trip currency with ECB reference rates.
+   converted from USD to the trip currency (ECB reference rates, or ExchangeRate-API for other currencies).
 
 Every value produced here is an ESTIMATE (verified=False, source="estimate").
 The price index is a rough, hand-maintained approximation of relative tourist costs
@@ -144,7 +144,7 @@ class CostModel:
             raise ValueError(f"Cannot convert {m.currency} to {self.currency} without exchange rates")
         amount = self.fx.convert(m.amount, m.currency, self.currency)
         return Money(amount=round(amount, 2), currency=self.currency, verified=False, source=m.source,
-                     note=f"{m.amount:g} {m.currency} converted at ECB reference rate" + (f"; {m.note}" if m.note else ""))
+                     note=f"{m.amount:g} {m.currency} converted at {self.fx.basis(m.currency, self.currency)}" + (f"; {m.note}" if m.note else ""))
 
 
 def _scale(row: FareRow, k: float) -> FareRow:

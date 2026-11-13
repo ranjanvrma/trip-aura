@@ -22,7 +22,7 @@ from app.schemas.trip import TripRequest
 from app.nlp.interests import expand_interests, interest_phrase
 from app.nlp.semantic import strength
 from app.services import ai_service
-from app.services.fx_service import FxService
+from app.services.fx_service import OPEN_ER, OPEN_ER_ATTRIBUTION, FxService
 from app.services.geocoding_service import GeocodingService
 from app.services.places_service import PlacesService
 from app.services.providers import ProviderBundle
@@ -69,7 +69,7 @@ class ItineraryService:
         self.places = PlacesService(providers.places)
         self.geo = GeocodingService(providers.geocoding)
         self.routes = RoutesService(providers.routes)
-        self.fx = fx or FxService(settings.fx_url)
+        self.fx = fx or FxService(settings.fx_url, settings.fx_open_url or None)
         self._cities: dict[str, CityContext] = {}
 
     @property
@@ -170,6 +170,9 @@ class ItineraryService:
             warnings.append(enrich_note[0])
             if enrich_note[1]:
                 attributions.append("Ratings and reviews marked 'Google' from Google Maps Platform")
+        live_fx = self.providers.mode != DataMode.MOCK and req.currency != "USD"
+        if live_fx and self.fx.basis("USD", req.currency) == OPEN_ER:
+            attributions.append(OPEN_ER_ATTRIBUTION)
 
         itinerary = Itinerary(
             data_source=self.source, generated_at=utc_now(), request=req, accommodation=home,

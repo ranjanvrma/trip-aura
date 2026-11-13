@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-14 · **Branch:** `main` · **Latest change:** **v1.1.0**: the trip form suggests the destination's own currency, one click to use it
+**Last updated:** 2026-11-14 · **Branch:** `main` · **Latest change:** **v1.1.1**: every country's currency can be planned in (150 currencies), so the currency suggestion works everywhere
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -93,7 +93,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Pipeline | `services/itinerary_service.py` (geocode → candidates → semantic match → schedule → budget → enrich → optional LLM summary) |
 | City data | `providers/open/city_store.py`: parallel loader (ThreadPoolExecutor) for Overture/Wikidata/3×OSM/Wikivoyage, merge (`merge_places`, accent-insensitive name + distance), SQLite/Postgres cache (`CityDataset`, `DATASET_VERSION=6`) |
 | Sources | `providers/open/overture.py` (slim columns, shared DuckDB with HTTP/object caches), `open/wikimedia.py` (SPARQL notable places, Wikivoyage dishes), `open/osm.py` (tags, `opening_hours` parser, fees, diet), `open/providers.py` (geocoder uses GeoNames index first, Nominatim fallback), `heuristic_routes.py` |
-| Engines | `engines/itinerary.py` (anchor + greedy + 2-opt, opening windows, meals, rests, near-duplicate removal), `recommendation.py` (weights 0.3/0.2/0.2/0.1/0.1/0.1, semantic boost), `food.py` (diet checks, dish lexicon, sentiment-gated evidence), `transport.py`, `budget.py`, `costs.py` (country price index + ECB FX; curated India table), `pace.py`, `fares.py` |
+| Engines | `engines/itinerary.py` (anchor + greedy + 2-opt, opening windows, meals, rests, near-duplicate removal), `recommendation.py` (weights 0.3/0.2/0.2/0.1/0.1/0.1, semantic boost), `food.py` (diet checks, dish lexicon, sentiment-gated evidence), `transport.py`, `budget.py`, `costs.py` (country price index + FX: ECB first, ExchangeRate-API for other currencies; curated India table), `pace.py`, `fares.py` |
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
 | API | `routers/` trip preview, geo autocomplete, NLP parsing, metadata, and routing. Sign-in, sessions, server-side saved trips, idempotency records and live location were removed (old tables in existing databases are simply unused). Security that remains: Origin check on POST, per-IP rate limits (`generate` 6/min on `/api/trips/preview`), security headers, input limits, safe URLs; CORS without credentials |
 | API and security | `routers/` contains itinerary generation (`/api/trips/preview`), geo autocomplete, NLP parsing, status/options and routing; `core/security.py` provides security headers, origin checks and per-IP limits. Account routes are not mounted. |
@@ -215,6 +215,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 - Public Overpass servers often fail, so hours, fees and diet tags can be missing (warnings are shown).
 - Overture has no ratings, hours or fees; Google enrichment runs only with a key.
 - Travel times are heuristic in open mode (no live traffic).
+- Exchange rates: ECB covers about 30 currencies; the other 120 come from ExchangeRate-API's open endpoint, which is rate limited and asks for attribution (rates are cached 12 hours per process, and the itinerary credits it). A few currencies (Venezuela, and Zimbabwe where USD is used) have parallel or unofficial rates, so treat those estimates loosely.
 - Bumping `DATASET_VERSION` rebuilds every cached city.
 - `opening_hours` parser: the common subset only; seasonal and sunrise rules become "unknown".
 - When deployed with scale-to-zero, the first request after idle takes ~30–60 s while the container starts (the frontend already retries for 2 min).
@@ -239,7 +240,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-14 | (this commit) | **v1.1.0.** Currency suggestion: picking a city (from the list, a quick-start city or a typed description) offers that country's currency as a one-click button under the Currency field, and marks it in the list as "used in <country>". Nothing changes until the traveller clicks, and any other currency can still be chosen. The country-to-currency table is `frontend/src/lib/localCurrency.ts` and covers only currencies the planner accepts, so countries with an unsupported currency get no suggestion. Frontend only |
+| 2026-11-14 | (this commit) | **v1.1.1.** Fix: the planner only accepted the 31 ECB currencies, so Karachi (PKR) and most of Asia, Africa and Latin America got no suggestion and could not be planned in their own money. `core/currencies.py` now maps every country to the currency travellers mostly pay in (150 currencies) and is the single source: the accepted list, the form options and the new `currency` field on city suggestions (the frontend table from v1.1.0 is gone). `FxService` loads ECB rates (Frankfurter) and ExchangeRate-API's open endpoint (`FX_OPEN_URL`, no key) and prefers ECB; if one source is down the other is used, if both are down the request fails as before. Conversion notes say which rate was used, and trips whose currency needs the second source credit it in their attributions. Terms and Privacy name both rate sources. Two new tests; checked with a real Karachi trip in PKR |
+| 2026-11-14 | `1d32b40` | **v1.1.0.** Currency suggestion: picking a city (from the list, a quick-start city or a typed description) offers that country's currency as a one-click button under the Currency field, and marks it in the list as "used in <country>". Nothing changes until the traveller clicks, and any other currency can still be chosen. The country-to-currency table is `frontend/src/lib/localCurrency.ts` and covers only currencies the planner accepts, so countries with an unsupported currency get no suggestion. Frontend only |
 | 2026-11-13 | `7538486` | **v1.0.2.** Footer lists Ranjan Verma and Chinmay Dahiya with GitHub and LinkedIn links (README Authors too). `vite.config.ts` restarts the dev server when `package.json` changes, so a version bump reaches the footer without a manual restart (the version was frozen at server start, so v1.0.1 still showed 1.0.0 locally) |
 | 2026-11-13 | `55e787c` | **v1.0.1.** Interface pass: removed template tells (uppercase tile labels, dash eyebrows, icon fact list, Keyboard and How-it's-built tiles, shortcut badges inside fields, pinned data banner); sentence-case serif headings; plainer copy; quick-start cities in the hero (looked up in the city index, fill the form and turn the globe); data note moved under the submit button; home layout is now hero, planning column, side column; quiet entrance motion (ticket, day ribbons, budget ring and bars), smooth scrolling, all off under reduced motion. Components grouped by feature (`planner/`, `trip/`, `ui/`, `layout/`), `Kbd` in its own file, dead CSS removed. README rewritten without the "AI-powered" tagline, with app and release links |
 | 2026-11-13 | `ea37847` | **v1.0.0.** Complete redesign: travel-atlas palette (paper, deep teal, terracotta), full-width hero with a real 3D globe (Natural Earth land, live day/night from the sun's position, drag to turn, destination pin and saved-trip pins, lazy chunk; detailed coastline, lighter one on slow connections), ticket-style trip header with real totals, day ribbons, budget ring and per-day bars, seeded contour artwork on trip cards, dark teal footer with the version, new logo colours and icons. Version system added (§13), past milestones tagged |
@@ -296,7 +298,8 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 
 | Version | Commit | Date | What it is |
 |---|---|---|---|
-| v1.1.0 | (this commit) | 2026-11-14 | Destination currency suggested in the trip form, one click to use it |
+| v1.1.1 | (this commit) | 2026-11-14 | Every country's currency supported (150), so the suggestion works everywhere |
+| v1.1.0 | `1d32b40` | 2026-11-14 | Destination currency suggested in the trip form, one click to use it |
 | v1.0.2 | `7538486` | 2026-11-13 | Author credits with GitHub and LinkedIn; version shows correctly in local dev |
 | v1.0.1 | `55e787c` | 2026-11-13 | Interface pass without template-looking elements, quick-start cities, components grouped by feature, quieter motion |
 | v1.0.0 | `ea37847` | 2026-11-13 | Public-ready redesign: real 3D globe, atlas look, ticket header, day ribbons, budget charts; version system |

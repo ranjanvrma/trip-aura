@@ -17,7 +17,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Plans that hold together.** Every place gets a 0 to 5 fit score with reasons. Each day starts from its strongest sight and the stops are reordered to cut travel (greedy order, then 2-opt), with meals, breaks and opening hours fitted in.
 - **Food that fits.** Vegetarian, vegan, Jain, eggetarian and non-veg filters, and local dishes only when reviews or a travel guide back them up.
 - **Honest numbers.** Every rating and price says where it came from, estimates are labelled, and the fit score never uses outside ratings.
-- **Local currency in one click.** Pick a city and the form offers the currency used there (EUR for Lisbon, JPY for Kyoto); any other currency stays one choice away.
+- **Any currency, local one first.** Plan in any of 150 currencies. Pick a city and the form offers the one used there (EUR for Lisbon, PKR for Karachi) in one click. Rates come from the European Central Bank where it publishes them, and from ExchangeRate-API otherwise.
 - **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
 - **Easy to read.** A 3D globe that turns to your destination, a ticket-style summary of each plan, a ribbon showing how each day's time is split, and charts of where the budget goes.
 - **No account.** Plans are saved in your browser on this device. They do not sync, and clearing site data removes them.
