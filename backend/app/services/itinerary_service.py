@@ -13,12 +13,13 @@ from app.engines.food import FoodEngine, _dish_allowed, city_popular_dishes
 from app.engines.itinerary import ItineraryEngine, PlanConstraints, PlanResult, accommodation_place
 from app.engines.pace import profile_for
 from app.engines.recommendation import ScoringContext
+from app.engines.style import PROFILES as STYLES
 from app.engines.transport import TransportEngine, TransportWeights
 from app.providers.base import CityContext
 from app.schemas.common import DataSource
 from app.schemas.itinerary import DayPlan, DishSuggestion, Itinerary, ItemType, ItineraryItem
 from app.schemas.place import Place
-from app.schemas.trip import TripRequest
+from app.schemas.trip import TripRequest, TripStyle
 from app.nlp.interests import expand_interests, interest_phrase
 from app.nlp.semantic import strength
 from app.services import ai_service
@@ -154,6 +155,8 @@ class ItineraryService:
                 warnings.append("Even after optimisation the plan exceeds your budget; see the suggestions below.")
         budget.applied_optimizations = applied
         budget.notes.append(f"Estimates use {costs.basis}.")
+        if req.trip_style != TripStyle.MID:
+            budget.notes.append(STYLES[req.trip_style].note + ".")
 
         if budget.over_budget or budget.remaining < 0.1 * req.budget:
             spare = [(c.place, c.score) for c in result.spare]

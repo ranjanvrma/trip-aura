@@ -232,3 +232,11 @@ def test_parser_understood_uses_real_plurals():
     many = parse_trip_text("4 days in Jaipur with my partner", None).understood
     assert "1 day" in one and "4 days" in many and "2 travellers" in many
     assert not any("(s)" in u for u in one + many)
+
+
+def test_trip_style_words(ix):
+    r = parse_trip_text("3 days in Lisbon for 2, luxury trip, budget 2000 euros", ix, TODAY)
+    assert r.fields["trip_style"] == "premium" and r.fields["budget"] == 2000
+    assert parse_trip_text("cheap weekend in Jaipur", ix, TODAY).fields["trip_style"] == "budget"
+    # "budget" on its own states an amount, not a style
+    assert "trip_style" not in parse_trip_text("2 days in Jaipur, budget 9000 rupees", ix, TODAY).fields

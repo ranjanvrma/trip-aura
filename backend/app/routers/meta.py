@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.core.config import DataMode, get_settings
 from app.schemas.trip import (
     PRESET_DIETS, PRESET_FOOD_CATEGORIES, PRESET_INTERESTS, SUPPORTED_CURRENCIES, AccommodationType, Pace, TransportMode,
+    TripStyle,
 )
 
 router = APIRouter(prefix="/api/meta", tags=["meta"])
@@ -69,6 +70,7 @@ def options() -> dict:
         "food_categories": PRESET_FOOD_CATEGORIES,
         "transport_modes": [m.value for m in TransportMode],
         "paces": [p.value for p in Pace],
+        "trip_styles": [t.value for t in TripStyle],
         "accommodation_types": [a.value for a in AccommodationType],
         "currencies": ["INR"] if s.data_mode == DataMode.MOCK else list(SUPPORTED_CURRENCIES),
     }

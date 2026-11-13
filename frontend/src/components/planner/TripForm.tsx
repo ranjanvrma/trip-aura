@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../services/api";
 import type {
-  AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, ParsedTrip, TransportMode, TripRequest,
+  AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, ParsedTrip, TransportMode, TripRequest, TripStyle,
 } from "../../types";
 import { MODE_LABEL, pretty } from "../../utils";
 import Autocomplete from "../ui/Autocomplete";
+import NumberInput from "../ui/NumberInput";
 import ChipSelect from "./ChipSelect";
+
+const STYLE: Record<TripStyle, { label: string; hint: string }> = {
+  budget: { label: "Lowest cost", hint: "Cheaper meals, free or cheap sights, walking and public transport." },
+  mid: { label: "Mid-range", hint: "A balance of cost, comfort and time." },
+  premium: { label: "Premium", hint: "Better restaurants and faster door-to-door rides, still within your budget." },
+};
 
 interface Props {
   options: ApiOptions;
@@ -36,6 +43,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
     pace: "moderate",
     return_to_accommodation: true,
     fit_to_budget: false,
+    trip_style: "mid",
   }));
   const [useCoords, setUseCoords] = useState(false);
   const [coords, setCoords] = useState({ lat: "", lng: "" });
@@ -145,18 +153,18 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
       <div className="grid-4">
         <label className="field"><span>Days</span>
-          <input type="number" min={1} max={14} value={req.num_days} onChange={(e) => set("num_days", Number(e.target.value))} />
+          <NumberInput min={1} max={14} inputMode="numeric" required value={req.num_days} onValue={(v) => set("num_days", v)} />
         </label>
         <label className="field"><span>Travellers</span>
-          <input type="number" min={1} max={20} value={req.travelers} onChange={(e) => set("travelers", Number(e.target.value))} />
+          <NumberInput min={1} max={20} inputMode="numeric" required value={req.travelers} onValue={(v) => set("travelers", v)} />
         </label>
         <label className="field"><span>Total budget</span>
-          <input type="number" min={1} value={req.budget} onChange={(e) => set("budget", Number(e.target.value))} />
+          <NumberInput min={1} required value={req.budget} onValue={(v) => set("budget", v)} />
         </label>
         <label className="field"><span>Currency</span>
           <select value={req.currency} onChange={(e) => set("currency", e.target.value)}>
             {options.currencies.map((c) => (
-              <option key={c} value={c}>{c === local?.currency ? `${c} (used in ${local.country})` : c}</option>
+              <option key={c} value={c}>{c === local?.currency ? `${c} (local)` : c}</option>
             ))}
           </select>
           {local && local.currency !== req.currency && (
@@ -168,8 +176,8 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
       </div>
       <label className="field">
         <span>Accommodation cost already in this budget (optional)</span>
-        <input type="number" min={0} value={req.accommodation_cost_total}
-               onChange={(e) => set("accommodation_cost_total", Number(e.target.value))} />
+        <NumberInput min={0} placeholder="0" emptyValue={0} value={req.accommodation_cost_total}
+                     onValue={(v) => set("accommodation_cost_total", v)} />
       </label>
 
       <ChipSelect label="Interests" options={options.interests} value={req.interests}
@@ -189,6 +197,17 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
             </button>
           ))}
         </div>
+      </fieldset>
+
+      <fieldset className="field">
+        <legend>How to spend the budget</legend>
+        <div className="chips">
+          {(options.trip_styles ?? []).map((t) => (
+            <button type="button" key={t} className={`chip ${req.trip_style === t ? "chip-on" : ""}`}
+                    aria-pressed={req.trip_style === t} onClick={() => set("trip_style", t)}>{STYLE[t].label}</button>
+          ))}
+        </div>
+        {req.trip_style && <small className="muted">{STYLE[req.trip_style].hint}</small>}
       </fieldset>
 
       <fieldset className="field">

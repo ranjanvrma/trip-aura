@@ -4,6 +4,8 @@ export type DataSource =
   | "google" | "mock" | "estimate" | "user"
   | "open_data" | "osm" | "overture" | "wikidata" | "wikivoyage";
 export type Pace = "relaxed" | "moderate" | "packed";
+/** How to spend the budget: lowest cost, mid-range or premium. The budget is always the ceiling. */
+export type TripStyle = "budget" | "mid" | "premium";
 export type TransportMode = "walking" | "metro" | "bus" | "train" | "cab" | "auto" | "personal_vehicle";
 export type ItemType = "start" | "activity" | "meal" | "rest" | "travel" | "end";
 
@@ -161,6 +163,7 @@ export interface TripRequest {
   pace: Pace;
   return_to_accommodation: boolean;
   fit_to_budget: boolean;
+  trip_style?: TripStyle;
 }
 
 export interface Itinerary {
@@ -197,7 +200,7 @@ export interface ApiStatus {
 
 export interface ApiOptions {
   interests: string[]; food_preferences: string[]; food_categories: string[]; transport_modes: TransportMode[];
-  paces: Pace[]; accommodation_types: string[]; currencies: string[];
+  paces: Pace[]; trip_styles: TripStyle[]; accommodation_types: string[]; currencies: string[];
 }
 
 

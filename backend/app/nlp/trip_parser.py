@@ -61,6 +61,14 @@ PACES = {
     "packed": "packed", "busy": "packed", "fast paced": "packed", "fast-paced": "packed", "see everything": "packed",
     "as much as possible": "packed", "action packed": "packed", "hectic": "packed",
 }
+# "budget" alone is not here: "budget 900 euros" states an amount, not a style
+TRIP_STYLES = {
+    "cheap": "budget", "cheapest": "budget", "low cost": "budget", "low-cost": "budget", "on a budget": "budget",
+    "budget trip": "budget", "budget travel": "budget", "shoestring": "budget", "backpacking": "budget",
+    "mid range": "mid", "mid-range": "mid", "midrange": "mid", "comfortable": "mid",
+    "luxury": "premium", "luxurious": "premium", "premium": "premium", "high class": "premium", "high-end": "premium",
+    "upscale": "premium", "5 star": "premium", "five star": "premium", "splurge": "premium",
+}
 ACCOM_TYPES = {"hotel": "hotel", "airbnb": "airbnb", "hostel": "hostel", "dorm": "dorm", "guesthouse": "hotel",
                "guest house": "hotel", "homestay": "private_property", "apartment": "airbnb", "villa": "private_property",
                "friend's place": "private_property", "friends place": "private_property", "resort": "hotel"}
@@ -282,6 +290,10 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
     if paces:
         f["pace"] = paces[0]
         res.understood.append(f"Pace: {paces[0]}")
+    styles = _match_terms(t, TRIP_STYLES)
+    if styles:
+        f["trip_style"] = styles[0]
+        res.understood.append({"budget": "Lowest-cost trip", "mid": "Mid-range trip", "premium": "Premium trip"}[styles[0]])
     diets = _match_terms(t, DIETS)
     if "non_vegetarian" in diets and "vegetarian" in diets and not re.search(r"\bvegetarian\b", t.replace("non vegetarian", "").replace("non-vegetarian", "")):
         diets.remove("vegetarian")

@@ -15,6 +15,7 @@ from app.core.errors import TripAuraError
 from app.core.geo import haversine_km
 from app.engines.costs import CostModel
 from app.engines.fares import heuristic_duration_min
+from app.engines.style import PROFILES
 from app.engines.pace import PaceProfile
 from app.providers.base import CityContext, RouteResult
 from app.schemas.common import LatLng, Money
@@ -88,12 +89,13 @@ class TransportEngine:
         self.city = city
         self.req = req
         self.pace = pace
-        self.weights = weights or TransportWeights()
+        style = PROFILES[req.trip_style]
+        self.weights = weights or TransportWeights(time=style.time_weight, cost=style.cost_weight)
         self.preferred = set(req.transport_modes)
         self.costs = costs or CostModel.fallback(req.currency)
         # ~25% of the daily spend for transport, spread over ~6 legs a day
         daily = (req.budget - req.accommodation_cost_total) / req.num_days
-        self.leg_allowance = daily * 0.25 / 6
+        self.leg_allowance = daily * 0.25 / 6 * style.leg_factor
 
     # ---- planning-time estimate (no provider calls) ----------------------------
     def quick_minutes(self, a: LatLng, b: LatLng) -> float:

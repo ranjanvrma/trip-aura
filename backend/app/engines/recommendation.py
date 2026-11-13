@@ -14,6 +14,7 @@ from app.engines.costs import CostModel
 from app.engines.pace import PaceProfile, profile_for
 from app.schemas.common import DataSource, LatLng
 from app.schemas.place import Place, PlaceKind, SuitabilityScore
+from app.engines.style import PROFILES
 from app.schemas.trip import TransportMode, TripRequest
 
 WEIGHTS: dict[str, float] = {
@@ -61,6 +62,19 @@ class ScoringContext:
     @property
     def meal_allowance(self) -> float:
         return self.daily_budget_pp * FOOD_SHARE / 3
+
+    @property
+    def style_factor(self) -> float:
+        """Share of the allowance the trip style aims for (lowest cost aims lower)."""
+        return PROFILES[self.req.trip_style].allowance_factor
+
+    def meal_fit(self, cost: float | None) -> float:
+        """Budget component for a meal. Premium also marks down the cheapest places: they fit the style less."""
+        fit = affordability(cost, self.meal_allowance * self.style_factor)
+        floor = self.meal_allowance * PROFILES[self.req.trip_style].cheap_floor
+        if floor > 0 and cost is not None and cost < floor:
+            fit *= 0.6 + 0.4 * max(0.0, cost) / floor
+        return fit
 
 
 def clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -161,7 +175,7 @@ def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     fee = ctx.costs.to_trip_currency(place.entry_fee).amount if place.entry_fee else None
     comps = {
         "interest": interest,
-        "budget": affordability(fee, ctx.attraction_allowance),
+        "budget": affordability(fee, ctx.attraction_allowance * ctx.style_factor),
         "distance": distance_component(km, ctx.pace.distance_scale_km),
         "transport": transport_component(km, req.transport_modes, ctx.pace.max_walk_km),
         "time": time_component(place, ctx),
@@ -213,7 +227,7 @@ def score_food_place(place: Place, ctx: ScoringContext, food_match: float, diet_
         cost = None
     comps = {
         "interest": food_match,
-        "budget": affordability(cost, ctx.meal_allowance),
+        "budget": ctx.meal_fit(cost),
         "distance": distance_component(km, ctx.pace.distance_scale_km * 0.6),
         "transport": transport_component(km, req.transport_modes, ctx.pace.max_walk_km),
         "time": open_day_ratio(place, ctx.weekdays),

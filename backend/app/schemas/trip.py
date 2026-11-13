@@ -16,6 +16,13 @@ class Pace(str, Enum):
     PACKED = "packed"
 
 
+class TripStyle(str, Enum):
+    """How to spend the budget; the budget itself is always the ceiling."""
+    BUDGET = "budget"      # lowest cost
+    MID = "mid"            # mid-range (default)
+    PREMIUM = "premium"
+
+
 class TransportMode(str, Enum):
     WALKING = "walking"
     METRO = "metro"
@@ -81,6 +88,7 @@ class TripRequest(BaseModel):
     pace: Pace = Pace.MODERATE
     return_to_accommodation: bool = True
     fit_to_budget: bool = Field(default=False, description="Automatically swap to cheaper options when over budget.")
+    trip_style: TripStyle = Field(default=TripStyle.MID, description="Lowest cost, mid-range or premium.")
 
     @field_validator("interests", "food_preferences", "food_categories")
     @classmethod

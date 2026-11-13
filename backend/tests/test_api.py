@@ -125,3 +125,36 @@ def test_address_search_matches_inside_names_and_stays_local(client, monkeypatch
     # hotels with "inn" anywhere in the name first, the duplicate merged, the river 6,000 km away dropped
     assert names == ["Holiday Inn", "Golden Inn", "Innovation Street", "City Mall"]
     assert {c["q"] for c in calls} == {"inn", "inn Jaipur"}
+
+
+def test_trip_style_changes_what_the_plan_spends(client, base_request):
+    totals = {}
+    for style in ("budget", "mid", "premium"):
+        r = client.post("/api/trips/preview", json={**base_request, "budget": 40000, "trip_style": style})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        totals[style] = data["budget"]["planned_total"]
+        assert data["budget"]["planned_total"] <= 40000
+        notes = " ".join(data["budget"]["notes"])
+        assert ("style" in notes) == (style != "mid")
+    assert totals["budget"] <= totals["mid"] <= totals["premium"]
+    assert totals["budget"] < totals["premium"]
+
+
+def test_trip_style_scores_meals_for_the_style():
+    import datetime as dt
+
+    from app.engines.recommendation import ScoringContext
+    from app.schemas.common import LatLng
+    from app.schemas.trip import TripRequest
+
+    def ctx(style):
+        req = TripRequest(destination_city="Jaipur", accommodation={"type": "hotel", "name_or_address": "MI Road"},
+                          start_date=dt.date(2026, 11, 10), num_days=2, budget=12000, currency="INR", trip_style=style)
+        return ScoringContext(req=req, origin=LatLng(lat=26.9, lng=75.8), weekdays=[1, 2])
+
+    budget, mid, premium = ctx("budget"), ctx("mid"), ctx("premium")
+    allowance = mid.meal_allowance
+    assert budget.meal_fit(allowance) < mid.meal_fit(allowance) == 1.0       # a full-price meal stretches a cheap trip
+    assert premium.meal_fit(allowance * 0.1) < mid.meal_fit(allowance * 0.1)  # the cheapest places suit premium less
+    assert premium.meal_fit(allowance) == 1.0
