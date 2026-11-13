@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** **v1.0.2**: footer credits both authors with GitHub and LinkedIn; the dev server restarts itself when package.json changes, so a version bump shows up locally
+**Last updated:** 2026-11-14 · **Branch:** `main` · **Latest change:** **v1.1.0**: the trip form suggests the destination's own currency, one click to use it
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -198,9 +198,10 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
    - Place photos (and BlurHash placeholders for them): the data has no images yet; Wikidata P18 / Wikimedia Commons is the free source. Only the globe uses a blurred placeholder today.
    - The current generation panel explains the work and shows elapsed time, but cannot report actual backend stages. True per-stage progress needs async loading and status polling.
    - Lottie: not used. Animations are Motion (sheets, toasts, menus), GSAP (scroll reveals, parallax, globe turns) and CSS. Add Lottie only with self-made or properly licensed animation files.
-3. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email (his email is still unknown).
-4. **Dependabot:** review the currently open dependency PRs in GitHub. Minor and patch upgrades are grouped; major upgrades are ignored and should be considered separately with any required code changes.
-5. **Nice to have:**
+3. **Owner's feature backlog:** the planned releases are listed at the end of §13, in order. Next up is the smarter hotel search.
+4. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email (his email is still unknown).
+5. **Dependabot:** review the currently open dependency PRs in GitHub. Minor and patch upgrades are grouped; major upgrades are ignored and should be considered separately with any required code changes.
+6. **Nice to have:**
    - async city loading with progress polling
    - real routing (`ROUTING_ENGINE=osrm` exists; it uses public demo servers)
    - GTFS transit
@@ -238,7 +239,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-13 | (this commit) | **v1.0.2.** Footer lists Ranjan Verma and Chinmay Dahiya with GitHub and LinkedIn links (README Authors too). `vite.config.ts` restarts the dev server when `package.json` changes, so a version bump reaches the footer without a manual restart (the version was frozen at server start, so v1.0.1 still showed 1.0.0 locally) |
+| 2026-11-14 | (this commit) | **v1.1.0.** Currency suggestion: picking a city (from the list, a quick-start city or a typed description) offers that country's currency as a one-click button under the Currency field, and marks it in the list as "used in <country>". Nothing changes until the traveller clicks, and any other currency can still be chosen. The country-to-currency table is `frontend/src/lib/localCurrency.ts` and covers only currencies the planner accepts, so countries with an unsupported currency get no suggestion. Frontend only |
+| 2026-11-13 | `7538486` | **v1.0.2.** Footer lists Ranjan Verma and Chinmay Dahiya with GitHub and LinkedIn links (README Authors too). `vite.config.ts` restarts the dev server when `package.json` changes, so a version bump reaches the footer without a manual restart (the version was frozen at server start, so v1.0.1 still showed 1.0.0 locally) |
 | 2026-11-13 | `55e787c` | **v1.0.1.** Interface pass: removed template tells (uppercase tile labels, dash eyebrows, icon fact list, Keyboard and How-it's-built tiles, shortcut badges inside fields, pinned data banner); sentence-case serif headings; plainer copy; quick-start cities in the hero (looked up in the city index, fill the form and turn the globe); data note moved under the submit button; home layout is now hero, planning column, side column; quiet entrance motion (ticket, day ribbons, budget ring and bars), smooth scrolling, all off under reduced motion. Components grouped by feature (`planner/`, `trip/`, `ui/`, `layout/`), `Kbd` in its own file, dead CSS removed. README rewritten without the "AI-powered" tagline, with app and release links |
 | 2026-11-13 | `ea37847` | **v1.0.0.** Complete redesign: travel-atlas palette (paper, deep teal, terracotta), full-width hero with a real 3D globe (Natural Earth land, live day/night from the sun's position, drag to turn, destination pin and saved-trip pins, lazy chunk; detailed coastline, lighter one on slow connections), ticket-style trip header with real totals, day ribbons, budget ring and per-day bars, seeded contour artwork on trip cards, dark teal footer with the version, new logo colours and icons. Version system added (§13), past milestones tagged |
 | 2026-11-13 | `712cc2b` | Reconcile HANDOFF with the latest GitHub changes: remove stale live-location output, describe the indeterminate generation panel accurately, and replace outdated Dependabot PR numbers with a current review task. |
@@ -294,7 +296,8 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 
 | Version | Commit | Date | What it is |
 |---|---|---|---|
-| v1.0.2 | (this commit) | 2026-11-13 | Author credits with GitHub and LinkedIn; version shows correctly in local dev |
+| v1.1.0 | (this commit) | 2026-11-14 | Destination currency suggested in the trip form, one click to use it |
+| v1.0.2 | `7538486` | 2026-11-13 | Author credits with GitHub and LinkedIn; version shows correctly in local dev |
 | v1.0.1 | `55e787c` | 2026-11-13 | Interface pass without template-looking elements, quick-start cities, components grouped by feature, quieter motion |
 | v1.0.0 | `ea37847` | 2026-11-13 | Public-ready redesign: real 3D globe, atlas look, ticket header, day ribbons, budget charts; version system |
 | v0.7.1 | `6c3d0f0` | 2026-11-13 | Ten interface fixes (form, notices, dates, waiting panel) |
@@ -306,7 +309,7 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 | v0.2.0 | `353b86d` | 2026-11-07 | Worldwide open-data mode, cost model and currency conversion |
 | v0.1.0 | `e492999` | 2026-11-07 | First planner: engines, Jaipur demo data, Google-ready providers |
 
-**Planned** (from the owner's backlog): v1.1.0 currency suggested from the destination; v1.2.0 trip style (budget, mid-range, premium); a planning-engine minor; **v2.0.0 multi-destination trips** (A to B to C).
+**Planned** (from the owner's backlog, in order): smarter hotel search that matches words anywhere in a name; trip style (lowest cost, mid-range, premium); PDF download of a trip; designed dropdowns; a livelier, step-by-step planning form and a possible alternative to the form; a more interactive site; a graph-based planning engine; **v2.0.0 multi-destination trips** (A to B to C).
 
 ---
 

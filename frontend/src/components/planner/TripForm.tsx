@@ -3,6 +3,7 @@ import { api } from "../../services/api";
 import type {
   AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, ParsedTrip, TransportMode, TripRequest,
 } from "../../types";
+import { localCurrency } from "../../lib/localCurrency";
 import { MODE_LABEL, pretty } from "../../utils";
 import Autocomplete from "../ui/Autocomplete";
 import ChipSelect from "./ChipSelect";
@@ -41,6 +42,12 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
   const [coords, setCoords] = useState({ lat: "", lng: "" });
   const [cityLoc, setCityLoc] = useState<LatLng | null>(null);       // from the city dropdown
   const [pinned, setPinned] = useState<LatLng | null>(null);         // exact accommodation point from suggestions
+  // the destination country's own currency, offered as a one-click choice
+  const [local, setLocal] = useState<{ currency: string; country: string } | null>(null);
+  const suggestCurrency = useCallback((c: CitySuggestion) => {
+    const currency = localCurrency(c.country_code, options.currencies);
+    setLocal(currency ? { currency, country: c.country } : null);
+  }, [options.currencies]);
 
   useEffect(() => { onCityLocation?.(cityLoc); }, [cityLoc, onCityLocation]);
 
@@ -54,9 +61,10 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
       currency: f.currency && options.currencies.includes(f.currency) ? f.currency : r.currency,
       accommodation: { ...r.accommodation, ...(f.accommodation ?? {}) },
     }) as TripRequest);
-    if (prefill.parsed.city) setCityLoc({ lat: prefill.parsed.city.lat, lng: prefill.parsed.city.lng });
+    const city = prefill.parsed.city;
+    if (city) { setCityLoc({ lat: city.lat, lng: city.lng }); suggestCurrency(city); }
     if (f.accommodation?.name_or_address) setPinned(null);
-  }, [prefill, options.currencies]);
+  }, [prefill, options.currencies, suggestCurrency]);
 
   const fetchCities = useCallback(
     (q: string, signal: AbortSignal) => api.citySuggestions(q, signal).then((r) => r.results), []);
@@ -83,8 +91,8 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
           <Autocomplete<CitySuggestion>
             inputId="city-input" value={req.destination_city} required minChars={2}
             placeholder={mock ? "Jaipur" : "Lisbon, Kyoto, Jaipur..."}
-            onChange={(v) => { set("destination_city", v); setCityLoc(null); }}
-            onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); }}
+            onChange={(v) => { set("destination_city", v); setCityLoc(null); setLocal(null); }}
+            onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); suggestCurrency(c); }}
             fetchItems={fetchCities} itemKey={(c) => String(c.id)}
             renderItem={(c) => (
               <span className="ac-item"><strong>{c.name}</strong>
@@ -147,8 +155,15 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
         </label>
         <label className="field"><span>Currency</span>
           <select value={req.currency} onChange={(e) => set("currency", e.target.value)}>
-            {options.currencies.map((c) => <option key={c}>{c}</option>)}
+            {options.currencies.map((c) => (
+              <option key={c} value={c}>{c === local?.currency ? `${c} (used in ${local.country})` : c}</option>
+            ))}
           </select>
+          {local && local.currency !== req.currency && (
+            <button type="button" className="currency-hint" onClick={() => set("currency", local.currency)}>
+              Use {local.currency}, the currency in {local.country}
+            </button>
+          )}
         </label>
       </div>
       <label className="field">
