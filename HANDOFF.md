@@ -3,20 +3,20 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** ten interface polish fixes (form, trip page, waiting panel, plain-language notices); all links re-checked
+**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** added `CLAUDE.md`, the working guide; README and this file point to it
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
 
 ## 0. If you are an AI agent, read this first
 
-1. Read this whole file, then `README.md` (architecture + setup), then run `git log --oneline -15`.
+1. Read this whole file, then `CLAUDE.md` (the working guide: folder map, commands, coding and design rules, pitfalls, done checklist), then `README.md` (architecture + setup), then run `git log --oneline -15`. This file says what is true now; `CLAUDE.md` says how to work. If they disagree, this file wins.
 2. CI runs the offline backend suite and frontend production build. The latest known backend result is **131 passing**; the frontend build also passed in CI.
 3. **Rules:**
    - Update **HANDOFF.md in every commit** (header, affected sections, change-log row). The hook `.githooks/pre-commit` enforces it once `git config core.hooksPath .githooks` is set.
-   - **No AI attribution anywhere:** no `Co-Authored-By` lines for AI tools, no assistant or tool names in code, docs or commit messages.
+   - **No AI attribution anywhere:** no `Co-Authored-By` lines for AI tools, no assistant or tool names in code, docs or commit messages. The one exception is the file name `CLAUDE.md`, which coding tools look for by that name; its contents name no tool.
    - **Never commit secrets** (see §7 for where they live).
-   - **Documentation lives only in `README.md` and `HANDOFF.md`.** The owners asked for no extra doc files: keep the README short, and put depth here.
+   - **Documentation lives only in `README.md`, `HANDOFF.md` and `CLAUDE.md`.** The owners asked for no other doc files: keep the README short, put status and depth here, and keep `CLAUDE.md` for how to work (update it only when the rules or the structure change).
    - Never push code; the human owner pushes their local commits. Deploy only when a human asks.
    - Keep the honesty rules: label data sources, keep external ratings separate from the suitability score, mark estimates, and never silently replace failed live data with mock data.
    - Tests stay offline (fakes, `httpx.MockTransport`); add a test for every behaviour change.
@@ -123,7 +123,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 | Neon Postgres | Container disks are ephemeral; Render free Postgres expires in 30 days |
 | After graduation (Azure for Students ends) | Switch backend to Render free "lite" (`SEMANTIC_ENABLED=false`, `OVERTURE_ENABLED=false`) or a cheap VPS (Docker Compose + Caddy recipe in commit `8443341`, folder `deploy/oracle/`); frontend/db unchanged |
 | Deployment torn down after one verified trial; files removed from the repo | Owner decision on 2026-11-08: redo deployment cleanly later, following the proven plan |
-| Docs only in README.md + HANDOFF.md | Owner instruction |
+| Docs only in README.md + HANDOFF.md + CLAUDE.md | Owner instruction. `CLAUDE.md` was added on 2026-11-13 at the owner's request so any coding tool or new contributor works the same way |
 | No AI-tool attribution in repo or commits | Owner instruction |
 
 ---
@@ -237,7 +237,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-13 | (this commit) | Interface polish, ten fixes: Generate button no longer floats over the form; open-data banner is one quiet line (demo-mode and error banners unchanged); trip warnings and disclaimers fold into one plain sentence with details (`data-notes`); removed the dead live-location tile; dates read "Sat, 12 Dec" (`fmtDay`); stops show a duration instead of a repeated time range and period tag, and each diet fact appears once (`extraNotes` in `DayCard`); unrated places show no badge in lists (`hideEmpty`, place details still say "No rating"); parser plurals ("4 days", "2 travellers", tested); custom chips use an "Add your own" chip instead of three input rows; a `GeneratingPanel` replaces the form while a plan is built (elapsed time, no fake percentage). All routes and external links re-checked. 131 tests |
+| 2026-11-13 | (this commit) | Add `CLAUDE.md`, the working guide (what the project is, folder map, commands, coding, design, honesty and security rules, known pitfalls, done checklist); README and HANDOFF §0 point to it; docs rule now allows this third file |
+| 2026-11-13 | `6c3d0f0` | Interface polish, ten fixes: Generate button no longer floats over the form; open-data banner is one quiet line (demo-mode and error banners unchanged); trip warnings and disclaimers fold into one plain sentence with details (`data-notes`); removed the dead live-location tile; dates read "Sat, 12 Dec" (`fmtDay`); stops show a duration instead of a repeated time range and period tag, and each diet fact appears once (`extraNotes` in `DayCard`); unrated places show no badge in lists (`hideEmpty`, place details still say "No rating"); parser plurals ("4 days", "2 travellers", tested); custom chips use an "Add your own" chip instead of three input rows; a `GeneratingPanel` replaces the form while a plan is built (elapsed time, no fake percentage). All routes and external links re-checked. 131 tests |
 | 2026-11-12 | `635eb3d` | Audit tracked repository files and reconcile README/HANDOFF status, test count, deployment verification, and next steps. |
 | 2026-11-10 | `e6de362` | Remove the leftover sign-in code after `7113855`: auth/email/idempotency/live-location routers, services, models, errors and settings, the saved-trip API (only `POST /api/trips/preview` remains), CORS credentials; tests rewritten for the public flow (`test_security.py`), CI green again; unused frontend CSS removed. 130 tests |
 | 2026-11-10 | `7113855` | Remove sign-in and save generated itineraries in browser storage; update privacy, deployment, and setup docs |

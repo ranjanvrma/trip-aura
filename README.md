@@ -10,7 +10,7 @@ Tell TripAura where you're staying, where you're going, your budget, interests, 
 - rest breaks and transport for every leg
 - a budget that separates real prices from estimates
 
-> **Working on this repo (human or AI)?** Read [HANDOFF.md](HANDOFF.md) first. It has the current state, decisions and next steps, and must be updated in every commit.
+> **Working on this repo (human or AI)?** Read [HANDOFF.md](HANDOFF.md) first: it has the current state, decisions and next steps, and must be updated in every commit. Then read [CLAUDE.md](CLAUDE.md), the working guide: folder map, commands, coding and design rules, known pitfalls, and the checklist to run before calling a task done.
 
 ## Features
 
