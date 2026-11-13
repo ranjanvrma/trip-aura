@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { CodeXml, Menu, Search } from "lucide-react";
 import { modKey } from "../../lib/platform";
-import { useCommands } from "../CommandMenu";
+import { useCommands } from "./CommandMenu";
 import Sheet from "../ui/Sheet";
-import { Kbd } from "../ui/Skeleton";
+import Kbd from "../ui/Kbd";
 import Logo from "./Logo";
 
 export const REPO_URL = "https://github.com/ranjanvrma/trip-aura";

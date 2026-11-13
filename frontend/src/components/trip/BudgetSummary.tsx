@@ -1,5 +1,5 @@
-import type { BudgetSummary as Budget } from "../types";
-import { fmtMoney } from "../utils";
+import type { BudgetSummary as Budget } from "../../types";
+import { fmtMoney } from "../../utils";
 
 const CATS = [
   { key: "food", label: "Food", color: "var(--c-food)" },

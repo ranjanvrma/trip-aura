@@ -9,7 +9,3 @@ export function SkeletonLines({ lines = 3 }: { lines?: number }) {
     </div>
   );
 }
-
-export function Kbd({ children }: { children: React.ReactNode }) {
-  return <kbd className="kbd">{children}</kbd>;
-}

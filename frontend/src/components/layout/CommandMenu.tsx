@@ -2,10 +2,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, MapPin, Plus, Search, Shield } from "lucide-react";
-import { listSavedTrips } from "../lib/localTrips";
-import { useSWR } from "../lib/swr";
-import { modKey } from "../lib/platform";
-import { Kbd } from "./ui/Skeleton";
+import { listSavedTrips } from "../../lib/localTrips";
+import { useSWR } from "../../lib/swr";
+import { modKey } from "../../lib/platform";
+import Kbd from "../ui/Kbd";
 
 export interface Command { id: string; label: string; hint?: string; group: string; icon?: LucideIcon; run: () => void }
 

@@ -13,13 +13,11 @@ interface Props<T> {
   footer?: string;
   className?: string;
   inputId?: string;
-  /** Keyboard shortcut shown inside the field, e.g. "/". */
-  hint?: string;
 }
 
 /** Accessible combobox: debounced search, arrow keys / Enter / Escape, mouse selection. */
 export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems, renderItem, itemKey, minChars = 2,
-                                         placeholder, required, footer, className, inputId, hint }: Props<T>) {
+                                         placeholder, required, footer, className, inputId }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -77,8 +75,7 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
         onFocus={() => items.length && setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
       />
-      {loading ? <span className="spinner ac-spin" aria-hidden />
-        : hint && !value && <kbd className="kbd ac-hint" aria-hidden>{hint}</kbd>}
+      {loading && <span className="spinner ac-spin" aria-hidden />}
       {open && (items.length > 0 || error) && (
         <ul className="ac-list" id={listId} role="listbox">
           {error && <li className="ac-empty">{error}</li>}

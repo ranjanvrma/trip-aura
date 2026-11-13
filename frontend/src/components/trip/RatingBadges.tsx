@@ -1,5 +1,5 @@
 import { Star } from "lucide-react";
-import type { ExternalRating, SuitabilityScore } from "../types";
+import type { ExternalRating, SuitabilityScore } from "../../types";
 
 /**
  * External (Google or demo) rating. Always shown separately from our suitability score.

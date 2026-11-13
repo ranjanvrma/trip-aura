@@ -1,5 +1,5 @@
-import type { DishSuggestion, FoodRecommendation } from "../types";
-import { moneyLabel, pretty } from "../utils";
+import type { DishSuggestion, FoodRecommendation } from "../../types";
+import { moneyLabel, pretty } from "../../utils";
 import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
 
 function Dish({ d }: { d: DishSuggestion }) {

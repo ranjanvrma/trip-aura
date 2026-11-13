@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CalendarDays, RotateCcw } from "lucide-react";
-import BudgetSummary from "../components/BudgetSummary";
-import { type Command, usePageCommands } from "../components/CommandMenu";
-import DayCard from "../components/DayCard";
+import BudgetSummary from "../components/trip/BudgetSummary";
+import { type Command, usePageCommands } from "../components/layout/CommandMenu";
+import DayCard from "../components/trip/DayCard";
 import MapView from "../components/map/MapView";
 import type { MapMarker, MapPolyline } from "../components/map/types";
-import PlaceDetails from "../components/PlaceDetails";
-import RestaurantList from "../components/RestaurantList";
+import PlaceDetails from "../components/trip/PlaceDetails";
+import RestaurantList from "../components/trip/RestaurantList";
 import { RibbonLegend } from "../components/trip/DayRibbon";
 import TripTicket from "../components/trip/TripTicket";
 import RetryNotice from "../components/ui/RetryNotice";

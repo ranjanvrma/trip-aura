@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
-import { pretty } from "../utils";
+import { pretty } from "../../utils";
 
 interface Props {
   label: string;

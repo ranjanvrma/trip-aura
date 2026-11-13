@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** **v1.0.0**: complete visual redesign (atlas look, real 3D globe, ticket header, day ribbons, budget charts) and the version system (see §13)
+**Last updated:** 2026-11-13 · **Branch:** `main` · **Latest change:** **v1.0.1**: interface pass to remove template-looking elements, quick-start cities on the home page, components grouped by feature, quieter motion
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -97,7 +97,7 @@ Diagram and request flow: README → *Architecture*. Key files:
 | NLP | `nlp/city_index.py` (GeoNames cities15000, fuzzy), `trip_parser.py`, `interests.py`, `semantic.py` (fastembed bge-small), `sentiment.py`, `registry.py` |
 | API | `routers/` trip preview, geo autocomplete, NLP parsing, metadata, and routing. Sign-in, sessions, server-side saved trips, idempotency records and live location were removed (old tables in existing databases are simply unused). Security that remains: Origin check on POST, per-IP rate limits (`generate` 6/min on `/api/trips/preview`), security headers, input limits, safe URLs; CORS without credentials |
 | API and security | `routers/` contains itinerary generation (`/api/trips/preview`), geo autocomplete, NLP parsing, status/options and routing; `core/security.py` provides security headers, origin checks and per-IP limits. Account routes are not mounted. |
-| Frontend | `App.tsx` (lazy routes, server wake-up retry), `components/layout/` (header, mobile menu sheet, footer, scroll progress, route chunk preloading), `pages/` (Planner, Trip, Trips, Legal, NotFound), `components/` (CommandMenu, globe, form, day cards and map), `lib/localTrips.ts` (saved itineraries in local storage), `lib/trips.ts` (delete + undo), `services/api.ts` (public API calls), `vite.config.ts` (production CSP and pre-rendered route heads) |
+| Frontend | `App.tsx` (lazy routes, server wake-up retry), `pages/` (Planner, Trip, Trips, Legal, NotFound), `components/` grouped by feature: `planner/` (form, describe box, progress panel), `trip/` (ticket header, day cards and ribbon, place details, budget charts, food), `globe/` (three.js Earth, lazy chunk), `map/`, `layout/` (shell, command menu, banners), `ui/` (sheet, skeleton, key, autocomplete, retry notice), `art/` (seeded contour artwork); `lib/localTrips.ts` (saved itineraries in local storage), `lib/trips.ts` (delete + undo), `services/api.ts` (public API calls), `vite.config.ts` (production CSP, pre-rendered route heads, version injection) |
 | Repo tooling | `.github/workflows/ci.yml` (tests + build), `.github/dependabot.yml` (minor/patch only), `.github/pull_request_template.md`, `.githooks/pre-commit` (HANDOFF check) |
 | Production-ready code kept | Postgres support (`db/database.py` normalises `postgres://` URLs), `CORS_ORIGIN_REGEX`, startup warm-up (`WARMUP_ON_START`), DuckDB memory caps; Azure deployment files and workflow are present; live deployment details are in §8 |
 
@@ -238,7 +238,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-13 | (this commit) | **v1.0.0.** Complete redesign: travel-atlas palette (paper, deep teal, terracotta), full-width hero with a real 3D globe (Natural Earth land, live day/night from the sun's position, drag to turn, destination pin and saved-trip pins, lazy chunk; detailed coastline, lighter one on slow connections), ticket-style trip header with real totals, day ribbons, budget ring and per-day bars, seeded contour artwork on trip cards, dark teal footer with the version, new logo colours and icons. Version system added (§13), past milestones tagged |
+| 2026-11-13 | (this commit) | **v1.0.1.** Interface pass: removed template tells (uppercase tile labels, dash eyebrows, icon fact list, Keyboard and How-it's-built tiles, shortcut badges inside fields, pinned data banner); sentence-case serif headings; plainer copy; quick-start cities in the hero (looked up in the city index, fill the form and turn the globe); data note moved under the submit button; home layout is now hero, planning column, side column; quiet entrance motion (ticket, day ribbons, budget ring and bars), smooth scrolling, all off under reduced motion. Components grouped by feature (`planner/`, `trip/`, `ui/`, `layout/`), `Kbd` in its own file, dead CSS removed. README rewritten without the "AI-powered" tagline, with app and release links |
+| 2026-11-13 | `ea37847` | **v1.0.0.** Complete redesign: travel-atlas palette (paper, deep teal, terracotta), full-width hero with a real 3D globe (Natural Earth land, live day/night from the sun's position, drag to turn, destination pin and saved-trip pins, lazy chunk; detailed coastline, lighter one on slow connections), ticket-style trip header with real totals, day ribbons, budget ring and per-day bars, seeded contour artwork on trip cards, dark teal footer with the version, new logo colours and icons. Version system added (§13), past milestones tagged |
 | 2026-11-13 | `712cc2b` | Reconcile HANDOFF with the latest GitHub changes: remove stale live-location output, describe the indeterminate generation panel accurately, and replace outdated Dependabot PR numbers with a current review task. |
 | 2026-11-13 | `c705060` | Add `CLAUDE.md`, the working guide (what the project is, folder map, commands, coding, design, honesty and security rules, known pitfalls, done checklist); README and HANDOFF §0 point to it; docs rule now allows this third file |
 | 2026-11-13 | `6c3d0f0` | Interface polish, ten fixes: Generate button no longer floats over the form; open-data banner is one quiet line (demo-mode and error banners unchanged); trip warnings and disclaimers fold into one plain sentence with details (`data-notes`); removed the dead live-location tile; dates read "Sat, 12 Dec" (`fmtDay`); stops show a duration instead of a repeated time range and period tag, and each diet fact appears once (`extraNotes` in `DayCard`); unrated places show no badge in lists (`hideEmpty`, place details still say "No rating"); parser plurals ("4 days", "2 travellers", tested); custom chips use an "Add your own" chip instead of three input rows; a `GeneratingPanel` replaces the form while a plan is built (elapsed time, no fake percentage). All routes and external links re-checked. 131 tests |
@@ -292,7 +293,8 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 
 | Version | Commit | Date | What it is |
 |---|---|---|---|
-| v1.0.0 | (this commit) | 2026-11-13 | Public-ready redesign: real 3D globe, atlas look, ticket header, day ribbons, budget charts; version system |
+| v1.0.1 | (this commit) | 2026-11-13 | Interface pass without template-looking elements, quick-start cities, components grouped by feature, quieter motion |
+| v1.0.0 | `ea37847` | 2026-11-13 | Public-ready redesign: real 3D globe, atlas look, ticket header, day ribbons, budget charts; version system |
 | v0.7.1 | `6c3d0f0` | 2026-11-13 | Ten interface fixes (form, notices, dates, waiting panel) |
 | v0.7.0 | `e6de362` | 2026-11-10 | No accounts: trips saved in the browser; sign-in code removed |
 | v0.6.0 | `c55f12c` | 2026-11-10 | First redesign; security hardening |

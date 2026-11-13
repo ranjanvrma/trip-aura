@@ -1,7 +1,7 @@
 import { ExternalLink, X } from "lucide-react";
-import { safeExternalUrl } from "../lib/safeUrl";
-import type { ItineraryItem } from "../types";
-import { moneyLabel, pretty } from "../utils";
+import { safeExternalUrl } from "../../lib/safeUrl";
+import type { ItineraryItem } from "../../types";
+import { moneyLabel, pretty } from "../../utils";
 import { ExternalRatingBadge, ScoreBreakdown, SuitabilityBadge } from "./RatingBadges";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

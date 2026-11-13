@@ -1,34 +1,25 @@
 # TripAura
 
-**AI-powered, day-by-day travel itineraries for any city in the world, built from free open data.**
+**Day-by-day trip plans for any city in the world, built from free open map data.**
+
+[Open the app](https://trip-aura-cr.vercel.app/) · [Releases](https://github.com/ranjanvrma/trip-aura/releases)
 
 ![CI](https://github.com/ranjanvrma/trip-aura/actions/workflows/ci.yml/badge.svg)
+![Latest release](https://img.shields.io/github/v/tag/ranjanvrma/trip-aura?label=version&sort=semver)
 
-Tell TripAura where you're staying, where you're going, your budget, interests, diet, transport and pace (or describe the trip in one sentence). It plans every day:
-- sights in a sensible order, with opening hours respected
-- breakfast, lunch and dinner that fit your diet
-- rest breaks and transport for every leg
-- a budget that separates real prices from estimates
+Give it a city and where you're staying, plus your dates, budget, interests, diet, transport and pace, or describe the trip in one sentence. It plans every day: sights in an order that saves walking, with opening hours respected; meals that fit your diet; breaks; a transport leg for every move; and a budget that keeps real prices apart from estimates.
 
 > **Working on this repo (human or AI)?** Read [HANDOFF.md](HANDOFF.md) first: it has the current state, decisions and next steps, and must be updated in every commit. Then read [CLAUDE.md](CLAUDE.md), the working guide: folder map, commands, coding and design rules, known pitfalls, and the checklist to run before calling a task done.
 
-## Features
+## What it does
 
-- **Any city, no API key:** places from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, loaded on demand and cached for 30 days.
-- **Smart planning:**
-  - a personal 0–5 fit score for every place, with reasons
-  - travel-minimising order (day anchor, then greedy ordering, then 2-opt)
-  - pace-aware days with rest breaks
-- **Food that fits:** vegetarian, vegan, Jain, eggetarian and non-veg filters, plus local dishes backed by review or guidebook evidence.
-- **Honest numbers:** every rating and price shows its source, estimates are labelled, and the fit score is kept separate from external ratings.
-- **NLP / AI:**
-  - city autocomplete with typo handling
-  - a "describe your trip" box that fills the form
-  - typo-tolerant interests
-  - semantic matching with a local embedding model
-  - review sentiment
-- **Budget:** savings suggestions and auto "fit to budget".
-- **No account needed:** generated itineraries are saved in your browser on this device. They do not sync; clearing site data removes them.
+- **Any city, no API key.** Places come from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, loaded on demand and cached for 30 days. Over 34,000 cities resolve from an offline index.
+- **Plans that hold together.** Every place gets a 0 to 5 fit score with reasons. Each day starts from its strongest sight and the stops are reordered to cut travel (greedy order, then 2-opt), with meals, breaks and opening hours fitted in.
+- **Food that fits.** Vegetarian, vegan, Jain, eggetarian and non-veg filters, and local dishes only when reviews or a travel guide back them up.
+- **Honest numbers.** Every rating and price says where it came from, estimates are labelled, and the fit score never uses outside ratings.
+- **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
+- **Easy to read.** A 3D globe that turns to your destination, a ticket-style summary of each plan, a ribbon showing how each day's time is split, and charts of where the budget goes.
+- **No account.** Plans are saved in your browser on this device. They do not sync, and clearing site data removes them.
 
 ## Architecture
 
@@ -69,14 +60,16 @@ flowchart LR
 | `backend/app/nlp/` | City index, trip-text parser, interests, embeddings, sentiment |
 | `backend/app/services/` | Orchestration (`itinerary_service.py`), FX, Google enrichment |
 | `backend/app/routers/` | REST API |
-| `frontend/src/` | Pages, components (form, day cards, map, budget), typed API client |
+| `frontend/src/pages/` | Planner (home), trip, saved trips, legal, 404 |
+| `frontend/src/components/` | `planner/` (form, describe box, progress), `trip/` (ticket, day cards, ribbon, budget, places), `globe/` (three.js Earth), `map/`, `layout/`, `ui/`, `art/` |
+| `frontend/src/lib/` | Saved trips in local storage, data cache, toasts, page titles, motion helpers |
 | `.github/` | CI (tests + build), Dependabot, PR template |
 
 **Tech stack:**
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, Leaflet |
+| Frontend | React 18, TypeScript, Vite, three.js (globe), Leaflet or Google Maps, Motion, GSAP |
 | Backend | FastAPI, Pydantic, SQLAlchemy |
 | Data | DuckDB, Overture Maps, Wikidata, OpenStreetMap, Wikivoyage, GeoNames |
 | NLP / ML | rapidfuzz, fastembed (ONNX `bge-small-en-v1.5`) |

@@ -37,7 +37,6 @@ export default function TripTicket({ it, regenerating, onRegenerate }: Props) {
     <header className="ticket">
       <div className="ticket-main">
         <ContourArt seed={r.destination_city} className="ticket-art" />
-        <p className="eyebrow">Your itinerary</p>
         <h1 className="ticket-city">
           <span className="ticket-mark" aria-hidden>{cityMark(r.destination_city)}</span>
           <span>{city}</span>

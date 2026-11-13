@@ -1,8 +1,8 @@
-import type { DayPlan, ItineraryItem } from "../types";
-import { MODE_LABEL, fmtDay, fmtDuration, fmtMoney, moneyLabel } from "../utils";
+import type { DayPlan, ItineraryItem } from "../../types";
+import { MODE_LABEL, fmtDay, fmtDuration, fmtMoney, moneyLabel } from "../../utils";
 import { type LucideIcon, ArrowRight, Coffee, House, Sun } from "lucide-react";
 import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
-import DayRibbon from "./trip/DayRibbon";
+import DayRibbon from "./DayRibbon";
 
 interface Props {
   day: DayPlan;

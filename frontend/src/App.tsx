@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { CommandProvider } from "./components/CommandMenu";
-import DataSourceBanner from "./components/DataSourceBanner";
+import { CommandProvider } from "./components/layout/CommandMenu";
+import DataSourceBanner from "./components/layout/DataSourceBanner";
 import Layout from "./components/layout/Layout";
 import { SkeletonLines } from "./components/ui/Skeleton";
 import { ToastProvider } from "./lib/toast";

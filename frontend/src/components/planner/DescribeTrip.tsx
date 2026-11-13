@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { api, ApiError } from "../services/api";
-import type { ParsedTrip } from "../types";
-import { Kbd } from "./ui/Skeleton";
+import { api, ApiError } from "../../services/api";
+import type { ParsedTrip } from "../../types";
 
 const EXAMPLE = "4 days in Lisbon with my partner from 12 Dec, vegetarian, we love museums, street art and sunsets, "
   + "budget 900 euros, staying at Rossio, relaxed pace, metro and walking";
@@ -12,6 +11,7 @@ export default function DescribeTrip({ onParsed }: { onParsed: (p: ParsedTrip) =
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ParsedTrip | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canRun = text.trim().length >= 3 && !busy;
 
   const run = async () => {
     setBusy(true);
@@ -29,22 +29,24 @@ export default function DescribeTrip({ onParsed }: { onParsed: (p: ParsedTrip) =
 
   return (
     <section className="describe">
-      <h2 className="tile-title">Describe your trip</h2>
-      <p className="small muted">Write it the way you'd tell a friend. TripAura fills in the form below; you can then adjust anything.</p>
-      <textarea rows={3} maxLength={500} aria-label="Describe your trip" value={text} onChange={(e) => setText(e.target.value)} placeholder={EXAMPLE}
-                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && text.trim().length > 2) void run(); }} />
-      <div className="row gap-s wrap mt-s">
-        <button type="button" className="btn" onClick={() => void run()} disabled={busy || text.trim().length < 3}>
-          {busy ? <><span className="spinner" aria-hidden /> Reading</> : "Fill the form"}
+      <h2 className="tile-title"><label htmlFor="describe-text">Describe the trip in a sentence</label></h2>
+      <textarea id="describe-text" rows={3} maxLength={500} value={text} onChange={(e) => setText(e.target.value)}
+                placeholder={EXAMPLE} aria-describedby="describe-help"
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canRun) void run(); }} />
+      <div className="describe-actions">
+        <p id="describe-help" className="small muted">Dates, budget, who's going, what you like. We'll fill in the form.</p>
+        <button type="button" className="link" onClick={() => setText(EXAMPLE)}>Try an example</button>
+        <button type="button" className="btn" onClick={() => void run()} disabled={!canRun}>
+          {busy ? <><span className="spinner" aria-hidden /> Reading</> : "Fill in the form"}
         </button>
-        <span className="small muted shortcut-hint"><Kbd>Ctrl</Kbd><Kbd>Enter</Kbd></span>
-        <button type="button" className="btn" onClick={() => setText(EXAMPLE)}>Use example</button>
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}
       {result && (
-        <div className="mt-s">
+        <div className="mt-s" role="status">
           {result.understood.length > 0 && (
-            <div className="chips">{result.understood.map((u) => <span key={u} className="chip chip-on" role="status">{u}</span>)}</div>
+            <ul className="understood" aria-label="What we picked up">
+              {result.understood.map((u) => <li key={u}>{u}</li>)}
+            </ul>
           )}
           {result.notes.map((n) => <p key={n} className="small warn">{n}</p>)}
         </div>

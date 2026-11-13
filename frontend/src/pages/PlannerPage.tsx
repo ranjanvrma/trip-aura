@@ -1,21 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Earth, MapPin, Route, ScanSearch, Trash, Utensils, Wallet, Waypoints } from "lucide-react";
-import DescribeTrip from "../components/DescribeTrip";
-import GeneratingPanel from "../components/GeneratingPanel";
+import { ArrowRight, Trash } from "lucide-react";
 import Globe from "../components/globe/Globe";
-import TripForm from "../components/TripForm";
+import DescribeTrip from "../components/planner/DescribeTrip";
+import GeneratingPanel from "../components/planner/GeneratingPanel";
+import TripForm from "../components/planner/TripForm";
 import RetryNotice from "../components/ui/RetryNotice";
-import { Kbd, SkeletonLines } from "../components/ui/Skeleton";
+import { SkeletonLines } from "../components/ui/Skeleton";
+import { listSavedTrips, saveTrip } from "../lib/localTrips";
 import { usePageMeta } from "../lib/meta";
-import { modKey } from "../lib/platform";
 import { mutate, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useDeleteTrip } from "../lib/trips";
 import { useScrollMotion } from "../lib/useScrollMotion";
-import { listSavedTrips, saveTrip } from "../lib/localTrips";
 import { api, ApiError } from "../services/api";
 import type { ApiStatus, LatLng, ParsedTrip, TripRequest } from "../types";
+
+// One-click starting points. Only the names live here: coordinates and the country come from the city index.
+const QUICK_CITIES = ["Lisbon", "Kyoto", "Jaipur", "Mexico City", "Istanbul", "Cape Town"];
+
+const scrollToPlan = (focusCity: boolean) => {
+  document.getElementById("plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (focusCity) window.setTimeout(() => document.getElementById("city-input")?.focus({ preventScroll: true }), 450);
+};
 
 export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   usePageMeta(null);
@@ -39,7 +46,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
 
   useScrollMotion(root, [options.data !== undefined]);
 
-  // keyboard: "/" focuses the city field, Ctrl/Cmd+Enter submits the form
+  // keyboard: "/" focuses the city field, Ctrl/Cmd+Enter submits from anywhere in the form
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement)?.closest("input, textarea, select, [contenteditable]");
@@ -53,12 +60,24 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const applyParsed = (p: ParsedTrip) => setPrefill((old) => ({ parsed: p, version: (old?.version ?? 0) + 1 }));
+
+  const pickCity = async (name: string) => {
+    try {
+      const [city] = (await api.citySuggestions(name)).results;
+      if (!city) return;
+      applyParsed({ fields: { destination_city: city.query }, understood: [], notes: [], city });
+      scrollToPlan(false);
+    } catch (e) {
+      toast.show({ tone: "error", message: (e as ApiError).message });
+    }
+  };
+
   const submit = async (req: TripRequest) => {
     setSubmitting(true);
     setPendingCity(req.destination_city);
     setError(null);
-    // The form is long and the progress panel that replaces it is short, so jump to the top of the tile
-    // once the panel has rendered (an instant jump: the content under the pointer is changing anyway).
+    // the progress panel replaces the long form, so jump to the top of the tile once it has rendered
     window.setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: "auto", block: "start" }), 0);
     try {
       const it = await api.previewTrip(req);
@@ -75,32 +94,34 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
     }
   };
 
+  const formReady = options.data && status;
+
   return (
     <div className="bento planner" ref={root}>
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <p className="eyebrow">Day-by-day trip planner</p>
           <h1 id="hero-title" className="display">
             Every day of your trip, <em>planned stop by stop.</em>
           </h1>
           <p className="lead">
-            Pick a city and where you're staying. TripAura orders the sights to cut travel time, checks opening hours,
-            adds meals that fit your diet and shows what each day costs.
+            Tell it the city and where you're staying. You get each day in an order that saves walking, meals that
+            suit how you eat, and what the day will roughly cost.
           </p>
           <div className="hero-actions">
-            <a href="#plan" className="btn btn-primary btn-lg" onClick={(e) => {
-              e.preventDefault();
-              document.getElementById("plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              window.setTimeout(() => document.getElementById("city-input")?.focus({ preventScroll: true }), 450);
-            }}>Start planning <ArrowRight size={18} aria-hidden /></a>
-            <span className="small muted shortcut-hint">or press <Kbd>/</Kbd></span>
+            <a href="#plan" className="btn btn-primary btn-lg" onClick={(e) => { e.preventDefault(); scrollToPlan(true); }}>
+              Plan a trip <ArrowRight size={18} aria-hidden />
+            </a>
           </div>
-          <ul className="hero-facts" aria-label="What you get">
-            <li><Earth size={16} aria-hidden /> Over 34,000 cities</li>
-            <li><Waypoints size={16} aria-hidden /> Sights ordered to cut travel</li>
-            <li><Utensils size={16} aria-hidden /> Meals that fit your diet</li>
-            <li><Wallet size={16} aria-hidden /> A cost for every day</li>
-          </ul>
+          {formReady && status?.data_mode !== "mock" && (
+            <div className="quick-cities">
+              <span className="small muted">Or start from</span>
+              <ul>
+                {QUICK_CITIES.map((c) => (
+                  <li key={c}><button type="button" className="quick-city" onClick={() => void pickCity(c)}>{c}</button></li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="hero-globe" data-parallax="0.08">
           <Globe target={cityLoc} pins={pins}
@@ -108,82 +129,74 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
         </div>
       </section>
 
-      <section className="tile tile-describe" data-reveal>
-        {options.data && status
-          ? <DescribeTrip onParsed={(p) => setPrefill((old) => ({ parsed: p, version: (old?.version ?? 0) + 1 }))} />
-          : <SkeletonLines lines={4} />}
-      </section>
+      <div className="plan-col">
+        <section className="tile tile-describe" data-reveal>
+          {formReady ? <DescribeTrip onParsed={applyParsed} /> : <SkeletonLines lines={4} />}
+        </section>
 
-      <section className="tile tile-form" id="plan" data-reveal aria-busy={submitting}>
-        {error && (
-          <div className="notice notice-error" role="alert">
-            <strong>{error.message}</strong>
-            {Array.isArray(error.details) && (
-              <ul className="small">
-                {(error.details as { field: string; message: string }[]).map((d) => (
-                  <li key={d.field + d.message}>{d.field || "request"}: {d.message}</li>
+        <section className="tile tile-form" id="plan" data-reveal aria-busy={submitting}>
+          {error && (
+            <div className="notice notice-error" role="alert">
+              <strong>{error.message}</strong>
+              {Array.isArray(error.details) && (
+                <ul className="small">
+                  {(error.details as { field: string; message: string }[]).map((d) => (
+                    <li key={d.field + d.message}>{d.field || "request"}: {d.message}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {submitting && <GeneratingPanel city={pendingCity} firstVisitHint={status?.data_mode === "open"} />}
+          {formReady ? (
+            // kept mounted (hidden) while generating, so the details are still there if the request fails
+            <div hidden={submitting}>
+              <TripForm options={options.data!} status={status!} submitting={submitting} onSubmit={(r) => void submit(r)}
+                        prefill={prefill} onCityLocation={setCityLoc} />
+            </div>
+          ) : options.error ? (
+            <RetryNotice message={`Couldn't load the form options: ${options.error.message}`} onRetry={() => void options.refresh()} />
+          ) : (
+            <div className="stack-m"><SkeletonLines lines={2} /><SkeletonLines lines={3} /><SkeletonLines lines={3} /></div>
+          )}
+        </section>
+      </div>
+
+      <aside className="side-stack" aria-label="Your trips and how plans are made">
+        <section className="tile tile-saved" data-reveal aria-labelledby="saved-title">
+          <div className="tile-head">
+            <h2 id="saved-title" className="tile-title">Your trips</h2>
+            {!!trips.data?.length && <Link to="/trips" className="small" viewTransition>See all</Link>}
+          </div>
+          {trips.loading ? <SkeletonLines lines={3} />
+            : trips.data?.length === 0 ? <p className="small muted">Plans you make are kept here, in this browser.</p>
+            : (
+              <ul className="trip-list">
+                {trips.data?.slice(0, 6).map((t) => (
+                  <li key={t.id} className="trip-row">
+                    <Link to={`/trips/${t.id}`} viewTransition className="trip-link">
+                      <span className="truncate">{t.destination.split(",")[0]}</span>
+                      <span className="small muted num">{t.num_days} {t.num_days === 1 ? "day" : "days"}</span>
+                    </Link>
+                    <button className="icon-btn hit" onClick={() => deleteTrip(t)} aria-label={`Delete ${t.title}`}>
+                      <Trash size={16} aria-hidden />
+                    </button>
+                  </li>
                 ))}
               </ul>
             )}
-          </div>
-        )}
-        {submitting && <GeneratingPanel city={pendingCity} firstVisitHint={status?.data_mode === "open"} />}
-        {options.data && status ? (
-          // kept mounted (hidden) while generating, so the details are still there if the request fails
-          <div hidden={submitting}>
-            <TripForm options={options.data} status={status} submitting={submitting} onSubmit={(r) => void submit(r)}
-                      prefill={prefill} onCityLocation={setCityLoc} />
-          </div>
-        ) : options.error ? (
-          <RetryNotice message={`Couldn't load the form options: ${options.error.message}`} onRetry={() => void options.refresh()} />
-        ) : (
-          <div className="stack-m"><SkeletonLines lines={2} /><SkeletonLines lines={3} /><SkeletonLines lines={3} /></div>
-        )}
-      </section>
+        </section>
 
-      <aside className="tile tile-saved" data-reveal aria-labelledby="saved-title">
-        <div className="tile-head">
-          <h2 id="saved-title" className="tile-title">Saved trips</h2>
-          <Link to="/trips" className="small" viewTransition>View all</Link>
-        </div>
-        {trips.loading ? <SkeletonLines lines={3} />
-          : trips.data?.length === 0 ? <p className="small muted">No saved trips yet. Your first plan will appear here.</p>
-          : (
-            <ul className="trip-list">
-              {trips.data?.slice(0, 6).map((t) => (
-                <li key={t.id} className="trip-row">
-                  <Link to={`/trips/${t.id}`} viewTransition className="trip-link">
-                    <span className="truncate">{t.title}</span>
-                    <span className="small muted num">{t.num_days} days</span>
-                  </Link>
-                  <button className="icon-btn hit" onClick={() => deleteTrip(t)} aria-label={`Delete ${t.title}`}>
-                    <Trash size={16} aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <section className="method" data-reveal aria-labelledby="method-title">
+          <h2 id="method-title" className="tile-title">How the plan is made</h2>
+          <ol>
+            <li>Places come from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, and are kept for 30 days.</li>
+            <li>Each one is scored for you: interests, budget, distance, transport, time and pace. Outside ratings never count.</li>
+            <li>Every day starts from its strongest sight, then the stops are reordered to cut the walking and riding.</li>
+            <li>Fares, meals and tickets are estimated from local prices, and labelled as estimates.</li>
+          </ol>
+        </section>
       </aside>
-
-      <section className="tile tile-steps" data-reveal aria-labelledby="how-title">
-        <h2 id="how-title" className="tile-title">How a plan is built</h2>
-        <ol className="steps">
-          <li><span className="step-icon" aria-hidden><MapPin size={16} /></span><span><strong>Places.</strong> Overture Maps, Wikidata, OpenStreetMap and Wikivoyage are read for your city and cached for 30 days.</span></li>
-          <li><span className="step-icon" aria-hidden><ScanSearch size={16} /></span><span><strong>Fit.</strong> Each place gets a 0 to 5 score for your interests, budget, distance, transport, time and pace.</span></li>
-          <li><span className="step-icon" aria-hidden><Route size={16} /></span><span><strong>Order.</strong> Each day starts from its strongest sight and is reordered to shorten the walking and riding.</span></li>
-          <li><span className="step-icon" aria-hidden><Wallet size={16} /></span><span><strong>Cost.</strong> Fares, meals and tickets are estimated from local price levels and marked as estimates.</span></li>
-        </ol>
-      </section>
-
-      <section className="tile tile-shortcuts" data-reveal aria-labelledby="keys-title">
-        <h2 id="keys-title" className="tile-title">Keyboard</h2>
-        <dl className="keys">
-          <div><dt><Kbd>{modKey()}</Kbd><Kbd>K</Kbd></dt><dd>Search pages, trips and actions</dd></div>
-          <div><dt><Kbd>/</Kbd></dt><dd>Jump to the city field</dd></div>
-          <div><dt><Kbd>{modKey()}</Kbd><Kbd>Enter</Kbd></dt><dd>Generate from anywhere in the form</dd></div>
-          <div><dt><Kbd>Esc</Kbd></dt><dd>Close a menu or panel</dd></div>
-        </dl>
-      </section>
     </div>
   );
 }

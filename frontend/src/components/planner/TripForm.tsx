@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../services/api";
+import { api } from "../../services/api";
 import type {
   AddressSuggestion, ApiOptions, ApiStatus, CitySuggestion, LatLng, ParsedTrip, TransportMode, TripRequest,
-} from "../types";
-import { MODE_LABEL, pretty } from "../utils";
-import Autocomplete from "./Autocomplete";
+} from "../../types";
+import { MODE_LABEL, pretty } from "../../utils";
+import Autocomplete from "../ui/Autocomplete";
 import ChipSelect from "./ChipSelect";
 
 interface Props {
@@ -75,14 +75,14 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
   return (
     <form className="form" onSubmit={submit} aria-labelledby="plan-title">
-      <h2 id="plan-title" className="tile-title">Trip details</h2>
+      <h2 id="plan-title" className="tile-title">The trip</h2>
 
       <div className="grid-2">
         <label className="field">
           <span>Destination city</span>
           <Autocomplete<CitySuggestion>
             inputId="city-input" value={req.destination_city} required minChars={2}
-            placeholder={mock ? "Jaipur" : "Start typing a city, e.g. Lis..."}
+            placeholder={mock ? "Jaipur" : "Lisbon, Kyoto, Jaipur..."}
             onChange={(v) => { set("destination_city", v); setCityLoc(null); }}
             onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); }}
             fetchItems={fetchCities} itemKey={(c) => String(c.id)}
@@ -92,10 +92,8 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
               </span>
             )}
             footer="City data © GeoNames"
-            hint="/"
           />
-          {mock ? <small className="muted">Demo mode supports {status?.mock_city} only.</small>
-            : <small className="muted">Works for cities worldwide.</small>}
+          {mock && <small className="muted">Demo mode supports {status?.mock_city} only.</small>}
         </label>
         <label className="field">
           <span>Start date</span>
@@ -202,9 +200,14 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
       <div className="form-submit">
         <button className="btn btn-primary btn-block" disabled={submitting} aria-keyshortcuts="Control+Enter Meta+Enter">
-          {submitting ? <><span className="spinner" aria-hidden /> Building your itinerary</> : "Generate itinerary"}
+          {submitting ? <><span className="spinner" aria-hidden /> Building your itinerary</> : "Build my itinerary"}
         </button>
-        <p className="small muted">Trips are saved only in this browser on this device.</p>
+        <p className="small muted">
+          {mock ? "Demo data: ratings, prices and times are illustrative."
+            : status?.google.active ? "Open map data, with Google ratings where a place matches. Times and most prices are estimates."
+            : "Built from open map data. Times and most prices are estimates."}{" "}
+          Saved only in this browser.
+        </p>
       </div>
     </form>
   );
