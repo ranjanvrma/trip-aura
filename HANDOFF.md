@@ -3,7 +3,7 @@
 > **Purpose:** everything a developer or AI coding agent needs to continue this project without the original conversation.
 > **Rule:** update this file in the **same commit** as any change to code, config, deployment or plans (see [How to update this file](#how-to-update-this-file)).
 
-**Last updated:** 2026-11-14 · **Branch:** `main` · **Latest change:** **v1.2.0**: trip style (lowest cost, mid-range, premium); number fields no longer show a leading 0 when cleared
+**Last updated:** 2026-11-14 · **Branch:** `main` · **Latest change:** **v1.3.0**: download a trip as a PDF
 **Authors:** Ranjan Verma (GitHub `ranjanvrma`) and Chinmay Dahiya
 
 ---
@@ -198,7 +198,7 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
    - Place photos (and BlurHash placeholders for them): the data has no images yet; Wikidata P18 / Wikimedia Commons is the free source. Only the globe uses a blurred placeholder today.
    - The current generation panel explains the work and shows elapsed time, but cannot report actual backend stages. True per-stage progress needs async loading and status polling.
    - Lottie: not used. Animations are Motion (sheets, toasts, menus), GSAP (scroll reveals, parallax, globe turns) and CSS. Add Lottie only with self-made or properly licensed animation files.
-3. **Owner's feature backlog:** the planned releases are listed at the end of §13, in order. Next up is downloading a trip as a PDF.
+3. **Owner's feature backlog:** the planned releases are listed at the end of §13, in order. Next up is designed dropdowns to replace the plain browser selects.
 4. **Credit Chinmay in GitHub contributors:** he commits with his GitHub email (his email is still unknown).
 5. **Dependabot:** review the currently open dependency PRs in GitHub. Minor and patch upgrades are grouped; major upgrades are ignored and should be considered separately with any required code changes.
 6. **Nice to have:**
@@ -240,7 +240,8 @@ CI (`ci.yml`) runs tests and the frontend build on every push.
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-11-14 | (this commit) | **v1.2.0.** Trip style: new `trip_style` request field (`budget`, `mid` default, `premium`), a "How to spend the budget" control in the form, listed in `/api/meta/options`, and read from descriptions ("cheap", "on a budget", "luxury", "5 star"...; "budget" alone still means an amount). `engines/style.py` holds the profiles. Lowest cost judges meals and entry fees against half the usual allowance and weights transport toward cost; premium marks down the cheapest restaurants and weights transport toward time. Only the budget component of the score and the transport choice change; score weights and honesty rules are untouched, and the budget is still the ceiling. Non-default styles add a note to the budget. On the Jaipur demo data a 2-day plan comes to 2,832 / 3,235 / 3,410 INR. Stays are not priced by the app, so the style does not pick hotels. Also: number fields (days, travellers, budget, stay cost) use a new `ui/NumberInput` that can be emptied while typing, so clearing one no longer leaves a 0 that turns 2 into "02"; the local currency option reads "JPY (local)" so it fits the field. Three new tests |
+| 2026-11-14 | (this commit) | **v1.3.0.** Download as PDF: a "Download PDF" button on the trip ticket (and a command-menu entry) mounts `components/trip/TripPrint.tsx` into `<body>` and opens the browser's print dialog, where "Save as PDF" writes the file; the page title becomes the suggested file name ("TripAura - 2 days in Lisbon"). Print styles at the end of `index.css` hide the app and lay the document out on A4: cover (title, dates, stay, travellers, pace, style, four totals, budget table with published vs estimated amounts, budget notes), one section per day (time, stop, ride with minutes and km, cost marked "est." when estimated, place notes), then food to try, data notes and sources. Chosen over a PDF library because the free ones cannot draw Turkish, Japanese or the rupee sign without bundling large fonts; the browser uses the site's own fonts and every script. Nothing is sent anywhere. Checked by printing a real Lisbon plan with headless Edge (4 pages) |
+| 2026-11-14 | `3d89aad` | **v1.2.0.** Trip style: new `trip_style` request field (`budget`, `mid` default, `premium`), a "How to spend the budget" control in the form, listed in `/api/meta/options`, and read from descriptions ("cheap", "on a budget", "luxury", "5 star"...; "budget" alone still means an amount). `engines/style.py` holds the profiles. Lowest cost judges meals and entry fees against half the usual allowance and weights transport toward cost; premium marks down the cheapest restaurants and weights transport toward time. Only the budget component of the score and the transport choice change; score weights and honesty rules are untouched, and the budget is still the ceiling. Non-default styles add a note to the budget. On the Jaipur demo data a 2-day plan comes to 2,832 / 3,235 / 3,410 INR. Stays are not priced by the app, so the style does not pick hotels. Also: number fields (days, travellers, budget, stay cost) use a new `ui/NumberInput` that can be emptied while typing, so clearing one no longer leaves a 0 that turns 2 into "02"; the local currency option reads "JPY (local)" so it fits the field. Three new tests |
 | 2026-11-14 | `75561d1` | **v1.1.2.** Smarter hotel search (`routers/geo.py`). Photon's location bias was too weak: "inn" for a Jaipur trip returned the Inn river in Austria and villages in Myanmar. Once a destination is chosen, the form now sends its name (`city`), and the backend runs two Photon searches in parallel: one limited to a 40 km box around the city, one with the city name added. Results are merged, duplicates dropped, and ranked: names containing every typed word anywhere (not only at the start) first, then places to stay, then places within 40 km; matches over 150 km away are dropped when local ones exist. If one search fails the other is still used. Checked live: "inn" now lists 99 Inn, Broadway Inn, Golden Inn... in Jaipur and Crown Inn, Grace Inn in Karachi. One new test |
 | 2026-11-14 | `96db37f` | **v1.1.1.** Fix: the planner only accepted the 31 ECB currencies, so Karachi (PKR) and most of Asia, Africa and Latin America got no suggestion and could not be planned in their own money. `core/currencies.py` now maps every country to the currency travellers mostly pay in (150 currencies) and is the single source: the accepted list, the form options and the new `currency` field on city suggestions (the frontend table from v1.1.0 is gone). `FxService` loads ECB rates (Frankfurter) and ExchangeRate-API's open endpoint (`FX_OPEN_URL`, no key) and prefers ECB; if one source is down the other is used, if both are down the request fails as before. Conversion notes say which rate was used, and trips whose currency needs the second source credit it in their attributions. Terms and Privacy name both rate sources. Two new tests; checked with a real Karachi trip in PKR |
 | 2026-11-14 | `1d32b40` | **v1.1.0.** Currency suggestion: picking a city (from the list, a quick-start city or a typed description) offers that country's currency as a one-click button under the Currency field, and marks it in the list as "used in <country>". Nothing changes until the traveller clicks, and any other currency can still be chosen. The country-to-currency table is `frontend/src/lib/localCurrency.ts` and covers only currencies the planner accepts, so countries with an unsupported currency get no suggestion. Frontend only |
@@ -300,7 +301,8 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 
 | Version | Commit | Date | What it is |
 |---|---|---|---|
-| v1.2.0 | (this commit) | 2026-11-14 | Trip style (lowest cost, mid-range, premium); number fields fixed |
+| v1.3.0 | (this commit) | 2026-11-14 | Download a trip as a PDF |
+| v1.2.0 | `3d89aad` | 2026-11-14 | Trip style (lowest cost, mid-range, premium); number fields fixed |
 | v1.1.2 | `75561d1` | 2026-11-14 | Hotel search stays in the destination and matches words anywhere in a name |
 | v1.1.1 | `96db37f` | 2026-11-14 | Every country's currency supported (150), so the suggestion works everywhere |
 | v1.1.0 | `1d32b40` | 2026-11-14 | Destination currency suggested in the trip form, one click to use it |
@@ -316,7 +318,7 @@ TripAura uses semantic versioning, `vMAJOR.MINOR.PATCH`:
 | v0.2.0 | `353b86d` | 2026-11-07 | Worldwide open-data mode, cost model and currency conversion |
 | v0.1.0 | `e492999` | 2026-11-07 | First planner: engines, Jaipur demo data, Google-ready providers |
 
-**Planned** (from the owner's backlog, in order): PDF download of a trip; designed dropdowns; a livelier, step-by-step planning form and a possible alternative to the form; a more interactive site; a graph-based planning engine; **v2.0.0 multi-destination trips** (A to B to C).
+**Planned** (from the owner's backlog, in order): designed dropdowns; a livelier, step-by-step planning form and a possible alternative to the form; a more interactive site; a graph-based planning engine; **v2.0.0 multi-destination trips** (A to B to C).
 
 ---
 

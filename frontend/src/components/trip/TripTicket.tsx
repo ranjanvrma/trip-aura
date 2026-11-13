@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Plus, RotateCcw } from "lucide-react";
+import { FileDown, Plus, RotateCcw } from "lucide-react";
 import ContourArt from "../art/ContourArt";
 import type { Itinerary } from "../../types";
 import { dataSourceLabel, fmtDay, fmtDuration, fmtMoney } from "../../utils";
@@ -22,10 +22,10 @@ function cityMark(city: string): string {
   return (letters.slice(0, 3) || "TRP").padEnd(3, letters.slice(-1) || "X");
 }
 
-interface Props { it: Itinerary; regenerating: boolean; onRegenerate: () => void }
+interface Props { it: Itinerary; regenerating: boolean; onRegenerate: () => void; onDownload: () => void }
 
 /** The trip header, laid out like a travel ticket: where and when on the left, the plan's totals on the stub. */
-export default function TripTicket({ it, regenerating, onRegenerate }: Props) {
+export default function TripTicket({ it, regenerating, onRegenerate, onDownload }: Props) {
   const r = it.request;
   const s = tripStats(it);
   const first = it.days[0]?.date;
@@ -53,6 +53,7 @@ export default function TripTicket({ it, regenerating, onRegenerate }: Props) {
           <button className="btn" onClick={onRegenerate} disabled={regenerating}>
             {regenerating ? <><span className="spinner" aria-hidden /> Regenerating</> : <><RotateCcw size={16} aria-hidden /> Regenerate</>}
           </button>
+          <button className="btn" onClick={onDownload}><FileDown size={16} aria-hidden /> Download PDF</button>
           <Link className="btn btn-primary" to="/" viewTransition><Plus size={16} aria-hidden /> New trip</Link>
         </div>
       </div>

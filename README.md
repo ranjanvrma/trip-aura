@@ -22,6 +22,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
 - **Finds your hotel.** The hotel search stays in your destination and matches a word anywhere in a name, so "inn" finds Holiday Inn and Golden Inn, with places to stay listed first.
 - **Easy to read.** A 3D globe that turns to your destination, a ticket-style summary of each plan, a ribbon showing how each day's time is split, and charts of where the budget goes.
+- **Take it with you.** Download any plan as a PDF: a cover with the totals and budget, a page per day with times, stops, rides and costs, then food, notes and sources.
 - **No account.** Plans are saved in your browser on this device. They do not sync, and clearing site data removes them.
 
 ## Architecture

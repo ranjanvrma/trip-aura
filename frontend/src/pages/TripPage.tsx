@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarDays, RotateCcw } from "lucide-react";
+import { CalendarDays, FileDown, RotateCcw } from "lucide-react";
 import BudgetSummary from "../components/trip/BudgetSummary";
 import { type Command, usePageCommands } from "../components/layout/CommandMenu";
 import DayCard from "../components/trip/DayCard";
@@ -9,6 +9,7 @@ import type { MapMarker, MapPolyline } from "../components/map/types";
 import PlaceDetails from "../components/trip/PlaceDetails";
 import RestaurantList from "../components/trip/RestaurantList";
 import { RibbonLegend } from "../components/trip/DayRibbon";
+import TripPrint from "../components/trip/TripPrint";
 import TripTicket from "../components/trip/TripTicket";
 import RetryNotice from "../components/ui/RetryNotice";
 import Sheet from "../components/ui/Sheet";
@@ -48,6 +49,7 @@ export default function TripPage() {
   const [dayFilter, setDayFilter] = useState<number | "all">("all");
   const [selected, setSelected] = useState<ItineraryItem | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   usePageMeta(it ? `${it.request.num_days} days in ${it.request.destination_city}` : "Your itinerary",
     it ? `Day-by-day plan for ${it.request.destination_city}: sights, meals, transport and budget.` : undefined,
@@ -111,6 +113,20 @@ export default function TripPage() {
     else apply();
   }, []);
 
+  // PDF: mount the print layout, wait for it and the fonts, then open the browser's print dialog ("Save as PDF").
+  // The page title becomes the suggested file name. A second click while the layout is mounted just prints again.
+  const downloadPdf = useCallback(() => (printing ? window.print() : setPrinting(true)), [printing]);
+  useEffect(() => {
+    if (!printing || !it) return;
+    const title = document.title;
+    document.title = `TripAura - ${it.days.length} days in ${it.request.destination_city.split(",")[0]}`;
+    const done = () => setPrinting(false);
+    window.addEventListener("afterprint", done);
+    let live = true;
+    void document.fonts.ready.then(() => window.setTimeout(() => { if (live) window.print(); }, 60));
+    return () => { live = false; window.removeEventListener("afterprint", done); document.title = title; };
+  }, [printing, it]);
+
   const commands = useMemo<Command[]>(() => !it ? [] : [
     { id: "all-days", label: "Show all days", group: "This trip", icon: CalendarDays, run: () => showDay("all") },
     ...it.days.map<Command>((d) => ({
@@ -118,7 +134,8 @@ export default function TripPage() {
       icon: CalendarDays, run: () => showDay(d.day_number),
     })),
     { id: "regen", label: "Regenerate this itinerary", group: "This trip", icon: RotateCcw, run: () => void regenerate() },
-  ], [it, showDay, regenerate]);
+    { id: "pdf", label: "Download as PDF", group: "This trip", icon: FileDown, run: downloadPdf },
+  ], [it, showDay, regenerate, downloadPdf]);
   usePageCommands(commands);
 
   if (!key || (trip.data === null && !trip.loading) || (trip.error as ApiError | undefined)?.status === 404) return <NotFoundPage what="trip" />;
@@ -149,7 +166,8 @@ export default function TripPage() {
 
   return (
     <div className="trip-layout" ref={root}>
-      <TripTicket it={it} regenerating={regenerating} onRegenerate={() => void regenerate()} />
+      <TripTicket it={it} regenerating={regenerating} onRegenerate={() => void regenerate()} onDownload={downloadPdf} />
+      {printing && <TripPrint it={it} />}
 
       {it.disclaimers.filter((d) => d.startsWith("DEMO")).map((d) => <p key={d} className="notice notice-warn small">{d}</p>)}
       {(notes.length > 0 || it.warnings.length > 0) && (
