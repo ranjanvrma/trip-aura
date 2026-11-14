@@ -311,8 +311,6 @@ button.mobile-link { display: flex; align-items: center; gap: 10px; width: 100%;
 }
 
 /* things to try */
-.demo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.demo-grid > * { min-width: 0; }
 .demo {
   height: 100%; display: grid; align-content: start; gap: 16px; padding: 22px; min-width: 0;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow-1);
@@ -335,17 +333,16 @@ button.mobile-link { display: flex; align-items: center; gap: 10px; width: 100%;
 .route-home { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
 .route-n { font: 600 9px var(--font-mono); fill: var(--ink); }
 .demo-figure strong { font: 600 1.5rem/1.2 var(--font-mono); letter-spacing: -.02em; }
-.pace-stats { display: grid; gap: 7px; margin: 0; font-size: .88rem; }
-.pace-stats div { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
-.pace-stats dt { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); }
-.pace-stats dd { margin: 0; font-family: var(--font-mono); font-size: .82rem; white-space: nowrap; }
-.method { list-style: none; counter-reset: m; margin: clamp(28px, 4vw, 48px) 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
-.method li { counter-increment: m; padding: 22px 24px 0 0; }
-.method li::before { content: "0" counter(m); display: block; font: 600 .76rem var(--font-mono); color: var(--primary); margin-bottom: 10px; }
-.method h3 { font-size: 1.02rem; margin: 0 0 6px; }
-.method p { margin: 0; font-size: .9rem; color: var(--muted); line-height: 1.55; }
-@media (max-width: 1020px) { .demo-grid { grid-template-columns: minmax(0, 1fr); max-width: 560px; } .method { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .method { grid-template-columns: minmax(0, 1fr); } }
+.showcase { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(24px, 5vw, 64px); align-items: center; }
+.showcase > * { min-width: 0; }
+.showcase-text .h1 { margin: 0 0 clamp(16px, 2vw, 24px); }
+.method { list-style: none; counter-reset: m; margin: 0; padding: 0; display: grid; }
+.method li { counter-increment: m; display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; padding: 14px 0; border-top: 1px solid var(--line); }
+.method li:last-child { border-bottom: 1px solid var(--line); }
+.method li::before { content: "0" counter(m); grid-row: span 2; font: 600 .78rem/1.6 var(--font-mono); color: var(--primary); }
+.method h3 { font-size: 1rem; margin: 0 0 2px; }
+.method p { margin: 0; font-size: .9rem; color: var(--muted); line-height: 1.5; }
+@media (max-width: 900px) { .showcase { grid-template-columns: minmax(0, 1fr); } }
 
 /* describe the trip in a sentence */
 .describe-band {
@@ -879,7 +876,6 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .day-bar span { display: block; height: 100%; }
 .day-bar span + span { box-shadow: inset 1px 0 0 var(--surface); }
 @media (max-width: 400px) { .budget-hero { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
-.ribbon-tall { height: 24px; border-radius: 7px; }
 
 /* form layout on small screens */
 @media (max-width: 520px) {
