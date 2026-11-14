@@ -43,9 +43,15 @@ export function fmtDuration(minutes: number): string {
   return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`;
 }
 
-// muted, distinguishable day colours (readable on the warm map tiles and as white-text pins)
-const DAY_COLORS = ["#4f7a5c", "#b0693f", "#4d6f91", "#9a5a6e", "#7d7038", "#5e6294", "#3f7f7a"];
+// bright, distinguishable day colours for the dark interface (pins and markers carry dark text)
+const DAY_COLORS = ["#6fe3cf", "#ff8f66", "#8ab4ff", "#f2c26b", "#ef9bbd", "#a9dc8f", "#c9b3ff"];
 export const dayColor = (dayNumber: number) => DAY_COLORS[(dayNumber - 1) % DAY_COLORS.length];
+
+/** "LIS" from "Lisbon, Portugal": a ticket-style city mark made from the city's own letters. */
+export function cityMark(city: string): string {
+  const letters = city.split(",")[0].normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase();
+  return (letters.slice(0, 3) || "TRP").padEnd(3, letters.slice(-1) || "X");
+}
 
 /** Honesty label for where a trip's places came from. */
 export const dataSourceLabel = (source: string) => (source === "mock" ? "Demo data" : "Open data");

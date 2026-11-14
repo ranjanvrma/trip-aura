@@ -22,8 +22,7 @@ export default function GeneratingPanel({ city, firstVisitHint }: { city: string
 
   return (
     <div className="generating" role="status" aria-live="polite">
-      <p className="eyebrow">Working on it</p>
-      <h2 className="h2">Building your plan{city ? ` for ${city}` : ""}</h2>
+      <h2 className="h1">Building your plan{city ? ` for ${city.split(",")[0]}` : ""}</h2>
       <div className="progress" aria-hidden><span /></div>
       <ol className="generating-steps">
         {STEPS.map((s) => <li key={s}>{s}</li>)}

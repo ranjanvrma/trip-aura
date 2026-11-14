@@ -19,6 +19,20 @@ function loadGoogleMaps(key: string): Promise<void> {
   return loader;
 }
 
+// Night colours for the base map, matching the interface (land, water, roads and labels only).
+const NIGHT_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#131c26" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8e9aa6" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0a0f14" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a1620" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#243140" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#34424f" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#17212c" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#12302b" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1f2b38" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#34424f" }] },
+];
+
 export default function GoogleMap({ markers, polylines, current, selectedId, onSelect, apiKey }:
   MapViewProps & { apiKey: string }) {
   const el = useRef<HTMLDivElement>(null);
@@ -31,7 +45,9 @@ export default function GoogleMap({ markers, polylines, current, selectedId, onS
     loadGoogleMaps(apiKey)
       .then(() => {
         if (el.current && !map.current) {
-          map.current = new google.maps.Map(el.current, { center: { lat: 20, lng: 0 }, zoom: 13, mapTypeControl: false });
+          map.current = new google.maps.Map(el.current, {
+            center: { lat: 20, lng: 0 }, zoom: 13, mapTypeControl: false, styles: NIGHT_STYLE, backgroundColor: "#0d141b",
+          });
           new google.maps.TrafficLayer().setMap(map.current);
         }
         setReady(true);
@@ -56,7 +72,7 @@ export default function GoogleMap({ markers, polylines, current, selectedId, onS
       const big = mk.kind === "home" || mk.id === selectedId;
       const marker = new google.maps.Marker({
         position: mk.position, map: m, title: mk.title,
-        label: { text: mk.label, color: "#fff", fontSize: "11px", fontWeight: "700" },
+        label: { text: mk.label, color: "#0a0f14", fontSize: "11px", fontWeight: "700" },
         icon: { path: google.maps.SymbolPath.CIRCLE, scale: big ? 14 : 11, fillColor: mk.color, fillOpacity: 1,
                 strokeColor: "#fff", strokeWeight: 2 },
       });

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { FileDown, Plus, RotateCcw } from "lucide-react";
 import ContourArt from "../art/ContourArt";
 import type { Itinerary } from "../../types";
-import { dataSourceLabel, fmtDay, fmtDuration, fmtMoney } from "../../utils";
+import { cityMark, dataSourceLabel, fmtDay, fmtDuration, fmtMoney } from "../../utils";
 
 /** Totals worked out from the plan itself; nothing here is invented. */
 function tripStats(it: Itinerary) {
@@ -14,12 +14,6 @@ function tripStats(it: Itinerary) {
     km: legs.reduce((s, i) => s + (i.travel?.chosen.distance_km ?? 0), 0),
     travelMin: legs.reduce((s, i) => s + (i.travel?.chosen.duration_min ?? 0), 0),
   };
-}
-
-/** "LIS" from "Lisbon, Portugal": a ticket-style city mark made from the city's own letters. */
-function cityMark(city: string): string {
-  const letters = city.split(",")[0].normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase();
-  return (letters.slice(0, 3) || "TRP").padEnd(3, letters.slice(-1) || "X");
 }
 
 interface Props { it: Itinerary; regenerating: boolean; onRegenerate: () => void; onDownload: () => void }

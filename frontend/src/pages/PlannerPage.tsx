@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Trash } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import Globe from "../components/globe/Globe";
+import Showcase from "../components/home/Showcase";
+import SplitFlap from "../components/home/SplitFlap";
 import DescribeTrip from "../components/planner/DescribeTrip";
 import GeneratingPanel from "../components/planner/GeneratingPanel";
 import TripForm from "../components/planner/TripForm";
+import TripPass from "../components/trip/TripPass";
+import Autocomplete from "../components/ui/Autocomplete";
 import RetryNotice from "../components/ui/RetryNotice";
 import { SkeletonLines } from "../components/ui/Skeleton";
+import Stepper from "../components/ui/Stepper";
 import { listSavedTrips, saveTrip } from "../lib/localTrips";
 import { usePageMeta } from "../lib/meta";
 import { mutate, useSWR } from "../lib/swr";
@@ -14,14 +19,17 @@ import { useToast } from "../lib/toast";
 import { useDeleteTrip } from "../lib/trips";
 import { useScrollMotion } from "../lib/useScrollMotion";
 import { api, ApiError } from "../services/api";
-import type { ApiStatus, LatLng, ParsedTrip, TripRequest } from "../types";
+import type { ApiStatus, CitySuggestion, LatLng, ParsedTrip, TripRequest } from "../types";
 
-// One-click starting points. Only the names live here: coordinates and the country come from the city index.
-const QUICK_CITIES = ["Lisbon", "Kyoto", "Jaipur", "Mexico City", "Istanbul", "Cape Town"];
+// Names for the departure board. Only the names live here: coordinates and the country come from the city index.
+const BOARD = ["Lisbon", "Kyoto", "Jaipur", "Istanbul", "Cape Town", "Hanoi", "Prague", "Lima", "Nairobi"];
+const BOARD_CELLS = 9;
+const SOURCES = ["Overture Maps", "Wikidata", "OpenStreetMap", "Wikivoyage", "GeoNames"];
 
-const scrollToPlan = (focusCity: boolean) => {
+/** Scroll to the planner, then put the cursor in one of its fields. */
+const scrollToPlan = (focusId?: string) => {
   document.getElementById("plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  if (focusCity) window.setTimeout(() => document.getElementById("city-input")?.focus({ preventScroll: true }), 450);
+  if (focusId) window.setTimeout(() => document.getElementById(focusId)?.focus({ preventScroll: true }), 500);
 };
 
 export default function PlannerPage({ status }: { status: ApiStatus | null }) {
@@ -30,6 +38,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const toast = useToast();
   const root = useRef<HTMLDivElement>(null);
   const ready = status !== null;
+  const mock = status?.data_mode === "mock";
   const options = useSWR(ready ? "options" : null, api.options, { dedupeMs: 60_000 });
   const trips = useSWR("localTrips", async () => listSavedTrips());
   const deleteTrip = useDeleteTrip();
@@ -43,14 +52,18 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const [prefill, setPrefill] = useState<{ parsed: ParsedTrip; version: number } | null>(null);
   const [error, setError] = useState<{ message: string; details?: unknown } | null>(null);
   const [cityLoc, setCityLoc] = useState<LatLng | null>(null);
+  // the hero's quick start: a city and a length, handed to the planner below
+  const [heroCity, setHeroCity] = useState("");
+  const [heroPick, setHeroPick] = useState<CitySuggestion | null>(null);
+  const [heroDays, setHeroDays] = useState(3);
 
-  useScrollMotion(root, [options.data !== undefined]);
+  useScrollMotion(root, [options.data !== undefined, trips.data?.length]);
 
   // keyboard: "/" focuses the city field, Ctrl/Cmd+Enter submits from anywhere in the form
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement)?.closest("input, textarea, select, [contenteditable]");
-      if (e.key === "/" && !typing) { e.preventDefault(); document.getElementById("city-input")?.focus(); }
+      if (e.key === "/" && !typing) { e.preventDefault(); scrollToPlan("city-input"); }
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && (e.target as HTMLElement)?.closest("form.form")) {
         e.preventDefault();
         document.querySelector<HTMLFormElement>("form.form")?.requestSubmit();
@@ -60,16 +73,38 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const applyParsed = (p: ParsedTrip) => setPrefill((old) => ({ parsed: p, version: (old?.version ?? 0) + 1 }));
+  const applyParsed = useCallback(
+    (p: ParsedTrip) => setPrefill((old) => ({ parsed: p, version: (old?.version ?? 0) + 1 })), []);
+  const fetchCities = useCallback(
+    (q: string, signal: AbortSignal) => api.citySuggestions(q, signal).then((r) => r.results), []);
 
-  const pickCity = async (name: string) => {
+  /** Hand a city (and optionally a length) to the planner, which turns the globe and fills the pass. */
+  const startWith = (city: CitySuggestion, days?: number) => {
+    applyParsed({ fields: { destination_city: city.query, ...(days ? { num_days: days } : {}) }, understood: [], notes: [], city });
+    setHeroCity(city.query);
+    setHeroPick(city);
+  };
+
+  const pickByName = async (name: string) => {
     try {
       const [city] = (await api.citySuggestions(name)).results;
       if (!city) return;
-      applyParsed({ fields: { destination_city: city.query }, understood: [], notes: [], city });
-      scrollToPlan(false);
+      startWith(city);
+      scrollToPlan("stay-input");
     } catch (e) {
       toast.show({ tone: "error", message: (e as ApiError).message });
+    }
+  };
+
+  const startFromHero = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const city = heroPick ?? (heroCity.trim().length >= 2 ? (await api.citySuggestions(heroCity.trim())).results[0] : undefined);
+      if (!city) { scrollToPlan("city-input"); return; }
+      startWith(city, heroDays);
+      scrollToPlan("stay-input");
+    } catch (err) {
+      toast.show({ tone: "error", message: (err as ApiError).message });
     }
   };
 
@@ -77,7 +112,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
     setSubmitting(true);
     setPendingCity(req.destination_city);
     setError(null);
-    // the progress panel replaces the long form, so jump to the top of the tile once it has rendered
+    // the progress panel replaces the planner, so jump to the top of the section once it has rendered
     window.setTimeout(() => document.getElementById("plan")?.scrollIntoView({ behavior: "auto", block: "start" }), 0);
     try {
       const it = await api.previewTrip(req);
@@ -96,107 +131,119 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
 
   const formReady = options.data && status;
 
+  // "Plan a trip" links from the bar and the footer arrive as /#plan
+  const { hash, key: navKey } = useLocation();
+  useEffect(() => { if (hash === "#plan") scrollToPlan(); }, [hash, navKey]);
+
   return (
-    <div className="bento planner" ref={root}>
+    <div className="home" ref={root}>
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <h1 id="hero-title" className="display">
-            Every day of your trip, <em>planned stop by stop.</em>
+          <h1 id="hero-title" className="display" aria-label="Your days in any city, planned stop by stop">
+            <span aria-hidden>Your days in</span>
+            <SplitFlap words={mock ? [status?.mock_city ?? "Jaipur"] : BOARD} cells={BOARD_CELLS} onPick={(w) => void pickByName(w)} />
+            <span aria-hidden>planned <em>stop by stop.</em></span>
           </h1>
           <p className="lead">
             Tell it the city and where you're staying. You get each day in an order that saves walking, meals that
             suit how you eat, and what the day will roughly cost.
           </p>
-          <div className="hero-actions">
-            <a href="#plan" className="btn btn-primary btn-lg" onClick={(e) => { e.preventDefault(); scrollToPlan(true); }}>
-              Plan a trip <ArrowRight size={18} aria-hidden />
-            </a>
-          </div>
-          {formReady && status?.data_mode !== "mock" && (
-            <div className="quick-cities">
-              <span className="small muted">Or start from</span>
-              <ul>
-                {QUICK_CITIES.map((c) => (
-                  <li key={c}><button type="button" className="quick-city" onClick={() => void pickCity(c)}>{c}</button></li>
-                ))}
-              </ul>
+
+          {mock ? (
+            <div className="hero-actions">
+              <button type="button" className="btn btn-cta btn-lg" onClick={() => scrollToPlan("stay-input")}>
+                Plan a trip <ArrowRight size={18} aria-hidden />
+              </button>
             </div>
+          ) : (
+            <form className="starter" onSubmit={(e) => void startFromHero(e)} aria-label="Start a plan">
+              <label className="starter-field starter-city">
+                <span>Where to</span>
+                <Autocomplete<CitySuggestion>
+                  inputId="hero-city" value={heroCity} minChars={2} placeholder="Any city in the world"
+                  onChange={(v) => { setHeroCity(v); setHeroPick(null); }}
+                  onSelect={(c) => startWith(c)}
+                  fetchItems={fetchCities} itemKey={(c) => String(c.id)}
+                  renderItem={(c) => (
+                    <span className="ac-item"><strong>{c.name}</strong>
+                      <span className="muted small"> {[c.region, c.country].filter((x) => x && x !== c.name).join(", ")}</span>
+                    </span>
+                  )}
+                  footer="City data © GeoNames"
+                />
+              </label>
+              <div className="starter-field">
+                <label htmlFor="hero-days">Days</label>
+                <Stepper id="hero-days" label="days" min={1} max={14} value={heroDays} onValue={setHeroDays} />
+              </div>
+              <button className="btn btn-cta btn-lg">Start planning <ArrowRight size={18} aria-hidden /></button>
+            </form>
           )}
+          <p className="hero-alt small muted">
+            Or <a href="#describe" onClick={(e) => { e.preventDefault(); document.getElementById("describe-text")?.focus(); }}>describe
+            the whole trip in one sentence</a>. No account needed.
+          </p>
         </div>
-        <div className="hero-globe" data-parallax="0.08">
+
+        <div className="hero-globe" data-parallax="0.06">
           <Globe target={cityLoc} pins={pins}
                  label={cityLoc ? "Your destination on the globe" : "The globe, with your saved trips marked"} />
         </div>
+
+        <ul className="sources" aria-label="Open data the plans are built from">
+          <li className="muted">Built on open data from</li>
+          {SOURCES.map((s) => <li key={s}>{s}</li>)}
+        </ul>
       </section>
 
-      <div className="plan-col">
-        <section className="tile tile-describe" data-reveal>
-          {formReady ? <DescribeTrip onParsed={applyParsed} /> : <SkeletonLines lines={4} />}
-        </section>
+      <Showcase />
 
-        <section className="tile tile-form" id="plan" data-reveal aria-busy={submitting}>
-          {error && (
-            <div className="notice notice-error" role="alert">
-              <strong>{error.message}</strong>
-              {Array.isArray(error.details) && (
-                <ul className="small">
-                  {(error.details as { field: string; message: string }[]).map((d) => (
-                    <li key={d.field + d.message}>{d.field || "request"}: {d.message}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-          {submitting && <GeneratingPanel city={pendingCity} firstVisitHint={status?.data_mode === "open"} />}
-          {formReady ? (
-            // kept mounted (hidden) while generating, so the details are still there if the request fails
-            <div hidden={submitting}>
-              <TripForm options={options.data!} status={status!} submitting={submitting} onSubmit={(r) => void submit(r)}
-                        prefill={prefill} onCityLocation={setCityLoc} />
-            </div>
-          ) : options.error ? (
-            <RetryNotice message={`Couldn't load the form options: ${options.error.message}`} onRetry={() => void options.refresh()} />
-          ) : (
-            <div className="stack-m"><SkeletonLines lines={2} /><SkeletonLines lines={3} /><SkeletonLines lines={3} /></div>
-          )}
-        </section>
-      </div>
+      <section className="describe-band" id="describe" data-reveal>
+        {formReady ? <DescribeTrip onParsed={(p) => { applyParsed(p); scrollToPlan("stay-input"); }} /> : <SkeletonLines lines={4} />}
+      </section>
 
-      <aside className="side-stack" aria-label="Your trips and how plans are made">
-        <section className="tile tile-saved" data-reveal aria-labelledby="saved-title">
-          <div className="tile-head">
-            <h2 id="saved-title" className="tile-title">Your trips</h2>
-            {!!trips.data?.length && <Link to="/trips" className="small" viewTransition>See all</Link>}
-          </div>
-          {trips.loading ? <SkeletonLines lines={3} />
-            : trips.data?.length === 0 ? <p className="small muted">Plans you make are kept here, in this browser.</p>
-            : (
-              <ul className="trip-list">
-                {trips.data?.slice(0, 6).map((t) => (
-                  <li key={t.id} className="trip-row">
-                    <Link to={`/trips/${t.id}`} viewTransition className="trip-link">
-                      <span className="truncate">{t.destination.split(",")[0]}</span>
-                      <span className="small muted num">{t.num_days} {t.num_days === 1 ? "day" : "days"}</span>
-                    </Link>
-                    <button className="icon-btn hit" onClick={() => deleteTrip(t)} aria-label={`Delete ${t.title}`}>
-                      <Trash size={16} aria-hidden />
-                    </button>
-                  </li>
+      <section className="plan" id="plan" aria-busy={submitting}>
+        <header className="section-head">
+          <h2 id="plan-title" className="h1">Plan your trip</h2>
+          <p className="lead">Five short questions. Your pass fills in as you go.</p>
+        </header>
+        {error && (
+          <div className="notice notice-error" role="alert">
+            <strong>{error.message}</strong>
+            {Array.isArray(error.details) && (
+              <ul className="small">
+                {(error.details as { field: string; message: string }[]).map((d) => (
+                  <li key={d.field + d.message}>{d.field || "request"}: {d.message}</li>
                 ))}
               </ul>
             )}
-        </section>
+          </div>
+        )}
+        {submitting && <GeneratingPanel city={pendingCity} firstVisitHint={status?.data_mode === "open"} />}
+        {formReady ? (
+          // kept mounted (hidden) while generating, so the answers are still there if the request fails
+          <div hidden={submitting}>
+            <TripForm options={options.data!} status={status!} submitting={submitting} onSubmit={(r) => void submit(r)}
+                      prefill={prefill} onCityLocation={setCityLoc} />
+          </div>
+        ) : options.error ? (
+          <RetryNotice message={`Couldn't load the planner: ${options.error.message}`} onRetry={() => void options.refresh()} />
+        ) : (
+          <div className="tile stack-m"><SkeletonLines lines={2} /><SkeletonLines lines={3} /><SkeletonLines lines={3} /></div>
+        )}
+      </section>
 
-        <section className="method" data-reveal aria-labelledby="method-title">
-          <h2 id="method-title" className="tile-title">How the plan is made</h2>
-          <ol>
-            <li>Places come from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, and are kept for 30 days.</li>
-            <li>Each one is scored for you: interests, budget, distance, transport, time and pace. Outside ratings never count.</li>
-            <li>Every day starts from its strongest sight, then the stops are reordered to cut the walking and riding.</li>
-            <li>Fares, meals and tickets are estimated from local prices, and labelled as estimates.</li>
-          </ol>
+      {!!trips.data?.length && (
+        <section className="recent" aria-labelledby="saved-title" data-reveal>
+          <header className="section-head section-head-row">
+            <h2 id="saved-title" className="h1">Your trips</h2>
+            <Link to="/trips" viewTransition>See all</Link>
+          </header>
+          <ul className="trip-passes">
+            {trips.data.slice(0, 6).map((t) => <TripPass key={t.id} trip={t} onDelete={deleteTrip} />)}
+          </ul>
         </section>
-      </aside>
+      )}
     </div>
   );
 }

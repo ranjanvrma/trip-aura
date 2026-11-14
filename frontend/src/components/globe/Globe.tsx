@@ -39,7 +39,6 @@ export default function Globe({ target, label, pins = NO_PINS }: { target: LatLn
 
   return (
     <figure className={`globe ${ready ? "is-ready" : ""}`} aria-label={label}>
-      <div className="globe-shadow" aria-hidden />
       <div className="globe-placeholder" aria-hidden />
       {load && <Suspense fallback={null}><GlobeCanvas target={target} pins={pins} onReady={onReady} /></Suspense>}
       <figcaption className="globe-caption">

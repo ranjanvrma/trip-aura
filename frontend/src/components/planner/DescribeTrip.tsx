@@ -29,15 +29,15 @@ export default function DescribeTrip({ onParsed }: { onParsed: (p: ParsedTrip) =
 
   return (
     <section className="describe">
-      <h2 className="tile-title"><label htmlFor="describe-text">Describe the trip in a sentence</label></h2>
+      <h2 className="h1"><label htmlFor="describe-text">Or just say it</label></h2>
       <textarea id="describe-text" rows={3} maxLength={500} value={text} onChange={(e) => setText(e.target.value)}
                 placeholder={EXAMPLE} aria-describedby="describe-help"
                 onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canRun) void run(); }} />
       <div className="describe-actions">
-        <p id="describe-help" className="small muted">Dates, budget, who's going, what you like. We'll fill in the form.</p>
+        <p id="describe-help" className="small muted">Dates, budget, who's going, what you like. It fills in the planner for you.</p>
         <button type="button" className="link" onClick={() => setText(EXAMPLE)}>Try an example</button>
-        <button type="button" className="btn" onClick={() => void run()} disabled={!canRun}>
-          {busy ? <><span className="spinner" aria-hidden /> Reading</> : "Fill in the form"}
+        <button type="button" className="btn btn-primary" onClick={() => void run()} disabled={!canRun}>
+          {busy ? <><span className="spinner" aria-hidden /> Reading</> : "Fill in the planner"}
         </button>
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}

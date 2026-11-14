@@ -91,6 +91,8 @@ export default defineConfig(({ mode }) => {
     define: { __APP_VERSION__: JSON.stringify(version) },
     plugins: [react(), restartOnPackageChange(), contentSecurityPolicy(env.VITE_API_BASE_URL ?? "", !!env.VITE_GOOGLE_MAPS_API_KEY), prerenderHeads()],
     build: {
+      // never inline assets as data URIs: a small font subset would be blocked by the CSP (font-src 'self')
+      assetsInlineLimit: 0,
       chunkSizeWarningLimit: 600,   // three.js (about 130 kB gzipped) loads lazily, only for the globe
       rollupOptions: {
         output: {

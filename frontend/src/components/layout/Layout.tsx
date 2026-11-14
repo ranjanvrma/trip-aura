@@ -24,7 +24,7 @@ const preload: Record<string, () => Promise<unknown>> = {
 const warm = (path: string) => () => { void preload[path]?.(); };
 
 const LINKS = [
-  { to: "/", label: "Plan a trip" },
+  { to: "/", label: "Home" },
   { to: "/trips", label: "My trips" },
 ];
 
@@ -57,6 +57,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
               <Search size={16} aria-hidden /> <span className="cmd-trigger-text">Search</span>
               <span className="kbd-group" aria-hidden><Kbd>{modKey()}</Kbd><Kbd>K</Kbd></span>
             </button>
+            <Link to="/#plan" className="btn btn-cta nav-cta" viewTransition>Plan a trip</Link>
             <button className="icon-btn hit nav-mobile" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu}>
               <Menu size={20} aria-hidden />
             </button>
@@ -84,8 +85,26 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
         <div className="footer-inner">
           <div className="footer-brand">
             <Link to="/" className="brand"><Logo /> <span>TripAura</span></Link>
-            <p className="muted small">Day-by-day trip plans from open map data.</p>
-            <ul className="footer-people" aria-label="Made by">
+            <p className="muted">Day-by-day trip plans for any city, built from open map data.</p>
+          </div>
+          <nav className="footer-col" aria-label="Product">
+            <h2>Product</h2>
+            <Link to="/#plan">Plan a trip</Link>
+            <Link to="/trips" onPointerEnter={warm("/trips")}>My trips</Link>
+            <a href={`${REPO_URL}/releases`} target="_blank" rel="noopener noreferrer" className="footer-version">
+              Version {__APP_VERSION__}
+            </a>
+          </nav>
+          <nav className="footer-col" aria-label="Project">
+            <h2>Project</h2>
+            <a href={REPO_URL} target="_blank" rel="noopener noreferrer"><CodeXml size={14} aria-hidden /> Source code</a>
+            <a href={`${REPO_URL}/issues`} target="_blank" rel="noopener noreferrer">Contact and support</a>
+            <Link to="/terms" onPointerEnter={warm("/terms")}>Terms of use</Link>
+            <Link to="/privacy" onPointerEnter={warm("/privacy")}>Privacy policy</Link>
+          </nav>
+          <div className="footer-col">
+            <h2>Made by</h2>
+            <ul className="footer-people">
               {AUTHORS.map((a) => (
                 <li key={a.name}>
                   <span>{a.name}</span>
@@ -95,15 +114,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
               ))}
             </ul>
           </div>
-          <nav className="footer-links" aria-label="Footer">
-            <Link to="/terms" onPointerEnter={warm("/terms")}>Terms of use</Link>
-            <Link to="/privacy" onPointerEnter={warm("/privacy")}>Privacy policy</Link>
-            <a href={REPO_URL} target="_blank" rel="noopener noreferrer"><CodeXml size={14} aria-hidden /> Source code</a>
-            <a href={`${REPO_URL}/issues`} target="_blank" rel="noopener noreferrer">Contact and support</a>
-            <a href={`${REPO_URL}/releases`} target="_blank" rel="noopener noreferrer" className="footer-version">
-              Version {__APP_VERSION__}
-            </a>
-          </nav>
+          <p className="footer-word" aria-hidden>TripAura</p>
           <p className="footer-legal small muted">
             © {new Date().getFullYear()} Ranjan Verma and Chinmay Dahiya. Map data © OpenStreetMap contributors (ODbL),
             Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY).

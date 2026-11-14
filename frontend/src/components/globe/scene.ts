@@ -22,19 +22,19 @@ export interface GlobeScene {
 
 // Tuning. Colours are sRGB hex, as a designer would pick them.
 const COLOR = {
-  oceanCentre: 0xd8e9ee,
-  oceanEdge: 0x9cc6d2,
-  shallow: 0xe7f3ef,
-  landLight: 0x8fb39a,
-  landDeep: 0x5f8a6c,
-  coast: 0x4d745a,
-  polar: 0xdde7e0,
-  atmosphere: 0xbfe1e8,
-  dots: 0xf2f6ec,
+  oceanCentre: 0x123448,
+  oceanEdge: 0x081620,
+  shallow: 0x1d5468,
+  landLight: 0x4fbfa8,
+  landDeep: 0x2b8273,
+  coast: 0xa4f3e3,
+  polar: 0xb7ccd4,
+  atmosphere: 0x6fe3cf,
+  dots: 0xd7fbf3,
   graticule: 0xffffff,
-  target: 0xc8603a,
-  pin: 0x15505c,
-  pinRing: 0xffffff,
+  target: 0xff8f66,
+  pin: 0xf2c26b,
+  pinRing: 0x0a0f14,
 };
 /** Night multiplier in linear light: roughly 40 percent darker on screen, shifted toward blue. */
 const NIGHT = new THREE.Vector3(0.3, 0.34, 0.47);
@@ -151,7 +151,7 @@ export function createGlobeScene(
     }
   }
   const gridMaterial = new THREE.LineBasicMaterial({
-    color: COLOR.graticule, transparent: true, opacity: 0.32, depthWrite: false,
+    color: COLOR.graticule, transparent: true, opacity: 0.1, depthWrite: false,
   });
   globe.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(grid), gridMaterial));
 
@@ -162,7 +162,7 @@ export function createGlobeScene(
     side: THREE.BackSide,
     transparent: true,
     depthWrite: false,
-    uniforms: { uColor: { value: color(COLOR.atmosphere) }, uStrength: { value: 0.85 } },
+    uniforms: { uColor: { value: color(COLOR.atmosphere) }, uStrength: { value: 0.5 } },
   });
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(HALO_RADIUS, 64, 48), haloMaterial));
 
