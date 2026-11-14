@@ -127,7 +127,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
           <p className="footer-word" aria-hidden>TripAura</p>
           <p className="footer-legal small muted">
             © {new Date().getFullYear()} Ranjan Verma and Chinmay Dahiya. Map data © OpenStreetMap contributors (ODbL),
-            Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY).
+            Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Earth imagery: NASA.
           </p>
         </div>
       </footer>

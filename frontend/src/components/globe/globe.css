@@ -9,9 +9,9 @@
 .globe-placeholder {
   position: absolute; inset: 11%; border-radius: 50%; pointer-events: none;
   background:
-    radial-gradient(circle at 32% 28%, rgba(164, 243, 227, .28), rgba(164, 243, 227, 0) 42%),
-    radial-gradient(circle at 62% 60%, #123448 0%, #0c2330 50%, #081620 100%);
-  box-shadow: 0 0 0 1px rgba(111, 227, 207, .25), 0 0 70px 6px rgba(111, 227, 207, .2);
+    radial-gradient(circle at 32% 28%, rgba(190, 220, 255, .35), rgba(190, 220, 255, 0) 42%),
+    radial-gradient(circle at 60% 62%, #1d4f8c 0%, #123a6b 45%, #0a1f3d 100%);
+  box-shadow: 0 0 0 1px rgba(125, 184, 255, .3), 0 0 60px 4px rgba(125, 184, 255, .22);
   transition: opacity 700ms var(--ease, ease);
 }
 .globe.is-ready .globe-placeholder { opacity: 0; }
