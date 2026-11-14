@@ -43,9 +43,13 @@ export function fmtDuration(minutes: number): string {
   return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`;
 }
 
-// bright, distinguishable day colours for the dark interface (pins and markers carry dark text)
-const DAY_COLORS = ["#6fe3cf", "#ff8f66", "#8ab4ff", "#f2c26b", "#ef9bbd", "#a9dc8f", "#c9b3ff"];
-export const dayColor = (dayNumber: number) => DAY_COLORS[(dayNumber - 1) % DAY_COLORS.length];
+// distinguishable day colours: bright on the dark theme (with dark text on them), deeper on the light theme (white text)
+const DAY_COLORS = {
+  dark: ["#6fe3cf", "#ff8f66", "#8ab4ff", "#f2c26b", "#ef9bbd", "#a9dc8f", "#c9b3ff"],
+  light: ["#0e8a78", "#d5532a", "#3d6fd0", "#a8761a", "#c0447a", "#4c9438", "#7657d0"],
+};
+export const dayColor = (dayNumber: number, theme: "dark" | "light" = "dark") =>
+  DAY_COLORS[theme][(dayNumber - 1) % DAY_COLORS[theme].length];
 
 /** "LIS" from "Lisbon, Portugal": a ticket-style city mark made from the city's own letters. */
 export function cityMark(city: string): string {

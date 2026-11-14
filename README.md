@@ -23,6 +23,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Finds your hotel.** The hotel search stays in your destination and matches a word anywhere in a name, so "inn" finds Holiday Inn and Golden Inn, with places to stay listed first.
 - **Made to be used.** A lit 3D globe that turns to your destination, a planner that asks one question at a time while a boarding pass fills in beside it, and small demos on the home page (route ordering, budget styles, pace) that really run. Each plan opens as a ticket with a ribbon of how every day is spent and charts of where the budget goes.
 - **Take it with you.** Download any plan as a PDF: a cover with the totals and budget, a page per day with times, stops, rides and costs, then food, notes and sources.
+- **Dark or light.** A night look by default, with a light theme one click away; the choice is remembered in your browser.
 - **No account.** Plans are saved in your browser on this device. They do not sync, and clearing site data removes them.
 
 ## Architecture

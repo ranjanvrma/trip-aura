@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, MapPin, Plus, Search, Shield } from "lucide-react";
+import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, MapPin, Moon, Plus, Search, Shield, Sun } from "lucide-react";
 import { listSavedTrips } from "../../lib/localTrips";
 import { useSWR } from "../../lib/swr";
 import { modKey } from "../../lib/platform";
+import { toggleTheme, useTheme } from "../../lib/theme";
 import Kbd from "../ui/Kbd";
 
 export interface Command { id: string; label: string; hint?: string; group: string; icon?: LucideIcon; run: () => void }
@@ -50,6 +51,7 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
   const listRef = useRef<HTMLUListElement>(null);
 
   const go = useCallback((path: string) => () => nav(path, { viewTransition: true }), [nav]);
+  const theme = useTheme();
 
   const all = useMemo<Command[]>(() => {
     const base: Command[] = [
@@ -57,12 +59,14 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
       { id: "trips", label: "My trips", group: "Navigate", icon: ListChecks, run: go("/trips") },
       { id: "terms", label: "Terms of use", group: "Legal", icon: FileText, run: go("/terms") },
       { id: "privacy", label: "Privacy policy", group: "Legal", icon: Shield, run: go("/privacy") },
+      { id: "theme", label: `Switch to ${theme === "dark" ? "light" : "dark"} theme`, group: "Appearance",
+        icon: theme === "dark" ? Sun : Moon, run: toggleTheme },
     ];
     const saved = (trips.data ?? []).slice(0, 8).map<Command>((t) => ({
       id: `trip-${t.id}`, label: t.title, hint: `${t.num_days} days`, group: "Saved trips", icon: MapPin, run: go(`/trips/${t.id}`),
     }));
     return [...pageCommands, ...saved, ...base];
-  }, [pageCommands, trips.data, go]);
+  }, [pageCommands, trips.data, go, theme]);
 
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase();

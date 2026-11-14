@@ -16,6 +16,7 @@ import Sheet from "../components/ui/Sheet";
 import { Skeleton, SkeletonLines } from "../components/ui/Skeleton";
 import { usePageMeta } from "../lib/meta";
 import { prefersReducedMotion } from "../lib/platform";
+import { useTheme } from "../lib/theme";
 import { mutate, useSWR } from "../lib/swr";
 import { useToast } from "../lib/toast";
 import { useScrollMotion } from "../lib/useScrollMotion";
@@ -40,6 +41,7 @@ export default function TripPage() {
   const { id } = useParams();
   const toast = useToast();
   const narrow = useIsNarrow();
+  const theme = useTheme();
   const root = useRef<HTMLDivElement>(null);
 
   const key = id ? `local-trip:${id}` : null;
@@ -65,7 +67,7 @@ export default function TripPage() {
     markers.push({ id: "home", position: it.accommodation.location, label: "H", kind: "home", color: "#2f3a33",
                    title: `${it.accommodation.name} (your accommodation)` });
     for (const d of days) {
-      const color = dayColor(d.day_number);
+      const color = dayColor(d.day_number, theme);
       let n = 0;
       for (const i of d.items) {
         if (i.type === "travel" && i.travel) {
@@ -82,7 +84,7 @@ export default function TripPage() {
       }
     }
     return { markers, polylines };
-  }, [it, days]);
+  }, [it, days, theme]);
 
   // stable map props: the Google renderer rebuilds its overlays and refits the view whenever these change
   const selectById = useCallback((mid: string) => {
@@ -197,7 +199,7 @@ export default function TripPage() {
         {it.days.map((d) => (
           <button key={d.day_number} role="tab" aria-selected={dayFilter === d.day_number}
                   className={`seg ${dayFilter === d.day_number ? "is-on" : ""}`}
-                  style={{ "--day": dayColor(d.day_number) } as React.CSSProperties}
+                  style={{ "--day": dayColor(d.day_number, theme) } as React.CSSProperties}
                   onClick={() => showDay(d.day_number)}>
             <span className="day-dot" aria-hidden />Day {d.day_number}
           </button>
@@ -210,7 +212,7 @@ export default function TripPage() {
         <div className="stack-m days-col">
           {days.map((d) => (
             <div key={d.day_number} data-reveal>
-              <DayCard day={d} color={dayColor(d.day_number)}
+              <DayCard day={d} color={dayColor(d.day_number, theme)}
                        currency={it.budget.currency} selectedId={selected?.id ?? null} onSelect={setSelected} />
             </div>
           ))}
