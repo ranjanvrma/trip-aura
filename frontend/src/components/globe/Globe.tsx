@@ -18,7 +18,7 @@ function webglAvailable(): boolean {
 }
 
 /**
- * The 3D globe. three.js and the Earth imagery are a separate chunk, fetched once the page is idle; until the first
+ * The 3D globe. three.js and the land data are a separate chunk, fetched once the page is idle; until the first
  * frame is drawn a soft CSS globe holds the space, so the layout never jumps. Without WebGL the CSS globe stays.
  */
 export default function Globe({ target, label, pins = NO_PINS }: { target: LatLng | null; label: string; pins?: GlobePin[] }) {
@@ -39,11 +39,12 @@ export default function Globe({ target, label, pins = NO_PINS }: { target: LatLn
 
   return (
     <figure className={`globe ${ready ? "is-ready" : ""}`} aria-label={label}>
+      <div className="globe-shadow" aria-hidden />
       <div className="globe-placeholder" aria-hidden />
       {load && <Suspense fallback={null}><GlobeCanvas target={target} pins={pins} onReady={onReady} /></Suspense>}
       <figcaption className="globe-caption">
         <span className="globe-caption-main">{label}</span>
-        <span className="globe-caption-note">Lit side: where it is daytime now · Imagery: NASA</span>
+        <span className="globe-caption-note">Lit side: where it is daytime now · Land: Natural Earth</span>
       </figcaption>
     </figure>
   );

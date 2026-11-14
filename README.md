@@ -21,9 +21,8 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Any currency, local one first.** Plan in any of 150 currencies. Pick a city and the form offers the one used there (EUR for Lisbon, PKR for Karachi) in one click. Rates come from the European Central Bank where it publishes them, and from ExchangeRate-API otherwise.
 - **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
 - **Finds your hotel.** The hotel search stays in your destination and matches a word anywhere in a name, so "inn" finds Holiday Inn and Golden Inn, with places to stay listed first.
-- **Made to be used.** A 3D Earth from NASA satellite imagery, lit where it is daytime right now, that turns to your destination; a planner that asks one question at a time while a boarding pass fills in beside it, and small demos on the home page (route ordering, budget styles, pace) that really run. Each plan opens as a ticket with a ribbon of how every day is spent and charts of where the budget goes.
+- **Made to be used.** A 3D globe with every country outlined, lit where it is daytime right now, that turns to your destination; a planner that asks one question at a time while a boarding pass fills in beside it; and small demos on the home page (route ordering, budget styles, pace) that really run. Each plan opens as a ticket with a ribbon of how every day is spent and charts of where the budget goes.
 - **Take it with you.** Download any plan as a PDF: a cover with the totals and budget, a page per day with times, stops, rides and costs, then food, notes and sources.
-- **Dark or light.** A night look by default, with a light theme one click away; the choice is remembered in your browser.
 - **No account.** Plans are saved in your browser on this device. They do not sync, and clearing site data removes them.
 
 ## Architecture
@@ -149,4 +148,4 @@ See [HANDOFF.md](HANDOFF.md#8-deployment-status) for deployment details and outs
 - **Ranjan Verma**: [GitHub](https://github.com/ranjanvrma) · [LinkedIn](https://www.linkedin.com/in/ranjan-vrma/)
 - **Chinmay Dahiya**: [GitHub](https://github.com/dahiyachinmay15) · [LinkedIn](https://www.linkedin.com/in/chinmaydahiya/)
 
-Data © OpenStreetMap contributors (ODbL), Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Every itinerary lists its sources. The globe uses NASA's Blue Marble and Black Marble imagery (public domain).
+Data © OpenStreetMap contributors (ODbL), Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Every itinerary lists its sources. The globe's land and borders are Natural Earth (public domain).

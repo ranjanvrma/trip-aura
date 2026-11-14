@@ -5,8 +5,9 @@ import * as THREE from "three";
 import gsap from "gsap";
 import { DEG, latLngToVec, shortestTurn } from "./geo";
 import { subsolarPoint } from "./sun";
-import { earthFragment, earthVertex, haloFragment, surfaceVertex } from "./shaders";
-import type { EarthTextures } from "./textures";
+import type { LandData } from "./landMask";
+import { MASK_HEIGHT, MASK_WIDTH } from "./landMask";
+import { dotsFragment, dotsVertex, globeFragment, haloFragment, surfaceVertex } from "./shaders";
 
 export interface Spot {
   lat: number;
@@ -21,11 +22,23 @@ export interface GlobeScene {
 
 // Tuning. Colours are sRGB hex, as a designer would pick them.
 const COLOR = {
-  atmosphere: 0x7db8ff,
-  target: 0xff8f66,
-  pin: 0xf2c26b,
-  pinRing: 0x0a0f14,
+  oceanCentre: 0xd8e9ee,
+  oceanEdge: 0x9cc6d2,
+  shallow: 0xe7f3ef,
+  landLight: 0x9fc2a6,
+  landDeep: 0x76a283,
+  coast: 0x4d745a,
+  polar: 0xe6eee8,
+  atmosphere: 0xbfe1e8,
+  dots: 0xf2f6ec,
+  graticule: 0xffffff,
+  border: 0x3f6a50,
+  target: 0xd5532a,
+  pin: 0x0e7667,
+  pinRing: 0xffffff,
 };
+/** Night multiplier in linear light: roughly 40 percent darker on screen, shifted toward blue. */
+const NIGHT = new THREE.Vector3(0.3, 0.34, 0.47);
 /** Globe diameter as a share of the container's shorter side; the halo reaches about 0.89. */
 const GLOBE_SCALE = 0.78;
 const HALO_RADIUS = 1.14;
@@ -51,7 +64,7 @@ function placeOnSurface(obj: THREE.Object3D, lat: number, lng: number) {
 
 export function createGlobeScene(
   host: HTMLElement,
-  earth: EarthTextures,
+  land: LandData | null,
   opts: { target: Spot | null; pins: Spot[]; reducedMotion: boolean; onReady: () => void },
 ): GlobeScene {
   const reduced = opts.reducedMotion;
@@ -67,22 +80,91 @@ export function createGlobeScene(
   const globe = new THREE.Group();
   scene.add(globe);
 
+  // ---- land texture (a 1x1 sea texel if the data failed, so the globe still draws as ocean)
+  const landTexture: THREE.Texture = land
+    ? new THREE.CanvasTexture(land.canvas)
+    : new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  landTexture.colorSpace = THREE.NoColorSpace; // a mask, not a colour
+  landTexture.wrapS = THREE.RepeatWrapping; // longitude wraps, so filtering across the seam stays smooth
+  landTexture.minFilter = THREE.LinearFilter; // no mipmaps: the shader's fract() at the seam would pick a tiny one
+  landTexture.magFilter = THREE.LinearFilter;
+  landTexture.generateMipmaps = false;
+  landTexture.needsUpdate = true;
+
   const sun = new THREE.Vector3(0, 0, 1);
 
-  // ---- the Earth: satellite imagery lit by the real sun position
-  const earthMaterial = new THREE.ShaderMaterial({
-    vertexShader: earthVertex,
-    fragmentShader: earthFragment,
+  // ---- globe body
+  const globeMaterial = new THREE.ShaderMaterial({
+    vertexShader: surfaceVertex,
+    fragmentShader: globeFragment,
     uniforms: {
-      uDay: { value: earth.day },
-      uNight: { value: earth.night },
-      uWater: { value: earth.water },
-      uClouds: { value: earth.clouds },
+      uLand: { value: landTexture },
+      uTexel: { value: new THREE.Vector2(1 / MASK_WIDTH, 1 / MASK_HEIGHT) },
       uSun: { value: sun },
+      uNight: { value: NIGHT },
+      uOceanCentre: { value: color(COLOR.oceanCentre) },
+      uOceanEdge: { value: color(COLOR.oceanEdge) },
+      uShallow: { value: color(COLOR.shallow) },
+      uLandLight: { value: color(COLOR.landLight) },
+      uLandDeep: { value: color(COLOR.landDeep) },
+      uCoast: { value: color(COLOR.coast) },
+      uPolar: { value: color(COLOR.polar) },
       uAtmosphere: { value: color(COLOR.atmosphere) },
     },
   });
-  globe.add(new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), earthMaterial));
+  globe.add(new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), globeMaterial));
+
+  // ---- land dots: a fine stipple that keeps the land from looking like flat clip art
+  const dotsMaterial = new THREE.ShaderMaterial({
+    vertexShader: dotsVertex,
+    fragmentShader: dotsFragment,
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uSize: { value: 3 },
+      uSun: { value: sun },
+      uNight: { value: NIGHT },
+      uColor: { value: color(COLOR.dots) },
+      uOpacity: { value: 0.35 },
+    },
+  });
+  // ---- country borders and coastlines, so each country reads as its own shape
+  const borderMaterial = new THREE.LineBasicMaterial({
+    color: COLOR.border, transparent: true, opacity: 0.6, depthWrite: false,
+  });
+  if (land && land.borders.length) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(land.borders, 3));
+    globe.add(new THREE.LineSegments(g, borderMaterial));
+  }
+
+  if (land && land.dots.length) {
+    const g = new THREE.BufferGeometry();
+    // 1.003 keeps the dots just above the surface so the depth test never flickers between them
+    const lifted = land.dots.map((v) => v * 1.003);
+    g.setAttribute("position", new THREE.BufferAttribute(lifted, 3));
+    globe.add(new THREE.Points(g, dotsMaterial));
+  }
+
+  // ---- graticule every 30 degrees
+  const grid: THREE.Vector3[] = [];
+  const STEPS = 96;
+  for (const lat of [-60, -30, 0, 30, 60]) {
+    for (let i = 0; i < STEPS; i++) {
+      grid.push(vec(lat, (i / STEPS) * 360 - 180, 1.0015), vec(lat, ((i + 1) / STEPS) * 360 - 180, 1.0015));
+    }
+  }
+  for (let lng = -180; lng < 180; lng += 30) {
+    for (let i = 0; i < STEPS / 2; i++) {
+      const a = -80 + (i / (STEPS / 2)) * 160;
+      const b = -80 + ((i + 1) / (STEPS / 2)) * 160;
+      grid.push(vec(a, lng, 1.0015), vec(b, lng, 1.0015));
+    }
+  }
+  const gridMaterial = new THREE.LineBasicMaterial({
+    color: COLOR.graticule, transparent: true, opacity: 0.32, depthWrite: false,
+  });
+  globe.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(grid), gridMaterial));
 
   // ---- atmosphere halo (rotation-independent, so it sits on the scene, not the globe)
   const haloMaterial = new THREE.ShaderMaterial({
@@ -91,7 +173,7 @@ export function createGlobeScene(
     side: THREE.BackSide,
     transparent: true,
     depthWrite: false,
-    uniforms: { uColor: { value: color(COLOR.atmosphere) }, uStrength: { value: 0.55 } },
+    uniforms: { uColor: { value: color(COLOR.atmosphere) }, uStrength: { value: 0.85 } },
   });
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(HALO_RADIUS, 64, 48), haloMaterial));
 
@@ -213,6 +295,7 @@ export function createGlobeScene(
     camera.updateProjectionMatrix();
     const diameter = GLOBE_SCALE * Math.min(width, height);
     dragScale = Math.PI / diameter; // dragging across the globe turns it half a turn, so land follows the pointer
+    dotsMaterial.uniforms.uSize.value = Math.max(1.5, diameter * 0.0042) * renderer.getPixelRatio();
     dirty = true;
     start();
   }
@@ -343,6 +426,7 @@ export function createGlobeScene(
   };
   const onRestored = () => {
     lost = false;
+    landTexture.needsUpdate = true;
     dirty = true;
     start();
   };
@@ -423,7 +507,7 @@ export function createGlobeScene(
       canvas.removeEventListener("webglcontextrestored", onRestored);
       arc?.geometry.dispose();
       scene.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
+        if (o instanceof THREE.Mesh || o instanceof THREE.Points || o instanceof THREE.LineSegments) {
           o.geometry.dispose();
           const m = o.material as THREE.Material | THREE.Material[];
           if (Array.isArray(m)) m.forEach((x) => x.dispose()); else m.dispose();
@@ -433,7 +517,7 @@ export function createGlobeScene(
       for (const r of [pinGeometry, pinRingGeometry, pinMaterial, pinRingMaterial, arcMaterial, targetMaterial, pulseMaterial]) {
         r.dispose();
       }
-      for (const t of Object.values(earth)) t.dispose();
+      landTexture.dispose();
       timer.dispose();
       renderer.dispose();
       renderer.forceContextLoss(); // frees the GPU context now; StrictMode mounts twice and browsers cap contexts

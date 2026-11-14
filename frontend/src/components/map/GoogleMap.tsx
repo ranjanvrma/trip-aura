@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { MapViewProps } from "./types";
-import { getTheme, useTheme } from "../../lib/theme";
 
 let loader: Promise<void> | null = null;
 
@@ -20,20 +19,6 @@ function loadGoogleMaps(key: string): Promise<void> {
   return loader;
 }
 
-// Night colours for the base map, matching the interface (land, water, roads and labels only).
-const NIGHT_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#131c26" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8e9aa6" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0a0f14" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a1620" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#243140" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#34424f" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#17212c" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#12302b" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1f2b38" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#34424f" }] },
-];
-
 export default function GoogleMap({ markers, polylines, current, selectedId, onSelect, apiKey }:
   MapViewProps & { apiKey: string }) {
   const el = useRef<HTMLDivElement>(null);
@@ -41,17 +26,13 @@ export default function GoogleMap({ markers, polylines, current, selectedId, onS
   const overlays = useRef<{ setMap: (m: google.maps.Map | null) => void }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const theme = useTheme();
-
-  // the base map follows the theme
-  useEffect(() => { if (ready) map.current?.setOptions({ styles: theme === "dark" ? NIGHT_STYLE : [] }); }, [theme, ready]);
 
   useEffect(() => {
     loadGoogleMaps(apiKey)
       .then(() => {
         if (el.current && !map.current) {
           map.current = new google.maps.Map(el.current, {
-            center: { lat: 20, lng: 0 }, zoom: 13, mapTypeControl: false, styles: getTheme() === "dark" ? NIGHT_STYLE : [],
+            center: { lat: 20, lng: 0 }, zoom: 13, mapTypeControl: false,
           });
           new google.maps.TrafficLayer().setMap(map.current);
         }
@@ -77,7 +58,7 @@ export default function GoogleMap({ markers, polylines, current, selectedId, onS
       const big = mk.kind === "home" || mk.id === selectedId;
       const marker = new google.maps.Marker({
         position: mk.position, map: m, title: mk.title,
-        label: { text: mk.label, color: theme === "dark" ? "#0a0f14" : "#ffffff", fontSize: "11px", fontWeight: "700" },
+        label: { text: mk.label, color: "#ffffff", fontSize: "11px", fontWeight: "700" },
         icon: { path: google.maps.SymbolPath.CIRCLE, scale: big ? 14 : 11, fillColor: mk.color, fillOpacity: 1,
                 strokeColor: "#fff", strokeWeight: 2 },
       });

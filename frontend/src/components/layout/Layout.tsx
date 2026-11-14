@@ -1,9 +1,8 @@
 import { motion, useScroll, useSpring } from "motion/react";
 import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { CodeXml, Menu, Moon, Search, Sun } from "lucide-react";
+import { CodeXml, Menu, Search } from "lucide-react";
 import { modKey } from "../../lib/platform";
-import { toggleTheme, useTheme } from "../../lib/theme";
 import { useCommands } from "./CommandMenu";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import Sheet from "../ui/Sheet";
@@ -41,9 +40,6 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
   const [menu, setMenu] = useState(false);
   const closeMenu = () => setMenu(false);
   const { pathname } = useLocation();
-  const theme = useTheme();
-  const other = theme === "dark" ? "light" : "dark";
-  const ThemeIcon = theme === "dark" ? Sun : Moon;
 
   return (
     <div className="shell">
@@ -63,9 +59,6 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
               <Search size={16} aria-hidden /> <span className="cmd-trigger-text">Search</span>
               <span className="kbd-group" aria-hidden><Kbd>{modKey()}</Kbd><Kbd>K</Kbd></span>
             </button>
-            <button className="icon-btn hit theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${other} theme`} title={`Switch to ${other} theme`}>
-              <ThemeIcon size={18} aria-hidden />
-            </button>
             <Link to="/#plan" className="btn btn-cta nav-cta" viewTransition>Plan a trip</Link>
             <button className="icon-btn hit nav-mobile" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu}>
               <Menu size={20} aria-hidden />
@@ -82,9 +75,6 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
           ))}
           <Link to="/terms" className="mobile-link" onClick={closeMenu}>Terms of use</Link>
           <Link to="/privacy" className="mobile-link" onClick={closeMenu}>Privacy policy</Link>
-          <button type="button" className="mobile-link" onClick={toggleTheme}>
-            <ThemeIcon size={18} aria-hidden /> Switch to {other} theme
-          </button>
         </nav>
       </Sheet>
 
@@ -129,7 +119,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
           <p className="footer-word" aria-hidden>TripAura</p>
           <p className="footer-legal small muted">
             © {new Date().getFullYear()} Ranjan Verma and Chinmay Dahiya. Map data © OpenStreetMap contributors (ODbL),
-            Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Earth imagery: NASA.
+            Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Globe: Natural Earth.
           </p>
         </div>
       </footer>

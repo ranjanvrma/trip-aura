@@ -102,7 +102,7 @@ export function PrivacyPage() {
 
       <h2>Cookies and browser storage</h2>
       <p>
-        Saved trips, and your choice of light or dark theme, use your browser's local storage. They stay on this device and browser profile, and are removed if you delete them or clear site data. There are no advertising or analytics cookies.
+        Saved trips use your browser's local storage. They stay on this device and browser profile, and are removed if you delete them or clear site data. There are no advertising or analytics cookies.
       </p>
 
       <h2>Services that process data for us</h2>
