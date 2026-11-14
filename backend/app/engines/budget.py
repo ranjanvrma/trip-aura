@@ -74,12 +74,13 @@ def day_budget(day_number: int, items: list[ItineraryItem]) -> DayBudget:
 
 
 def _item_cost(it: ItineraryItem) -> tuple[Money, str] | None:
-    """(cost, budget category) of an item; rests, start and end items are not counted."""
+    """(cost, budget category) of an item. Start and end items cost nothing; a rest counts only when it is in a
+    park or garden with an entry fee."""
     if it.type == ItemType.TRAVEL:
         return (it.travel.chosen.cost, "transport") if it.travel is not None else None
     if it.type == ItemType.MEAL and it.cost is not None:
         return it.cost, "food"
-    if it.type == ItemType.ACTIVITY and it.cost is not None:
+    if it.type in (ItemType.ACTIVITY, ItemType.REST) and it.cost is not None:
         return it.cost, "attractions"
     return None
 

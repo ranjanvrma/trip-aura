@@ -40,7 +40,11 @@ interface Props {
   onCityLocation?: (loc: LatLng | null) => void;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** Today's date where the traveller is (not in UTC, which is yesterday or tomorrow for part of every day). */
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 /** The planner, one question at a time, with the trip so far shown as a boarding pass beside it. */
 export default function TripForm({ options, status, submitting, onSubmit, prefill, onCityLocation }: Props) {
@@ -73,6 +77,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
   const [local, setLocal] = useState<{ currency: string; country: string } | null>(null);
   const panels = useRef<(HTMLElement | null)[]>([]);
   const moved = useRef(false);   // the step was changed by the traveller (not the first render)
+  const appliedPrefill = useRef(0);
 
   const suggestCurrency = useCallback((c: CitySuggestion) => {
     setLocal(c.currency && options.currencies.includes(c.currency) ? { currency: c.currency, country: c.country } : null);
@@ -82,7 +87,9 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
   // apply fields read from a free-text description or the hero's quick start, and begin at the first question
   useEffect(() => {
-    if (!prefill) return;
+    // once per prefill: this must not run again when the options are refetched, or it would wipe later answers
+    if (!prefill || prefill.version === appliedPrefill.current) return;
+    appliedPrefill.current = prefill.version;
     const f = prefill.parsed.fields;
     setReq((r) => ({
       ...r,
@@ -92,7 +99,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
     }) as TripRequest);
     const city = prefill.parsed.city;
     if (city) { setCityLoc({ lat: city.lat, lng: city.lng }); suggestCurrency(city); }
-    if (f.accommodation?.name_or_address) setPinned(null);
+    if (city || f.accommodation?.name_or_address) setPinned(null);   // a pin belongs to the previous city or stay
     setStep(0);
   }, [prefill, options.currencies, suggestCurrency]);
 
@@ -154,7 +161,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
 
   return (
     <div className="planner-grid">
-      <form className="form wiz" onSubmit={submit} aria-labelledby="plan-title">
+      <form className="form wiz" onSubmit={submit} aria-labelledby="plan-title" noValidate>
         <ol className="wiz-steps" aria-label="Questions">
           {STEPS.map((s, i) => (
             <li key={s.short}>
@@ -174,8 +181,8 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
             <Autocomplete<CitySuggestion>
               inputId="city-input" value={req.destination_city} required minChars={2}
               placeholder={mock ? "Jaipur" : "Lisbon, Kyoto, Jaipur..."}
-              onChange={(v) => { set("destination_city", v); setCityLoc(null); setLocal(null); }}
-              onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); suggestCurrency(c); }}
+              onChange={(v) => { set("destination_city", v); setCityLoc(null); setLocal(null); setPinned(null); }}
+              onSelect={(c) => { set("destination_city", c.query); setCityLoc({ lat: c.lat, lng: c.lng }); suggestCurrency(c); setPinned(null); }}
               fetchItems={fetchCities} itemKey={(c) => String(c.id)}
               renderItem={(c) => (
                 <span className="ac-item"><strong>{c.name}</strong>
@@ -195,7 +202,7 @@ export default function TripForm({ options, status, submitting, onSubmit, prefil
               ))}
             </div>
             <Autocomplete<AddressSuggestion>
-              className="mt-s" inputId="stay-input" value={req.accommodation.name_or_address} required minChars={3}
+              className="mt-s" inputId="stay-input" ariaLabel="Hotel name or address" value={req.accommodation.name_or_address} required minChars={3}
               placeholder="Hotel name, Airbnb address or any address"
               onChange={(v) => { set("accommodation", { ...req.accommodation, name_or_address: v }); setPinned(null); }}
               onSelect={(a) => { set("accommodation", { ...req.accommodation, name_or_address: a.label }); setPinned({ lat: a.lat, lng: a.lng }); }}

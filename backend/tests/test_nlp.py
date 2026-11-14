@@ -240,3 +240,14 @@ def test_trip_style_words(ix):
     assert parse_trip_text("cheap weekend in Jaipur", ix, TODAY).fields["trip_style"] == "budget"
     # "budget" on its own states an amount, not a style
     assert "trip_style" not in parse_trip_text("2 days in Jaipur, budget 9000 rupees", ix, TODAY).fields
+
+
+def test_parser_does_not_invent_budgets_or_lengths(ix):
+    from app.nlp.trip_parser import parse_budget
+
+    assert parse_budget("we love museums and bars 3 days in goa") is None      # not "rs 3"
+    assert parse_budget("4 wonderful days in lisbon") is None                  # not "4 won"
+    assert parse_budget("budget 900 euros") == (900.0, "EUR")
+    r = parse_trip_text("Paris, 100 euros a day, 5 days", ix, TODAY)           # "a day" is a rate here
+    assert r.fields["num_days"] == 5
+    assert parse_trip_text("a day in Lisbon", ix, TODAY).fields["num_days"] == 1

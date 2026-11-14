@@ -8,7 +8,7 @@ const STEPS = [
 ];
 
 /**
- * Shown while a plan is being generated (20 to 60 seconds for a city nobody has planned before).
+ * Shown while a plan is being generated (usually 10 to 20 seconds for a city nobody has planned before).
  * The bar is indeterminate and the steps are a description, not a progress report: the server
  * answers once, at the end, so there is no real percentage to show.
  */
@@ -30,7 +30,7 @@ export default function GeneratingPanel({ city, firstVisitHint }: { city: string
       <p className="small muted">
         <span className="num" aria-hidden>{seconds} s elapsed. </span>
         {firstVisitHint
-          ? "The first plan for a city can take up to a minute while its map data is loaded. After that it takes a few seconds."
+          ? "The first plan for a city usually takes 10 to 20 seconds while its map data is loaded. After that it takes a second or two."
           : "This usually takes a few seconds."}
       </p>
     </div>

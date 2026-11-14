@@ -9,6 +9,9 @@ from app.schemas.common import LatLng
 from app.schemas.trip import TransportMode
 
 
+MAX_ROUTES = 20_000
+
+
 class RoutesService:
     def __init__(self, provider: RoutesProvider, ttl_seconds: int = 900):
         self._p = provider
@@ -24,5 +27,10 @@ class RoutesService:
         if hit and not fresh and time.monotonic() - hit[0] < self._ttl:
             return hit[1]
         result = self._p.compute_route(origin, destination, mode, departure, city)
+        if len(self._cache) >= MAX_ROUTES:   # drop what has expired; if that is not enough, start again
+            now = time.monotonic()
+            self._cache = {k: v for k, v in self._cache.items() if now - v[0] < self._ttl}
+            if len(self._cache) >= MAX_ROUTES:
+                self._cache.clear()
         self._cache[key] = (time.monotonic(), result)
         return result

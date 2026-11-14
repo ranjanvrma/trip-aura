@@ -24,6 +24,7 @@ export default function NumberInput({ value, onValue, emptyValue, onBlur, ...res
   return (
     <input
       inputMode="decimal"
+      step="any"
       {...rest}
       type="number"
       value={text}

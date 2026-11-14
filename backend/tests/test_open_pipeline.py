@@ -267,3 +267,52 @@ def test_trip_does_not_mutate_cached_city(open_service):
     open_service.generate(request(interests=["museums", "history buff"]))
     after = [(p.id, list(p.categories), dict(p.external_ids), p.external_rating) for p in cached.places]
     assert before == after
+
+
+def test_slow_osm_does_not_hold_up_a_new_city(monkeypatch, tmp_path):
+    import threading
+    import time
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import models  # noqa: F401
+    from app.db.database import Base
+    from app.providers.open import osm, overture, wikimedia
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'c.db'}")
+    Base.metadata.create_all(engine)
+    settings = Settings(data_mode="open", wikivoyage_enabled=False, osm_time_budget_seconds=30, osm_grace_seconds=0.2)
+    svc = CityDataService(settings, OpenHttp(settings), sessionmaker(bind=engine))
+    data = fake_city_data()
+    answer = threading.Event()
+
+    def slow_overpass(query, deadline=None):
+        answer.wait(10)
+        return {"elements": []}
+
+    monkeypatch.setattr(overture, "latest_release", lambda ua: "2026-10-21.0")
+    monkeypatch.setattr(overture, "fetch", lambda *a, **k: (data.places, data.stations))
+    monkeypatch.setattr(wikimedia, "wikidata_notable_places", lambda *a, **k: [])
+    monkeypatch.setattr(svc.http, "overpass", slow_overpass)
+    late = ([restaurant(99, "Late Bistro", 0.003, 0.003)], [])
+    monkeypatch.setattr(osm, "parse_elements", lambda elements, local, currency=None: late)
+
+    started = time.monotonic()
+    first = svc.get(CITY)
+    assert time.monotonic() - started < 5                      # the plan did not wait for OSM
+    assert "OpenStreetMap" not in first.sources
+    assert sum("still loading" in w for w in first.warnings) == 3
+    names = [p.name for p in first.places]
+
+    answer.set()                                               # OSM answers late: the cached city is upgraded
+    for _ in range(200):
+        if svc.get(CITY) is not first:
+            break
+        time.sleep(0.05)
+    second = svc.get(CITY)
+    assert "OpenStreetMap" in second.sources and not any("still loading" in w for w in second.warnings)
+    assert any(p.name == "Late Bistro" for p in second.places)
+    assert [p.name for p in first.places] == names             # the dataset already handed out was not changed
+    svc._memory.clear()
+    assert "OpenStreetMap" in svc.get(CITY).sources            # and the upgrade was saved

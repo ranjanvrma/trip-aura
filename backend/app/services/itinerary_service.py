@@ -80,6 +80,8 @@ class ItineraryService:
     def city(self, name: str) -> CityContext:
         key = name.strip().lower()
         if key not in self._cities:
+            if len(self._cities) >= 500:   # keyed by what people type, so it must not grow for ever
+                self._cities.clear()
             self._cities[key] = self.geo.resolve_city(name)
         return self._cities[key]
 

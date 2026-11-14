@@ -95,6 +95,13 @@ class TripRequest(BaseModel):
     def _normalise(cls, v: list[str]) -> list[str]:
         return _norm_list(v)
 
+    @field_validator("start_date")
+    @classmethod
+    def _start(cls, v: dt.date | None) -> dt.date | None:
+        if v is not None and not 2000 <= v.year <= 2100:
+            raise ValueError("start_date must be between the years 2000 and 2100")
+        return v
+
     @field_validator("currency")
     @classmethod
     def _currency(cls, v: str) -> str:

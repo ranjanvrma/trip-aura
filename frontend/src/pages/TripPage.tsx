@@ -37,8 +37,13 @@ function useIsNarrow(query = "(max-width: 960px)") {
   return narrow;
 }
 
+/** Keyed by trip id: the day filter, the selected place and a running regenerate never carry over to another trip. */
 export default function TripPage() {
   const { id } = useParams();
+  return <TripView key={id} id={id} />;
+}
+
+function TripView({ id }: { id: string | undefined }) {
   const toast = useToast();
   const narrow = useIsNarrow();
   const theme = useTheme();
@@ -96,6 +101,7 @@ export default function TripPage() {
     setRegenerating(true);
     try {
       const fresh = await api.previewTrip(it.request);
+      if (!getSavedTrip(id)) return;   // the trip was deleted while the new plan was being made: leave it deleted
       const saved = saveTrip(fresh, id, trip.data?.created_at);
       mutate(key, saved);
       mutate("localTrips", listSavedTrips());

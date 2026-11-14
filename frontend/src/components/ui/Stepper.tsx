@@ -17,7 +17,7 @@ export default function Stepper({ value, onValue, min, max, label, id }: Props) 
     <div className="stepper">
       <button type="button" className="stepper-btn" aria-label={`Fewer ${label}`} disabled={value <= min}
               onClick={() => onValue(clamp(value - 1))}><Minus size={16} aria-hidden /></button>
-      <NumberInput id={id} min={min} max={max} inputMode="numeric" required value={value} onValue={onValue}
+      <NumberInput id={id} min={min} max={max} step={1} inputMode="numeric" required value={value} onValue={onValue}
                    aria-label={label} />
       <button type="button" className="stepper-btn" aria-label={`More ${label}`} disabled={value >= max}
               onClick={() => onValue(clamp(value + 1))}><Plus size={16} aria-hidden /></button>

@@ -5,6 +5,9 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import App from "./App";
 import "./index.css";
+import { printInLightTheme } from "./lib/theme";
+
+printInLightTheme();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

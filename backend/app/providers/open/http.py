@@ -30,9 +30,10 @@ class OpenHttp:
         self._nominatim_lock = threading.Lock()
         self._last_nominatim = 0.0
 
-    def get_json(self, url: str, params: dict[str, Any] | None = None, *, what: str) -> Any:
+    def get_json(self, url: str, params: dict[str, Any] | None = None, *, what: str,
+                 timeout: float | None = None) -> Any:
         try:
-            r = self._http.get(url, params=params)
+            r = self._http.get(url, params=params, **({"timeout": timeout} if timeout else {}))
         except httpx.HTTPError as exc:
             raise ProviderRequestError(f"{what}: could not connect ({exc.__class__.__name__})") from exc
         if r.status_code >= 400:
@@ -49,7 +50,7 @@ class OpenHttp:
                 time.sleep(wait)
             try:
                 return self.get_json(f"{self.settings.nominatim_url.rstrip('/')}/{path}",
-                                     {**params, "format": "jsonv2"}, what="Nominatim geocoding")
+                                     {**params, "format": "jsonv2"}, what="Nominatim geocoding", timeout=15)
             finally:
                 self._last_nominatim = time.monotonic()
 
@@ -63,7 +64,9 @@ class OpenHttp:
                 errors.append("time budget used up")
                 break
             try:
-                r = self._http.post(url, data={"data": query}, timeout=min(65.0, remaining))
+                # httpx timeouts are per phase, so a slow connect must not be allowed the whole budget as well
+                limit = min(65.0, remaining)
+                r = self._http.post(url, data={"data": query}, timeout=httpx.Timeout(limit, connect=min(8.0, limit)))
             except httpx.HTTPError as exc:
                 errors.append(f"{url}: {exc.__class__.__name__}")
                 log.warning("Overpass mirror %s failed: %s", url, exc.__class__.__name__)

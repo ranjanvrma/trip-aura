@@ -34,6 +34,14 @@ export function invalidate(key: string) {
 
 export function clearCache() { cache.clear(); listeners.forEach((_, k) => emit(k)); }
 
+function sameData(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
 async function revalidate<T>(key: string, fetcher: () => Promise<T>): Promise<void> {
   const e = (cache.get(key) ?? { at: 0 }) as Entry<T>;
   if (e.promise) return void (await e.promise.catch(() => undefined));
@@ -42,7 +50,9 @@ async function revalidate<T>(key: string, fetcher: () => Promise<T>): Promise<vo
   emit(key);
   try {
     const data = await promise;
-    cache.set(key, { data, at: Date.now() });
+    // Unchanged data keeps its old identity: a refetch on tab focus must not look like a change to effects and
+    // memos downstream (it used to reset the planner and refit the map).
+    cache.set(key, { data: e.data !== undefined && sameData(e.data, data) ? e.data : data, at: Date.now() });
   } catch (error) {
     cache.set(key, { ...e, error: error as Error, at: Date.now(), promise: undefined });
   }

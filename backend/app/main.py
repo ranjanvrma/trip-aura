@@ -40,8 +40,8 @@ async def lifespan(app: FastAPI):
 
 
 def _warm_up() -> None:
-    """Load the city index, embedding model and providers in the background at startup, so the
-    first user request doesn't pay for them (a few seconds each)."""
+    """Load the city index, embedding model, providers and the Overture file index in the background at startup,
+    so the first user request doesn't pay for them (a few seconds each)."""
     t = time.monotonic()
     try:
         from app.nlp.registry import get_city_index, get_semantic
@@ -51,12 +51,19 @@ def _warm_up() -> None:
         _ = get_semantic().available
         get_itinerary_service()
         log.info("Warm-up finished in %.1fs", time.monotonic() - t)
+        settings = get_settings()
+        if settings.data_mode == DataMode.OPEN and settings.overture_enabled:
+            from app.providers.open import overture
+
+            release = settings.overture_release or overture.latest_release(settings.open_user_agent)
+            overture.warm_up(release, settings.duckdb_memory_limit, settings.duckdb_threads)
+            log.info("Overture index warmed in %.1fs", time.monotonic() - t)
     except Exception as exc:  # warm-up is an optimisation only
         log.warning("Warm-up skipped: %s", exc)
 
 
 # Docs routes are registered below so DOCS_ENABLED is checked per request.
-app = FastAPI(title="TripAura API", version="2.2.0", lifespan=lifespan, docs_url=None, redoc_url=None,
+app = FastAPI(title="TripAura API", version="2.3.0", lifespan=lifespan, docs_url=None, redoc_url=None,
               openapi_url=None,
               description="Personalised day-wise travel itineraries for any city (open data, optional Google).")
 # Middleware: the last one added runs first. Order of execution:

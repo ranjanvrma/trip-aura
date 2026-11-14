@@ -71,9 +71,12 @@ class SemanticMatcher:
             for (k, _), v in zip(missing, gen):
                 v = np.asarray(v, dtype="float32")
                 self._cache[k] = v / (np.linalg.norm(v) or 1.0)
-            if len(self._cache) > 50_000:
-                self._cache.clear()
-        return np.stack([self._cache[k] for k in keys])
+        vectors = [self._cache.get(k) for k in keys]
+        if any(v is None for v in vectors):   # another request emptied the cache in between: compute these again
+            return self.embed(texts, query)
+        if len(self._cache) > 50_000:         # emptied only after this request has its vectors
+            self._cache.clear()
+        return np.stack(vectors)
 
     def similarity(self, queries: list[str], docs: list[str]):
         """Cosine similarity matrix [len(queries) x len(docs)]."""

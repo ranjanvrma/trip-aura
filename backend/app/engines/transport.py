@@ -63,25 +63,35 @@ def score_options(options: list[TransportOption], preferred: set[TransportMode],
     """
     if not options:
         return
-    practical = [o for o in options if o.practical] or options
+    # an option with no duration is one the provider could not offer here (no station nearby, no route)
+    usable = [o for o in options if o.duration_min > 0]
+    practical = [o for o in usable if o.practical] or usable
+    if not practical:
+        for o in options:
+            o.score = 0.0
+        return
     fastest = min(o.duration_min for o in practical)
     priciest = max(o.cost.amount for o in practical)
     ref = leg_allowance if leg_allowance and leg_allowance > 0 else priciest
     for o in options:
+        if o.duration_min <= 0:
+            o.score = 0.0
+            continue
         t = max(fastest, 1) / max(o.duration_min, 1)
         c = 1.0 if ref <= 0 else max(0.0, 1 - o.cost.amount / ref)
         p = 1.0 if o.mode in preferred else 0.4
         s = weights.time * t + weights.cost * c + weights.preference * p
         if o.mode == TransportMode.WALKING and o.practical and o.distance_km <= 1.0:
             s += 0.15  # short walks: no waiting, free
-        o.score = round(min(1.0, s) if o.practical else s * 0.3, 3)
+        o.score = round(min(1.0, s) if o.practical else min(1.0, s) * 0.3, 3)
 
 
 def choose(options: list[TransportOption], preferred: set[TransportMode]) -> tuple[TransportOption, str]:
     if not options:
         raise TripAuraError("No transport option could be computed for this leg")
     pref_practical = [o for o in options if o.practical and o.mode in preferred]
-    pool = pref_practical or [o for o in options if o.practical] or options
+    pool = (pref_practical or [o for o in options if o.practical] or [o for o in options if o.duration_min > 0]
+            or options)
     best = max(pool, key=lambda o: o.score)
     cost = "free" if best.cost.amount == 0 else f"~{best.cost.amount:,.0f} {best.cost.currency}"
     if pref_practical:

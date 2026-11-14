@@ -22,6 +22,19 @@ export function setTheme(theme: Theme): void {
 
 export const toggleTheme = () => setTheme(getTheme() === "dark" ? "light" : "dark");
 
+/** Paper is light: while the browser prints, the page uses the light theme, then goes back. */
+export function printInLightTheme(): void {
+  let onScreen: Theme | null = null;
+  window.addEventListener("beforeprint", () => {
+    onScreen = getTheme();
+    document.documentElement.dataset.theme = "light";
+  });
+  window.addEventListener("afterprint", () => {
+    if (onScreen) document.documentElement.dataset.theme = onScreen;
+    onScreen = null;
+  });
+}
+
 function subscribe(onChange: () => void): () => void {
   window.addEventListener(EVENT, onChange);
   return () => window.removeEventListener(EVENT, onChange);

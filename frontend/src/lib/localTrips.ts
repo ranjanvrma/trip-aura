@@ -19,11 +19,20 @@ export function listSavedTrips(): SavedTrip[] {
   }
 }
 
+/**
+ * Trips are stored newest first. If the browser's storage is full, the oldest trips are dropped one at a time
+ * until the list fits, so a plan that took a while to build is not lost for lack of room.
+ */
 function writeSavedTrips(trips: SavedTrip[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trips.slice(0, MAX_TRIPS)));
-  } catch {
-    throw new Error("This browser couldn't save the trip. Check available storage and try again.");
+  let keep = trips.slice(0, MAX_TRIPS);
+  for (;;) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(keep));
+      return;
+    } catch {
+      if (keep.length <= 1) throw new Error("This browser couldn't save the trip. Check available storage and try again.");
+      keep = keep.slice(0, -1);
+    }
   }
 }
 

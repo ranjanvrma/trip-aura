@@ -48,7 +48,7 @@ flowchart LR
 **How a trip request flows:**
 1. **Understand.** The form, or the NLP parser for a typed description, gives the city, dates, budget and preferences. The city resolves from an offline index of about 34k cities.
 2. **Load the city.**
-   - **First visit:** Overture, Wikidata, OpenStreetMap (25 s cap) and Wikivoyage are fetched **in parallel**, merged into one list of places, then cached in Postgres for 30 days. This takes about 30–60 s.
+   - **First visit:** Overture, Wikidata, OpenStreetMap and Wikivoyage are fetched **in parallel** and merged into one list of places, cached in Postgres for 30 days. The plan is built as soon as the first three are in, usually 10 to 20 s; OpenStreetMap (opening hours, fees, diet tags) gets a few seconds' grace, and if it answers later it is merged into the cached city in the background.
    - **Later visits:** read from the cache in about 1–2 s.
 3. **Score.**
    - Every place gets a 0–5 suitability score: interests 30%, budget 20%, distance 20%, transport 10%, time 10%, pace 10%.
@@ -101,7 +101,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (131 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (164 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration

@@ -1,10 +1,11 @@
 import { motion, useScroll, useSpring } from "motion/react";
 import { useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { CodeXml, Menu, Moon, Search, Sun } from "lucide-react";
 import { modKey } from "../../lib/platform";
 import { toggleTheme, useTheme } from "../../lib/theme";
 import { useCommands } from "./CommandMenu";
+import ErrorBoundary from "../ui/ErrorBoundary";
 import Sheet from "../ui/Sheet";
 import Kbd from "../ui/Kbd";
 import Logo from "./Logo";
@@ -39,6 +40,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
   const { open } = useCommands();
   const [menu, setMenu] = useState(false);
   const closeMenu = () => setMenu(false);
+  const { pathname } = useLocation();
   const theme = useTheme();
   const other = theme === "dark" ? "light" : "dark";
   const ThemeIcon = theme === "dark" ? Sun : Moon;
@@ -88,7 +90,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
 
       {banner}
       <main id="main" className="main" tabIndex={-1}>
-        <Outlet />
+        <ErrorBoundary key={pathname}><Outlet /></ErrorBoundary>
       </main>
 
       <footer className="footer">

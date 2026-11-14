@@ -895,7 +895,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
   .ticket-stub::before { left: -12px; } .ticket-stub::after { right: -12px; }
   .ticket-total { grid-column: 1 / -1; }
   .ticket-stub div:not(.ticket-total) { flex-direction: column; align-items: flex-start; gap: 2px; }
-  .ticket-stub div:not(.ticket-total) dd { text-align: left; }
+  .ticket-stub div:not(.ticket-total) dd { text-align: left !important; }
 }
 
 /* ---------- day ribbon: the day at a glance ---------- */
@@ -976,7 +976,9 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
   @page { size: A4; margin: 16mm 15mm 18mm; }
   html, body { background: #fff !important; }
   body::before, body::after { display: none !important; }
-  body > *:not(.print-doc) { display: none !important; }
+  /* only while the trip's PDF layout is mounted; a plain Ctrl+P prints the page itself (in the light theme) */
+  body:has(> .print-doc) > *:not(.print-doc) { display: none !important; }
+  .topbar, .footer, .toasts, .scroll-progress { display: none !important; }
   .print-doc {
     /* paper colours: the screen's night palette would print light text on white */
     --ink: #1c2a2c; --ink-2: #3b4849; --muted: #66706b; --line: #e4dac8; --line-strong: #d2c4ad;
@@ -1001,7 +1003,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
   .pd-table td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .pd-table td:last-child { text-align: right; }
   .pd-total td { font-weight: 600; border-top: 1.5px solid var(--ink); }
-  .pd-plan td:first-child { width: 24mm; color: var(--ink-2); text-align: left; }
+  .pd-plan td:first-child { width: 24mm; color: var(--ink-2); text-align: left !important; }
   .pd-plan td:last-child { width: 26mm; }
   .pd-plan tr { break-inside: avoid; }
   .pd-row-travel td { color: var(--ink-2); font-size: 9pt; background: var(--surface-2); }

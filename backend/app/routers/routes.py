@@ -3,8 +3,9 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.core.errors import TripAuraError
 from app.engines.transport import choose
 from app.routers.deps import get_itinerary_service
 from app.schemas.common import LatLng
@@ -35,11 +36,14 @@ class RouteResponse(BaseModel):
 @router.post("/compare", response_model=RouteResponse)
 def compare(body: RouteRequest, svc: ItineraryService = Depends(get_itinerary_service)) -> RouteResponse:
     """Compare transport modes between two points (used by the map for ad-hoc routes)."""
-    req = TripRequest.model_validate({
-        "accommodation": {"name_or_address": "route-compare", "location": body.origin.model_dump()},
-        "destination_city": body.city, "num_days": 1, "budget": 1_000_000, "currency": body.currency,
-        "travelers": body.travelers, "transport_modes": [m.value for m in body.modes],
-    })
+    try:
+        req = TripRequest.model_validate({
+            "accommodation": {"name_or_address": "route-compare", "location": body.origin.model_dump()},
+            "destination_city": body.city, "num_days": 1, "budget": 1_000_000, "currency": body.currency,
+            "travelers": body.travelers, "transport_modes": [m.value for m in body.modes],
+        })
+    except ValidationError as exc:   # e.g. a currency the planner does not support
+        raise TripAuraError(exc.errors()[0]["msg"]) from exc
     city = svc.city(body.city)
     engine = svc.transport_for(req, city)
     options = engine.options(body.origin, body.destination, body.departure, fresh=True)

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from app.core.geo import haversine_km
 from app.core.timeutil import hm_to_min, min_to_hm, period_of
 from app.engines import budget as budget_engine
-from app.engines.food import FoodEngine
+from app.engines.food import FoodEngine, is_open_for
 from app.engines.pace import DINNER_WINDOW, LUNCH_WINDOW
 from app.engines.recommendation import ScoringContext, open_day_ratio, score_attraction
 from app.engines.transport import TransportEngine
@@ -264,11 +264,23 @@ class ItineraryEngine:
         def meal(kind: str, duration: int) -> None:
             radius = 1.5 if kind == "breakfast" else 3.0
             pick = None
-            for exclude in (used_food, set()):   # prefer a restaurant not used yet; repeat one if needed
-                pick = self.food.pick(kind, state["loc"], int(state["t"] + 10), weekday, exclude, max_km=radius,
-                                      max_cost=self.c.max_meal_cost_pp, duration=duration)
-                if pick is not None:
+            # places that are open when we set off, but shut before the meal would end once travel is counted
+            closing: set[str] = set()
+            for _ in range(4):
+                # prefer a restaurant not used yet; repeat one if needed
+                for exclude in (used_food | closing, closing):
+                    pick = self.food.pick(kind, state["loc"], int(state["t"] + 10), weekday, exclude, max_km=radius,
+                                          max_cost=self.c.max_meal_cost_pp, duration=duration)
+                    if pick is not None:
+                        break
+                if pick is None:
                     break
+                there = pick[0].place
+                arrive = state["t"] + self.transport.quick_minutes(state["loc"], there.location) + self.pace.buffer_min
+                if is_open_for(there, weekday, int(arrive), duration):
+                    break
+                closing.add(there.id)
+                pick = None
             if pick is None:
                 cost = budget_engine.meal_cost(None, kind, self.req, self.ctx.costs)
                 label = "at your accommodation" if state["name"] == self.home.name else f"near {state['name']}"
@@ -294,6 +306,10 @@ class ItineraryEngine:
             nonlocal lunch_done
             if lunch_done or not (force or state["t"] >= LUNCH_WINDOW[0]):
                 return
+            if state["t"] < LUNCH_WINDOW[0]:   # a day with nothing left to see: lunch still waits for lunchtime
+                add(ItemType.REST, "Free time", int(state["t"]), LUNCH_WINDOW[0],
+                    notes=["Nothing is planned for this part of the day."])
+                state["t"] = LUNCH_WINDOW[0]
             meal("lunch", self.pace.lunch_min)
             lunch_done = True
             if self.pace.rest_after_lunch > 0:
@@ -352,10 +368,12 @@ class ItineraryEngine:
             return haversine_km(here.lat, here.lng, p.location.lat, p.location.lng)
 
         parks = [p for p in self._parks
-                 if p.id not in self._used_parks and km(p) < 1.5 and open_window(p, weekday, t + 15, dur) is not None]
+                 if p.id not in self._used_parks and p.id not in self._visited
+                 and km(p) < 1.5 and open_window(p, weekday, t + 15, dur) is not None]
         if parks:
             park = min(parks, key=km)
             self._used_parks.add(park.id)
+            self._visited.add(park.id)   # a park rested in is not offered again as a sight on a later day
             add(ItemType.REST, f"Rest at {park.name}", t, t + dur, place=park,
                 cost=budget_engine.entry_cost(park, self.req, self.ctx.costs), notes=["Relaxed break in a nearby park or garden"])
         else:
@@ -368,6 +386,7 @@ class ItineraryEngine:
         self._parks = [c.place for c in ranked if c.place.kind == PlaceKind.PARK]
         self._used_parks: set[str] = set()
         used: set[str] = set()
+        self._visited = used
         used_food: set[str] = set()
         dropped: list[UnscheduledPlace] = []
         days: list[DayPlan] = []

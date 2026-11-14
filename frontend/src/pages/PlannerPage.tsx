@@ -56,6 +56,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
   const [heroCity, setHeroCity] = useState("");
   const [heroPick, setHeroPick] = useState<CitySuggestion | null>(null);
   const [heroDays, setHeroDays] = useState(3);
+  const board = useMemo(() => (mock ? [status?.mock_city ?? "Jaipur"] : BOARD), [mock, status?.mock_city]);
 
   useScrollMotion(root, [options.data !== undefined, trips.data?.length]);
 
@@ -98,6 +99,8 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
 
   const startFromHero = async (e: React.FormEvent) => {
     e.preventDefault();
+    // leave the field: the planner takes over, and late suggestions must not open under a field nobody is in
+    (document.activeElement as HTMLElement | null)?.blur();
     try {
       const city = heroPick ?? (heroCity.trim().length >= 2 ? (await api.citySuggestions(heroCity.trim())).results[0] : undefined);
       if (!city) { scrollToPlan("city-input"); return; }
@@ -141,7 +144,7 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
         <div className="hero-copy">
           <h1 id="hero-title" className="display" aria-label="Your days in any city, planned stop by stop">
             <span aria-hidden>Your days in</span>
-            <SplitFlap words={mock ? [status?.mock_city ?? "Jaipur"] : BOARD} cells={BOARD_CELLS} onPick={(w) => void pickByName(w)} />
+            <SplitFlap words={board} cells={BOARD_CELLS} onPick={(w) => void pickByName(w)} />
             <span aria-hidden>planned <em>stop by stop.</em></span>
           </h1>
           <p className="lead">

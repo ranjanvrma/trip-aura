@@ -13,11 +13,12 @@ interface Props<T> {
   footer?: string;
   className?: string;
   inputId?: string;
+  ariaLabel?: string;
 }
 
 /** Accessible combobox: debounced search, arrow keys / Enter / Escape, mouse selection. */
 export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems, renderItem, itemKey, minChars = 2,
-                                         placeholder, required, footer, className, inputId }: Props<T>) {
+                                         placeholder, required, footer, className, inputId, ariaLabel }: Props<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -25,10 +26,12 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
   const [error, setError] = useState<string | null>(null);
   const typed = useRef(false);   // only search after the user types (not after a selection)
   const listId = useId();
+  const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!typed.current || value.trim().length < minChars) {
       setItems([]);
+      setLoading(false);   // a request cut short by this change must not leave the spinner running
       return;
     }
     const ctrl = new AbortController();
@@ -38,7 +41,8 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
         const res = await fetchItems(value.trim(), ctrl.signal);
         setItems(res);
         setError(null);
-        setOpen(true);
+        // results that arrive after the field was left (or filled in by something else) stay closed
+        if (document.activeElement === field.current) setOpen(true);
         setActive(res.length ? 0 : -1);
       } catch (e) {
         if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : "Suggestions unavailable");
@@ -51,6 +55,7 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
 
   const choose = (item: T) => {
     typed.current = false;
+    setLoading(false);
     onSelect(item);
     setOpen(false);
     setItems([]);
@@ -67,7 +72,7 @@ export default function Autocomplete<T>({ value, onChange, onSelect, fetchItems,
   return (
     <div className={`ac ${className ?? ""}`}>
       <input
-        id={inputId} value={value} maxLength={120} placeholder={placeholder} required={required} autoComplete="off"
+        ref={field} id={inputId} aria-label={ariaLabel} value={value} maxLength={120} placeholder={placeholder} required={required} autoComplete="off"
         role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
         onChange={(e) => { typed.current = true; onChange(e.target.value); }}

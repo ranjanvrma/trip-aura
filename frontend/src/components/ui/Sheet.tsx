@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
+import { trapTab } from "../../lib/focusTrap";
 import { useBackToClose } from "../../lib/useBackToClose";
 
 interface Props {
@@ -25,7 +26,10 @@ export default function Sheet({ open, onClose, title, children }: Props) {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     panel.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeRef.current();
+      else trapTab(e, panel.current);
+    };
     document.addEventListener("keydown", onKey);
     document.documentElement.classList.add("no-scroll");
     return () => {

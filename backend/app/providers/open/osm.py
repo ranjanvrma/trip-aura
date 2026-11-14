@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import re
 
+from app.core.currencies import SUPPORTED_CURRENCIES
 from app.core.geo import degree_span
 from app.core.urls import safe_http_url, wikidata_qid
 from app.schemas.common import DataSource, LatLng, Money
@@ -146,25 +147,60 @@ def parse_opening_hours(value: str | None) -> OpeningHours:
 
 
 # ----------------------------------------------------------------------------- fees
-_SYMBOLS = {"€": "EUR", "£": "GBP", "₹": "INR", "¥": "JPY", "$": "USD", "฿": "THB",
-            "₺": "TRY", "₩": "KRW", "r$": "BRL", "kc": "CZK", "zł": "PLN"}
-_CHARGE = re.compile(r"(?P<cur1>[A-Z]{3}|[€£₹¥$฿₺₩])?\s*(?P<num>\d+(?:[.,]\d+)?)\s*(?P<cur2>[A-Z]{3}|[€£₹¥$฿₺₩])?")
+_SYMBOLS = {"€": "EUR", "£": "GBP", "₹": "INR", "฿": "THB", "₺": "TRY", "₩": "KRW"}
+# "$" and "¥" are shared by several currencies, so they are read as the local one when that fits
+_DOLLARS = {"USD", "CAD", "AUD", "NZD", "SGD", "HKD", "TWD", "MXN", "ARS", "CLP", "COP", "UYU", "BRL", "FJD", "JMD",
+            "BSD", "BBD", "BZD", "XCD", "TTD", "NAD", "LRD", "GYD", "SRD", "BMD", "KYD", "SBD", "DOP", "CUP"}
+_CODE = r"(?<![A-Za-z])[A-Z]{3}(?![A-Za-z])"          # a currency code standing on its own, not part of a word
+_SIGN = r"[€£₹¥$฿₺₩]"
+_CHARGE = re.compile(rf"(?P<cur1>{_CODE}|{_SIGN})?\s*(?P<num>\d[\d.,]*)\s*(?P<cur2>{_CODE}|{_SIGN})?")
 USUALLY_FREE = {("tourism", "viewpoint"), ("tourism", "artwork"), ("historic", "monument"), ("historic", "memorial"),
                 ("amenity", "place_of_worship"), ("amenity", "marketplace"), ("shop", "mall"), ("natural", "beach")}
 
 
-def parse_fee(tags: dict[str, str]) -> Money | None:
+def _amount(text: str) -> float | None:
+    """'12', '12.50', '12,50', '1,500', '10.000' and '1.500,50' as numbers. A single separator followed by exactly
+    three digits is a thousands separator; when both kinds appear, the last one is the decimal point."""
+    text = text.strip(".,")
+    if "," in text and "." in text:
+        dec = max(text.rfind(","), text.rfind("."))
+        text = text[:dec].replace(",", "").replace(".", "") + "." + text[dec + 1:]
+    elif text.count(",") + text.count(".") == 1:
+        head, tail = re.split(r"[.,]", text)
+        text = head + tail if len(tail) == 3 else head + "." + tail
+    else:
+        text = text.replace(",", "").replace(".", "")      # 1,000,000
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _charge_currency(symbol: str | None, local_currency: str | None) -> str | None:
+    """The currency a charge is in, or None when it cannot be told (the fee then stays unknown)."""
+    if symbol is None:
+        return local_currency                              # a bare number is in the local money
+    if symbol == "$":
+        return local_currency if local_currency in _DOLLARS else "USD"
+    if symbol == "¥":
+        return "CNY" if local_currency == "CNY" else "JPY"
+    code = _SYMBOLS.get(symbol, symbol)
+    return code if code in SUPPORTED_CURRENCIES else None  # "ADULT", "DEM" and the like are not currencies
+
+
+def parse_fee(tags: dict[str, str], local_currency: str | None = None) -> Money | None:
     fee = tags.get("fee", "").lower()
     if fee == "no":
         return Money(amount=0, currency="USD", verified=False, source=SRC, note="Free entry (OpenStreetMap fee=no)")
     charge = tags.get("charge")
     if charge:
         m = _CHARGE.search(charge)
-        cur = (m.group("cur1") or m.group("cur2")) if m else None
-        if m and cur:
-            code = _SYMBOLS.get(cur, cur)
-            return Money(amount=float(m.group("num").replace(",", ".")), currency=code, verified=False, source=SRC,
+        amount = _amount(m.group("num")) if m else None
+        code = _charge_currency(m.group("cur1") or m.group("cur2"), local_currency) if m else None
+        if amount is not None and code:
+            return Money(amount=amount, currency=code, verified=False, source=SRC,
                          note=f"From OpenStreetMap charge tag '{charge}' - may be out of date")
+        return None                                        # a charge exists but could not be read: unknown, not free
     if not fee and any(tags.get(k) == v for k, v in USUALLY_FREE):
         return Money(amount=0, currency="USD", verified=False, source=DataSource.ESTIMATE,
                      note="Usually free for this type of place (no fee recorded in OpenStreetMap)")
@@ -274,7 +310,7 @@ def _address(tags: dict[str, str]) -> str | None:
     return s or None
 
 
-def element_to_place(el: dict, local_cuisines: set[str]) -> Place | None:
+def element_to_place(el: dict, local_cuisines: set[str], local_currency: str | None = None) -> Place | None:
     tags = el.get("tags") or {}
     name = _name(tags)
     lat = el.get("lat", (el.get("center") or {}).get("lat"))
@@ -327,12 +363,13 @@ def element_to_place(el: dict, local_cuisines: set[str]) -> Place | None:
     return Place(
         id=f"osm:{osm_id}", name=name, kind=kind, categories=cats, location=LatLng(lat=lat, lng=lon),
         address=_address(tags), description=tags.get("description") or website,
-        entry_fee=parse_fee(tags), typical_visit_minutes=visit, opening_hours=hours, best_time=best,
+        entry_fee=parse_fee(tags, local_currency), typical_visit_minutes=visit, opening_hours=hours, best_time=best,
         external_ids=ext, source=SRC,
     )
 
 
-def parse_elements(elements: list[dict], local_cuisines: set[str]) -> tuple[list[Place], list[dict]]:
+def parse_elements(elements: list[dict], local_cuisines: set[str],
+                   local_currency: str | None = None) -> tuple[list[Place], list[dict]]:
     places: dict[str, Place] = {}
     stations: list[dict] = []
     for el in elements:
@@ -345,7 +382,7 @@ def parse_elements(elements: list[dict], local_cuisines: set[str]) -> tuple[list
             kind = "metro" if metro else "train"
             stations.append({"name": tags.get("name", "station"), "lat": el["lat"], "lng": el["lon"], "kind": kind})
             continue
-        p = element_to_place(el, local_cuisines)
+        p = element_to_place(el, local_cuisines, local_currency)
         if p and p.id not in places:
             places[p.id] = p
     return list(places.values()), stations

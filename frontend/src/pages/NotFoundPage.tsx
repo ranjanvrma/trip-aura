@@ -13,7 +13,7 @@ export default function NotFoundPage({ what = "page" }: { what?: "page" | "trip"
         <h1 className="h2">{what === "trip" ? "We couldn't find that trip" : "This page doesn't exist"}</h1>
         <p className="muted">
           {what === "trip"
-            ? "It may have been deleted, or it belongs to another account."
+            ? "It may have been deleted, or it was saved in another browser or on another device."
             : "The link may be mistyped or out of date."}
         </p>
         <div className="row gap-s wrap center">

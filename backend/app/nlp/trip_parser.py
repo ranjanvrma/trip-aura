@@ -114,8 +114,8 @@ _SYM = r"(₹|\$|€|£|¥|rs\.?|inr|usd|eur|gbp|jpy)"
 _AMT = r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|lakhs?|lac|m|mn|million)?\b"
 _CURRENCY_NAMES = "|".join(sorted((re.escape(w) for w in CURRENCY_WORDS if w.isalpha() and len(w) > 2),
                                   key=len, reverse=True))
-_BUDGET_SYMBOL_FIRST = re.compile(rf"{_SYM}\s*{_AMT}")                    # $600, rs 40,000, € 2k
-_BUDGET_AMOUNT_FIRST = re.compile(rf"{_AMT}\s*({_CURRENCY_NAMES}|{_SYM})")  # 600 euros, 40k inr
+_BUDGET_SYMBOL_FIRST = re.compile(rf"(?<![a-z]){_SYM}\s*{_AMT}")                    # $600, rs 40,000, € 2k
+_BUDGET_AMOUNT_FIRST = re.compile(rf"{_AMT}\s*({_CURRENCY_NAMES}|{_SYM})(?![a-z])")  # 600 euros, 40k inr
 _BUDGET_NO_CURRENCY = re.compile(rf"budget\D{{0,15}}?{_AMT}")             # budget of 600
 
 
@@ -218,7 +218,11 @@ def parse_trip_text(text: str, city_index=None, today: dt.date | None = None) ->
         res.understood.append(f"Destination: {city['display']}")
 
     # days
-    m = re.search(rf"\b{_NUM}\s*(?:-\s*)?(day|days|night|nights)\b", t)
+    lengths = [x for x in re.finditer(rf"\b{_NUM}\s*(?:-\s*)?(day|days|night|nights)\b", t)
+               # "100 euros a day" and "rs 2000 a night" are rates
+               if not (x.group(1) in ("a", "an") and re.search(r"(\d|[a-z€$£₹¥])\s+$", t[:x.start()])
+                       and re.search(rf"({_CURRENCY_NAMES}|{_SYM}|\d)\s*$", t[:x.start()]))]
+    m = lengths[0] if lengths else None
     n = _num(m.group(1)) if m else None
     if n:
         days = n + 1 if m.group(2).startswith("night") else n

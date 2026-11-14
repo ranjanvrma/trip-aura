@@ -29,7 +29,7 @@ Browser (React + Vite + TypeScript)
                     └─ db/         one table: the per-city open-data cache
 ```
 
-**A trip request** (`POST /api/trips/preview`) flows through `services/itinerary_service.py`: resolve the city (offline GeoNames index first) → load the city's places (cached 30 days; a first visit fetches Overture, Wikidata, OpenStreetMap and Wikivoyage in parallel and takes 30 to 60 seconds) → score every place 0 to 5 for this traveller → schedule each day (anchor on the best sight, greedy order, 2-opt, opening hours, meals, rests) → cost it → optionally enrich with Google ratings → return an `Itinerary`. The server stores nothing about the trip. The browser saves it under a local UUID (`frontend/src/lib/localTrips.ts`).
+**A trip request** (`POST /api/trips/preview`) flows through `services/itinerary_service.py`: resolve the city (offline GeoNames index first) → load the city's places (cached 30 days; a first visit fetches Overture, Wikidata, OpenStreetMap and Wikivoyage in parallel and usually takes 10 to 20 seconds: the plan does not wait for a slow OpenStreetMap, whose late answer is merged into the cached city in the background) → score every place 0 to 5 for this traveller → schedule each day (anchor on the best sight, greedy order, 2-opt, opening hours, meals, rests) → cost it → optionally enrich with Google ratings → return an `Itinerary`. The server stores nothing about the trip. The browser saves it under a local UUID (`frontend/src/lib/localTrips.ts`).
 
 **Data modes** (`DATA_MODE`): `open` is the default and the real product; `mock` is a bundled Jaipur dataset used by the tests; `live` uses Google for everything. There is deliberately no automatic fallback from one mode to another.
 
@@ -83,7 +83,7 @@ cd frontend && npm run build                                          # typechec
 cd frontend && npm run build && npm run preview -- --port 5173 --strictPort
 ```
 
-The suite had 131 tests when this was written. The number can change, but it should never drop without a reason you can state.
+The suite had 164 tests when this was written. The number can change, but it should never drop without a reason you can state.
 
 Local secrets live in `backend/.env` and `frontend/.env.local`, both gitignored. After editing either, restart the server that reads it (`VITE_` values are baked in at build or dev-server start).
 
@@ -192,6 +192,8 @@ Each of these either happened in this project or was narrowly avoided.
 - *Putting a network call or a service import inside `engines/`.* Fetch in a service and pass the data in.
 - *Mutating a cached `Place`.* The next request sees your change. Copy, then reassign.
 - *Changing merge logic or cached shape without bumping `DATASET_VERSION`.*
+- *Making a new city wait for OpenStreetMap.* Public Overpass servers are often slow or refuse. `city_store.build` waits for the essential sources, gives OSM `OSM_GRACE_SECONDS`, builds the plan, and lets `_upgrade_when_ready` merge a late answer and re-save the city. Don't put a blocking wait back, and remember that merging mutates the layer's places (the first assembly works on copies).
+- *Trusting a currency found in open data.* An OSM `charge` tag can hold anything (`ADULT 12 EUR`, `5 DEM`, `1,500 JPY`, a bare `$`). Only codes in `SUPPORTED_CURRENCIES` are accepted; an unknown code used to make every trip to that city fail in conversion.
 - *Falling back to mock or to a guess when an open-data source fails.* Overpass in particular fails often; the correct result is a warning and missing fields.
 - *Removing the contact URL from `OPEN_USER_AGENT`.* Wikimedia answers 403 without one.
 - *Writing a rate-limit test that expects the refusal on exactly request N+1.* Buckets refill while the loop runs. Assert the first N succeed and a refusal appears within a few more.
@@ -209,7 +211,8 @@ Each of these either happened in this project or was narrowly avoided.
 - *Pulling a heavy library into the entry bundle.* three.js and the Earth imagery (`globe/textures/`, about 0.9 MB) must stay behind the lazy `Globe`; Leaflet must stay in the trip page chunk. After touching imports or `manualChunks`, check which files `dist/index.html` preloads.
 - *Hiding content for an entrance animation and not revealing it.* Use `useScrollMotion`, which never hides anything already on screen and always cleans up.
 - *Calling `history.back()` to close an overlay.* It undoes a navigation the user just made from inside the overlay. `useBackToClose` already handles this; use it as is.
-- *Passing inline functions or fresh arrays to effects and map components.* See §7.
+- *Passing inline functions or fresh arrays to effects and map components.* See §7. `useSWR` refetches on every tab focus; it keeps the old object when the data is unchanged, and effects that apply something once (the planner's prefill) must guard on a version, not on their dependencies.
+- *Relying on the browser's form validation in the planner.* The form is `noValidate`: a required field in a hidden step cannot be focused, so the browser would cancel the submit silently. `TripForm` checks each step itself and jumps to the first one that needs an answer.
 - *Overriding a responsive rule by accident.* A later rule with equal specificity wins (`.icon-btn` once un-hid `.nav-mobile` on desktop). After CSS edits, look at both a wide and a 375px viewport.
 - *Putting bare text next to a `::before` inside a grid `li`.* Each becomes its own grid item and the text wraps one word per line; wrap the content in a `span`.
 - *Calling endpoints that no longer exist.* The backend has no saved-trip, sign-in or live-location routes. Trips have local string UUIDs; `trip_id` from the server is always null.

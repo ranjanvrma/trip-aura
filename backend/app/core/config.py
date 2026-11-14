@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     city_cache_days: int = Field(default=30, ge=1, le=365)
     # time box for the best-effort OSM layer; its 3 queries run in parallel with the other sources
     osm_time_budget_seconds: float = 25.0
+    # once the essential sources (Overture, Wikidata, Wikivoyage) are in, OSM gets this much longer before the plan
+    # is built without it; a late answer is merged into the cached city in the background
+    osm_grace_seconds: float = Field(default=4.0, ge=0, le=60)
     open_http_timeout_seconds: float = 90.0
     fx_url: str = "https://api.frankfurter.dev/v1/latest"           # ECB rates, about 30 currencies
     fx_open_url: str = "https://open.er-api.com/v6/latest/USD"       # every other currency (empty turns it off)

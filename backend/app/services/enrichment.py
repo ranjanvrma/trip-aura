@@ -26,11 +26,20 @@ def _tokens(name: str) -> set[str]:
 
 
 def names_match(a: str, b: str) -> bool:
+    """True when two names plainly refer to the same place. A shared generic word is not enough: "Cafe" is not
+    "Cafe Coffee Day", and "City Palace Museum" is not "City Cafe"."""
     na, nb = re.sub(r"[^a-z0-9]", "", fold(a)), re.sub(r"[^a-z0-9]", "", fold(b))
-    if na and nb and (na in nb or nb in na):
+    if not na or not nb:
+        return False
+    short, long = sorted((na, nb), key=len)
+    if short in long and len(short) >= 0.6 * len(long):
         return True
     ta, tb = _tokens(a), _tokens(b)
-    return bool(ta and tb) and len(ta & tb) / min(len(ta), len(tb)) >= 0.5
+    if not ta or not tb:
+        return False
+    shared = len(ta & tb)
+    few, many = sorted((len(ta), len(tb)))
+    return shared / many >= 0.5 or (few >= 2 and shared == few)
 
 
 class GoogleEnricher:

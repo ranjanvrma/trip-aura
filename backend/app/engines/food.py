@@ -276,7 +276,8 @@ class FoodEngine:
                 p = c.place
                 if p.id in exclude or (p.best_time and meal not in p.best_time):
                     continue
-                if max_cost is not None and p.avg_cost_per_person and p.avg_cost_per_person.amount > max_cost:
+                if (max_cost is not None and p.avg_cost_per_person
+                        and self.ctx.costs.to_trip_currency(p.avg_cost_per_person).amount > max_cost):
                     continue
                 if not is_open_for(p, weekday, minute, duration):
                     continue

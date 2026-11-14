@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { type LucideIcon, ArrowRight, CornerDownLeft, FileText, ListChecks, MapPin, Moon, Plus, Search, Shield, Sun } from "lucide-react";
 import { listSavedTrips } from "../../lib/localTrips";
 import { useSWR } from "../../lib/swr";
+import { trapTab } from "../../lib/focusTrap";
 import { modKey } from "../../lib/platform";
 import { toggleTheme, useTheme } from "../../lib/theme";
 import Kbd from "../ui/Kbd";
@@ -74,7 +75,12 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
     return all.filter((c) => `${c.label} ${c.group}`.toLowerCase().includes(term));
   }, [all, q]);
 
-  useEffect(() => { input.current?.focus(); }, []);
+  // focus goes to the search box, and back to whatever opened the menu when it closes
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    input.current?.focus();
+    return () => opener?.focus?.();
+  }, []);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
@@ -85,6 +91,7 @@ function Palette({ pageCommands, onClose }: { pageCommands: Command[]; onClose: 
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
     else if (e.key === "Enter") { e.preventDefault(); run(shown[active]); }
     else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    else trapTab(e, input.current?.closest(".cmd") ?? null);
   };
 
   let lastGroup = "";

@@ -83,11 +83,13 @@ export default function Select({ value, onChange, options, label, searchable = f
         <div className="select-pop" onKeyDown={onKeyDown}>
           {searchable && (
             <input ref={search} className="select-search" value={query} placeholder="Type to filter" aria-label={`Filter ${label}`}
-                   aria-controls={listId} onChange={(e) => { setQuery(e.target.value); setActive(0); }} />
+                   role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list"
+                   aria-activedescendant={shown[active] ? `${listId}-${active}` : undefined} onChange={(e) => { setQuery(e.target.value); setActive(0); }} />
           )}
-          <ul className="select-list" id={listId} ref={list} role="listbox" aria-label={label} tabIndex={-1}>
+          <ul className="select-list" id={listId} ref={list} role="listbox" aria-label={label} tabIndex={-1}
+              aria-activedescendant={shown[active] ? `${listId}-${active}` : undefined}>
             {shown.map((o, i) => (
-              <li key={o.value} data-i={i} role="option" aria-selected={o.value === value}
+              <li key={o.value} id={`${listId}-${i}`} data-i={i} role="option" aria-selected={o.value === value}
                   className={`select-option ${i === active ? "is-active" : ""}`}
                   onPointerEnter={() => setActive(i)} onClick={() => pick(o.value)}>
                 <span>{o.label}</span>

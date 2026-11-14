@@ -18,10 +18,11 @@ import logging
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from app.core.currencies import currency_for_country
 from app.core.config import Settings
 from app.core.errors import ProviderRequestError
 from app.core.geo import haversine_km
@@ -34,7 +35,7 @@ from app.schemas.itinerary import DishSuggestion
 from app.schemas.place import Place, PlaceKind
 
 log = logging.getLogger(__name__)
-DATASET_VERSION = 6
+DATASET_VERSION = 7
 FAMOUS_SITELINKS = 20
 
 
@@ -157,6 +158,22 @@ def merge_places(base: list[Place], extra: list[Place], max_m: float = 150) -> l
 
 
 # ------------------------------------------------------------------------- service
+PENDING = object()   # a layer that had not answered when the plan was built
+DEGRADED_CACHE_HOURS = 24
+MAX_CITIES_IN_MEMORY = 40
+
+
+def _copy_layers(results: dict[str, object]) -> dict[str, object]:
+    """The fetched layers with their Place objects copied, so merging them leaves the originals untouched."""
+    def copy(v: object) -> object:
+        if isinstance(v, list):
+            return [x.model_copy(deep=True) if isinstance(x, Place) else x for x in v]
+        if isinstance(v, tuple):
+            return tuple(copy(x) for x in v)
+        return v
+    return {name: copy(v) for name, v in results.items()}
+
+
 class CityDataService:
     def __init__(self, settings: Settings, http: OpenHttp, session_factory=None):
         self.settings = settings
@@ -182,9 +199,25 @@ class CityDataService:
             if row is None or row.version != DATASET_VERSION:
                 return None
             built = row.built_at if row.built_at.tzinfo else row.built_at.replace(tzinfo=dt.timezone.utc)
-            if dt.datetime.now(dt.timezone.utc) - built > dt.timedelta(days=self.settings.city_cache_days):
-                return None
-            return CityData.from_payload(row.key, row.name, built, row.payload)
+            data = CityData.from_payload(row.key, row.name, built, row.payload)
+            return data if self._fresh(data) else None
+
+    def _fresh(self, data: CityData) -> bool:
+        """A complete city is kept for city_cache_days. One built while a source was down is kept for a day only,
+        so a bad hour at Overpass or Wikidata does not leave a thin city in place for a month."""
+        if data.built_at is None:
+            return True
+        age = dt.datetime.now(dt.timezone.utc) - data.built_at
+        degraded = any("unavailable" in w or "still loading" in w for w in data.warnings)
+        return age <= (dt.timedelta(hours=DEGRADED_CACHE_HOURS) if degraded
+                       else dt.timedelta(days=self.settings.city_cache_days))
+
+    def _remember(self, data: CityData) -> None:
+        """Keeps the most recently used cities in memory (each holds thousands of places)."""
+        self._memory.pop(data.key, None)
+        self._memory[data.key] = data
+        while len(self._memory) > MAX_CITIES_IN_MEMORY:
+            self._memory.pop(next(iter(self._memory)))
 
     def _save(self, data: CityData) -> None:
         from app.db.models import CityDataset
@@ -200,18 +233,28 @@ class CityDataService:
 
     def get(self, city: CityContext) -> CityData:
         key = city_key(city)
-        if key in self._memory:
-            return self._memory[key]
+        hit = self._memory.get(key)
+        if hit is not None and self._fresh(hit):
+            return hit
         with self._guard:
             lock = self._locks.setdefault(key, threading.Lock())
         with lock:  # one build per city at a time
-            if key in self._memory:
-                return self._memory[key]
-            data = self._load_cached(key)
+            hit = self._memory.get(key)
+            if hit is not None and self._fresh(hit):
+                return hit
+            # the database is only a cache: if it cannot be read or written, the city is still built and served
+            try:
+                data = self._load_cached(key)
+            except Exception as exc:
+                log.warning("City cache could not be read (%s); building %s", exc.__class__.__name__, city.name)
+                data = None
             if data is None:
                 data = self.build(city)
-                self._save(data)
-            self._memory[key] = data
+                try:
+                    self._save(data)
+                except Exception as exc:
+                    log.warning("City %s could not be saved to the cache (%s)", city.name, exc.__class__.__name__)
+            self._remember(data)
             return data
 
     def stations(self, city: CityContext) -> list[dict]:
@@ -227,7 +270,6 @@ class CityDataService:
         local = osm.LOCAL_CUISINES.get((city.country_code or "").upper(), set())
         lat, lng = city.center.lat, city.center.lng
         log.info("Building open dataset for %s (r=%.1f km, food r=%.1f km)", city.name, radius_km, food_km)
-        sources: list[str] = []
         warnings: list[str] = []
         timings: dict[str, float] = {}
 
@@ -265,11 +307,12 @@ class CityDataService:
 
         def osm_layer(query: str):
             raw = self.http.overpass(query, deadline=osm_deadline)
-            return osm.parse_elements(raw.get("elements", []), local)
+            return osm.parse_elements(raw.get("elements", []), local, currency_for_country(city.country_code or ""))
 
-        jobs = {}
+        jobs: dict[str, Future] = {}
         osm_queries = osm.build_queries(lat, lng, radius_km, food_km)
-        with ThreadPoolExecutor(max_workers=7, thread_name_prefix="city-load") as pool:
+        pool = ThreadPoolExecutor(max_workers=7, thread_name_prefix="city-load")
+        try:
             if self.settings.overture_enabled:
                 jobs["overture"] = pool.submit(timed("overture", overture_layer))
             jobs["wikidata"] = pool.submit(timed("wikidata", wikidata_layer))
@@ -277,8 +320,22 @@ class CityDataService:
                 jobs["wikivoyage"] = pool.submit(timed("wikivoyage", wikivoyage_layer))
             for name, query in osm_queries.items():
                 jobs[f"osm_{name}"] = pool.submit(timed(f"osm_{name}", osm_layer, query))
-        results = {}
+            # The essential sources are always waited for. OSM is best effort: public Overpass servers are often
+            # slow or refuse, so it gets a short grace after the others are in (inside its overall budget) and the
+            # plan is then built without it. A late answer still counts: see _upgrade_when_ready.
+            wait([f for name, f in jobs.items() if not name.startswith("osm_")])
+            cut = min(osm_deadline, time.monotonic() + self.settings.osm_grace_seconds)
+            wait([f for name, f in jobs.items() if name.startswith("osm_")], timeout=max(0.0, cut - time.monotonic()))
+        finally:
+            pool.shutdown(wait=False)   # never block on a straggler; its thread ends when its request does
+
+        results: dict[str, object] = {}
+        pending: list[str] = []
         for name, fut in jobs.items():
+            if not fut.done():
+                results[name] = PENDING
+                pending.append(name)
+                continue
             try:
                 results[name] = fut.result()
             except ImportError:
@@ -286,7 +343,44 @@ class CityDataService:
             except Exception as exc:
                 log.warning("%s layer failed: %s", name, exc)
                 results[name] = exc
+        log.info("City sources for %s fetched in parallel: %s%s", city.name, timings,
+                 f"; still waiting for {pending}" if pending else "")
 
+        # merging changes the layer's Place objects, so when a second assembly will follow, this one works on copies
+        data = self._assemble(city, _copy_layers(results) if pending else results, list(osm_queries), warnings, t0)
+        if pending:
+            threading.Thread(target=self._upgrade_when_ready, name="city-upgrade", daemon=True,
+                             args=(city, jobs, results, pending, list(osm_queries), warnings)).start()
+        return data
+
+    def _upgrade_when_ready(self, city: CityContext, jobs: dict[str, Future], results: dict[str, object],
+                            pending: list[str], osm_names: list[str], warnings: list[str]) -> None:
+        """Runs after a plan was built without OSM: waits for the late answers, then rebuilds and re-saves the city,
+        so the next plan has opening hours, fees and diet tags (or an honest "unavailable" in place of
+        "still loading")."""
+        for name in pending:
+            try:
+                results[name] = jobs[name].result(timeout=180)
+            except Exception as exc:   # includes the timeout: the layer is recorded as failed
+                log.warning("%s layer failed after the plan was built: %s", name, exc)
+                results[name] = exc
+        gained = [n for n in pending if isinstance(results[n], tuple)]
+        try:
+            data = self._assemble(city, results, osm_names, warnings, time.monotonic())
+            with self._guard:
+                lock = self._locks.setdefault(data.key, threading.Lock())
+            with lock:   # get() holds this while it builds and saves, so the upgrade always lands after it
+                self._remember(data)
+                self._save(data)
+            log.info("City %s re-saved after late OSM answers (%s)", city.name, gained or "none arrived")
+        except Exception:
+            log.exception("Could not upgrade the cached city %s", city.name)
+
+    def _assemble(self, city: CityContext, results: dict[str, object], osm_names: list[str], base_warnings: list[str],
+                  t0: float) -> CityData:
+        """Merges the fetched layers, in a fixed order, into one CityData. No network."""
+        sources: list[str] = []
+        warnings = list(base_warnings)
         places: list[Place] = []
         stations: list[dict] = []
         layers_ok = 0
@@ -311,8 +405,12 @@ class CityDataService:
 
         # 3) OpenStreetMap: opening hours, fees, diet tags, stations (best effort, time-boxed)
         osm_hits = 0
-        for name in osm_queries:
+        for name in osm_names:
             res = results.get(f"osm_{name}")
+            if res is PENDING:
+                warnings.append(f"OpenStreetMap {name} data was still loading when this plan was made, so opening "
+                                "hours, fees or diet tags may be missing. Regenerate in a minute to include them.")
+                continue
             if not isinstance(res, tuple):
                 warnings.append(f"OpenStreetMap {name} data was unavailable (public servers busy); "
                                 "opening hours, fees or diet tags may be missing.")
@@ -344,7 +442,6 @@ class CityDataService:
                 sources.append(f"Wikivoyage ({wv_title})")
         elif isinstance(wv, Exception):
             warnings.append("Wikivoyage was unavailable; no guidebook dish suggestions.")
-        log.info("City sources for %s fetched in parallel: %s", city.name, timings)
 
         n_food = sum(1 for p in places if p.kind in (PlaceKind.RESTAURANT, PlaceKind.CAFE))
         log.info("Dataset %s: %d attractions/parks, %d food, %d stations from %s in %.0fs", city.name,

@@ -87,6 +87,8 @@ def ip_route_class(method: str, path: str) -> str:
     """Route class for the per-IP limit applied to every request."""
     if path == "/api/trips/preview" and method == "POST":
         return "generate"
+    if path.startswith("/api/routes/"):   # may load a whole city (stations), so it is as costly as a trip
+        return "generate"
     if path.startswith("/api/geo/"):
         return "geo"
     if path.startswith("/api/nlp/"):

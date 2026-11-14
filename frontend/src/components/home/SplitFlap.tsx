@@ -26,7 +26,7 @@ export default function SplitFlap({ words, cells, onPick, holdMs = 3200 }: Props
   }, [words.length, holdMs]);
 
   useEffect(() => {
-    const target = pad(words[index], cells);
+    const target = pad(words[index % words.length], cells);
     if (prefersReducedMotion()) { setChars(target); return; }
     let frame = 0;
     const t = window.setInterval(() => {
@@ -38,7 +38,7 @@ export default function SplitFlap({ words, cells, onPick, holdMs = 3200 }: Props
     return () => window.clearInterval(t);
   }, [index, words, cells]);
 
-  const word = words[index];
+  const word = words[index % words.length];   // the list can shrink (demo mode) while the index is ahead
   return (
     <button type="button" className="flap" onClick={() => onPick(word)} aria-label={`Plan a trip to ${word}`}
             onPointerEnter={() => { paused.current = true; }} onPointerLeave={() => { paused.current = false; }}
