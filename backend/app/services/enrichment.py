@@ -9,6 +9,9 @@ place keeps "no rating". The schedule itself is not changed.
 from __future__ import annotations
 
 import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 from app.core.errors import TripAuraError
 from app.core.geo import haversine_km
@@ -42,15 +45,42 @@ def names_match(a: str, b: str) -> bool:
     return shared / many >= 0.5 or (few >= 2 and shared == few)
 
 
+NO_MATCH_TTL_S = 24 * 3600
+_NO_MATCH: dict[str, float] = {}       # open-data place id -> when Google last had no match for it
+_NO_MATCH_LOCK = threading.Lock()
+
+
+def _known_no_match(place_id: str) -> bool:
+    with _NO_MATCH_LOCK:
+        t = _NO_MATCH.get(place_id)
+        return t is not None and time.monotonic() - t < NO_MATCH_TTL_S
+
+
+def _remember_no_match(place_id: str) -> None:
+    with _NO_MATCH_LOCK:
+        if len(_NO_MATCH) > 50_000:
+            _NO_MATCH.clear()
+        _NO_MATCH[place_id] = time.monotonic()
+
+
 class GoogleEnricher:
     def __init__(self, places: GooglePlacesProvider):
         self.places = places
         self.matched = 0
         self.errors: list[str] = []
+        self._lock = threading.Lock()
+        self.stopped = False   # set after a quota or permission error: the remaining places are not tried
+
+    def enrich_all(self, places: list[Place], city: CityContext, workers: int = 6) -> None:
+        """Looks the places up in parallel. Each call only changes its own Place (a per-request copy)."""
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="enrich") as pool:
+            list(pool.map(lambda p: self.enrich(p, city), places))
 
     def enrich(self, place: Place, city: CityContext) -> bool:
         if place.external_rating is not None and place.external_rating.provider == DataSource.GOOGLE:
             return True
+        if self.stopped or _known_no_match(place.id):
+            return False
         local_name = place.name.split(" (")[0]
         ctx = CityContext(name=city.name, center=place.location, country_code=city.country_code, radius_km=0.3,
                           has_metro=None, source=city.source)
@@ -58,7 +88,10 @@ class GoogleEnricher:
             results = self.places.search(ctx, PlaceQuery(text=local_name, tag="enrich", kind="food" if place.diet else
                                                          "attraction", max_results=3))
         except TripAuraError as exc:
-            self.errors.append(exc.message)
+            with self._lock:
+                self.errors.append(exc.message)
+                if any(k in exc.message.lower() for k in ("429", "quota", "403", "permission")):
+                    self.stopped = True
             return False
         for g in results:
             km = haversine_km(place.location.lat, place.location.lng, g.location.lat, g.location.lng)
@@ -73,6 +106,8 @@ class GoogleEnricher:
                         and g.opening_hours.known:
                     # informational only: the schedule was built before enrichment
                     place.description = (place.description or "") + " (Google lists opening hours; verify before visiting)"
-                self.matched += 1
+                with self._lock:
+                    self.matched += 1
                 return True
+        _remember_no_match(place.id)
         return False

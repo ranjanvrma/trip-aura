@@ -160,6 +160,7 @@ def merge_places(base: list[Place], extra: list[Place], max_m: float = 150) -> l
 # ------------------------------------------------------------------------- service
 PENDING = object()   # a layer that had not answered when the plan was built
 DEGRADED_CACHE_HOURS = 24
+DEGRADED_RETRY_MINUTES = 30
 MAX_CITIES_IN_MEMORY = 40
 
 
@@ -180,6 +181,7 @@ class CityDataService:
         self.http = http
         self._session_factory = session_factory
         self._memory: dict[str, CityData] = {}
+        self._refreshing: set[str] = set()
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
 
@@ -212,6 +214,35 @@ class CityDataService:
         return age <= (dt.timedelta(hours=DEGRADED_CACHE_HOURS) if degraded
                        else dt.timedelta(days=self.settings.city_cache_days))
 
+    def _retry_if_degraded(self, city: CityContext, data: CityData) -> None:
+        """Starts one background rebuild for a city that was built while a source was unavailable, once it is
+        DEGRADED_RETRY_MINUTES old. The current data keeps being served meanwhile."""
+        if data.built_at is None or not any("unavailable" in w for w in data.warnings):
+            return
+        if dt.datetime.now(dt.timezone.utc) - data.built_at < dt.timedelta(minutes=DEGRADED_RETRY_MINUTES):
+            return
+        with self._guard:
+            current = self._memory.get(data.key)
+            if data.key in self._refreshing or (current is not None and current is not data
+                                                and (current.built_at or data.built_at) > data.built_at):
+                return   # already being rebuilt, or a newer version is already in place
+            self._refreshing.add(data.key)
+
+        def rebuild() -> None:
+            try:
+                fresh = self.build(city)
+                with self._locks.setdefault(data.key, threading.Lock()):
+                    self._remember(fresh)
+                    self._save(fresh)
+                log.info("Rebuilt %s, which had been built with a source unavailable", data.name)
+            except Exception as exc:
+                log.warning("Background rebuild of %s failed: %s", data.name, exc)
+            finally:
+                with self._guard:
+                    self._refreshing.discard(data.key)
+
+        threading.Thread(target=rebuild, name="city-retry", daemon=True).start()
+
     def _remember(self, data: CityData) -> None:
         """Keeps the most recently used cities in memory (each holds thousands of places)."""
         self._memory.pop(data.key, None)
@@ -235,6 +266,7 @@ class CityDataService:
         key = city_key(city)
         hit = self._memory.get(key)
         if hit is not None and self._fresh(hit):
+            self._retry_if_degraded(city, hit)
             return hit
         with self._guard:
             lock = self._locks.setdefault(key, threading.Lock())

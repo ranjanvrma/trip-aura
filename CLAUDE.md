@@ -83,7 +83,7 @@ cd frontend && npm run build                                          # typechec
 cd frontend && npm run build && npm run preview -- --port 5173 --strictPort
 ```
 
-The suite had 164 tests when this was written. The number can change, but it should never drop without a reason you can state.
+The suite had 174 tests when this was written. The number can change, but it should never drop without a reason you can state.
 
 Local secrets live in `backend/.env` and `frontend/.env.local`, both gitignored. After editing either, restart the server that reads it (`VITE_` values are baked in at build or dev-server start).
 
@@ -194,6 +194,7 @@ Each of these either happened in this project or was narrowly avoided.
 - *Changing merge logic or cached shape without bumping `DATASET_VERSION`.*
 - *Making a new city wait for OpenStreetMap.* Public Overpass servers are often slow or refuse. `city_store.build` waits for the essential sources, gives OSM `OSM_GRACE_SECONDS`, builds the plan, and lets `_upgrade_when_ready` merge a late answer and re-save the city. Don't put a blocking wait back, and remember that merging mutates the layer's places (the first assembly works on copies).
 - *Trusting a currency found in open data.* An OSM `charge` tag can hold anything (`ADULT 12 EUR`, `5 DEM`, `1,500 JPY`, a bare `$`). Only codes in `SUPPORTED_CURRENCIES` are accepted; an unknown code used to make every trip to that city fail in conversion.
+- *Caching Google content.* Google's terms allow caching place IDs, not ratings or reviews, so enrichment looks matches up again on every plan and only remembers "no match" (`services/enrichment.py`).
 - *Falling back to mock or to a guess when an open-data source fails.* Overpass in particular fails often; the correct result is a warning and missing fields.
 - *Removing the contact URL from `OPEN_USER_AGENT`.* Wikimedia answers 403 without one.
 - *Writing a rate-limit test that expects the refusal on exactly request N+1.* Buckets refill while the loop runs. Assert the first N succeed and a refusal appears within a few more.

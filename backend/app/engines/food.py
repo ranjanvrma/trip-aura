@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.core.geo import haversine_km
 from app.core.text import fold
 from app.core.timeutil import hm_to_min
-from app.engines.recommendation import ScoringContext, score_food_place
+from app.engines.recommendation import (
+    ScoringContext, food_distance_components, food_fixed_components, meal_cost_pp, score_food_place, score_total,
+)
 from app.nlp.sentiment import sentence_polarity, split_sentences
 from app.schemas.common import LatLng
 from app.schemas.itinerary import DishSuggestion, FoodRecommendation
@@ -252,6 +254,8 @@ class FoodCandidate:
     check: DietCheck
     base_score: SuitabilityScore
     food_match: float
+    fixed: dict[str, float] = field(default_factory=dict)   # score parts that do not depend on location
+    cost_pp: float | None = None                              # trip currency; published price or estimate
 
 
 class FoodEngine:
@@ -264,31 +268,38 @@ class FoodEngine:
             if not chk.ok:
                 continue
             fm = food_match_component(p, ctx.req.food_categories, chk)
-            self.candidates.append(FoodCandidate(p, chk, score_food_place(p, ctx, fm, chk.reasons), fm))
+            self.candidates.append(FoodCandidate(p, chk, score_food_place(p, ctx, fm, chk.reasons), fm,
+                                                 food_fixed_components(p, ctx, fm), meal_cost_pp(p, ctx)))
 
     def pick(self, meal: str, near: LatLng, minute: int, weekday: int, exclude: set[str],
              max_km: float = 3.0, max_cost: float | None = None,
              duration: int = 45) -> tuple[FoodCandidate, SuitabilityScore] | None:
-        """Best open restaurant for this meal near `near`. Expands the radius if needed."""
+        """Best open restaurant for this meal near `near`. Expands the radius if needed.
+
+        Ranking uses the score's arithmetic only; the full SuitabilityScore (with its reasons) is built once, for
+        the winner. This runs for every meal of every day of every plan the budget optimiser tries."""
+        found: list[tuple[float, FoodCandidate]] = []   # (km, candidate) passing every test except distance
+        for c in self.candidates:
+            p = c.place
+            if p.id in exclude or (p.best_time and meal not in p.best_time):
+                continue
+            if max_cost is not None and c.cost_pp is not None and c.cost_pp > max_cost:
+                continue
+            km = haversine_km(near.lat, near.lng, p.location.lat, p.location.lng)
+            if km > max_km * 4 or not is_open_for(p, weekday, minute, duration):
+                continue
+            found.append((km, c))
         for radius in (max_km, max_km * 2, max_km * 4):
-            best: tuple[float, FoodCandidate, SuitabilityScore] | None = None
-            for c in self.candidates:
-                p = c.place
-                if p.id in exclude or (p.best_time and meal not in p.best_time):
-                    continue
-                if (max_cost is not None and p.avg_cost_per_person
-                        and self.ctx.costs.to_trip_currency(p.avg_cost_per_person).amount > max_cost):
-                    continue
-                if not is_open_for(p, weekday, minute, duration):
-                    continue
-                km = haversine_km(near.lat, near.lng, p.location.lat, p.location.lng)
+            best: tuple[float, FoodCandidate] | None = None
+            for km, c in found:
                 if km > radius:
                     continue
-                s = score_food_place(p, self.ctx, c.food_match, c.check.reasons, origin=near)
-                if best is None or s.score > best[0]:
-                    best = (s.score, c, s)
+                s = score_total({**c.fixed, **food_distance_components(km, self.ctx)})
+                if best is None or s > best[0]:
+                    best = (s, c)
             if best:
-                return best[1], best[2]
+                c = best[1]
+                return c, score_food_place(c.place, self.ctx, c.food_match, c.check.reasons, origin=near)
         return None
 
     def recommendations(self, limit: int = 10) -> list[FoodRecommendation]:

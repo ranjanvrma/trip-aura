@@ -118,3 +118,176 @@ def test_a_city_built_while_a_source_was_down_expires_after_a_day():
     assert svc._fresh(city(down, dt.timedelta(hours=3)))
     assert not svc._fresh(city(down, dt.timedelta(days=2)))
     assert not svc._fresh(city([], dt.timedelta(days=settings.city_cache_days + 1)))
+
+
+# ---------------------------------------------------------------- second round (v2.3.1)
+def _minutes(hm: str) -> int:
+    h, m = hm.split(":")
+    return int(h) * 60 + int(m)
+
+
+@pytest.mark.parametrize("pace", ["relaxed", "moderate", "packed"])
+def test_lunch_never_slips_past_mid_afternoon(client, base_request, pace):
+    from app.engines.itinerary import LATEST_LUNCH_START
+
+    data = client.post("/api/trips/preview", json={**base_request, "num_days": 6, "pace": pace}).json()
+    starts = [_minutes(i["start"]) for d in data["days"] for i in d["items"] if i.get("meal_type") == "lunch"]
+    assert starts and all(LUNCH_WINDOW[0] - 60 <= s <= LATEST_LUNCH_START for s in starts), starts
+
+
+def test_a_far_away_stay_has_dinner_near_it_and_no_late_ride(client, base_request):
+    # about 45 km outside the Jaipur demo data
+    stay = {"type": "hotel", "name_or_address": "Far Farm Stay", "location": {"lat": 27.32, "lng": 75.82}}
+    data = client.post("/api/trips/preview", json={**base_request, "accommodation": stay,
+                                                   "transport_modes": ["cab"]}).json()
+    for day in data["days"]:
+        times = [_minutes(i["start"]) for i in day["items"]]
+        assert times == sorted(times), (day["day_number"], [i["start"] for i in day["items"]])   # nothing wraps
+        end = day["items"][-1]
+        assert end["type"] == "end" and _minutes(end["start"]) <= 23 * 60, end["start"]
+        dinner = next(i for i in day["items"] if i.get("meal_type") == "dinner")
+        after = day["items"][day["items"].index(dinner):]
+        assert all(i["travel"]["chosen"]["duration_min"] <= 30 for i in after if i["type"] == "travel")
+
+
+def test_a_park_rest_has_a_way_to_get_there(client, base_request):
+    data = client.post("/api/trips/preview", json={**base_request, "num_days": 6, "pace": "relaxed"}).json()
+    for day in data["days"]:
+        items = day["items"]
+        for k, item in enumerate(items):
+            if item["type"] == "rest" and item.get("place"):
+                before = items[k - 1]
+                there = item["place"]["location"]
+                arrived = ((before["type"] == "travel" and before["travel"]["destination"] == there)
+                           or (before.get("place") or {}).get("location") == there)
+                assert arrived, (day["day_number"], item["title"], before["title"])
+
+
+def test_meal_ranking_picks_what_full_scoring_would():
+    """The scheduler ranks restaurants with plain arithmetic; it must agree with the full score every time."""
+    from app.core.geo import haversine_km
+    from app.engines.food import FoodEngine, is_open_for
+    from app.engines.recommendation import ScoringContext, score_food_place
+    from app.providers.mock.providers import _all_places
+    from app.schemas.common import LatLng
+
+    places = [p for p in _all_places().values() if p.kind.value in ("restaurant", "cafe")]
+    assert places
+    req = TripRequest(destination_city="Jaipur", accommodation={"type": "hotel", "name_or_address": "MI Road"},
+                      num_days=2, budget=12000, currency="INR", food_preferences=["vegetarian"])
+    ctx = ScoringContext(req=req, origin=LatLng(lat=26.92, lng=75.81), weekdays=[1, 2])
+    engine = FoodEngine(ctx, places)
+    for lat, lng, meal, minute in [(26.92, 75.81, "lunch", 780), (26.90, 75.80, "dinner", 1170),
+                                   (26.95, 75.85, "breakfast", 560), (26.88, 75.78, "lunch", 800)]:
+        near = LatLng(lat=lat, lng=lng)
+        got = engine.pick(meal, near, minute, 1, set(), max_km=1.5)
+        best = None
+        for radius in (1.5, 3.0, 6.0):
+            for c in engine.candidates:
+                p = c.place
+                if (p.best_time and meal not in p.best_time) or not is_open_for(p, 1, minute, 45):
+                    continue
+                if haversine_km(lat, lng, p.location.lat, p.location.lng) > radius:
+                    continue
+                s = score_food_place(p, ctx, c.food_match, c.check.reasons, origin=near)
+                if best is None or s.score > best[0]:
+                    best = (s.score, p.id)
+            if best:
+                break
+        assert (got[0].place.id if got else None) == (best[1] if best else None)
+
+
+def test_cheaper_restaurant_step_also_filters_estimated_prices():
+    from app.engines.food import FoodEngine
+    from app.engines.recommendation import ScoringContext
+    from app.schemas.common import LatLng
+    from app.schemas.place import DietInfo, OpeningHours, Place, PlaceKind, TimeRange
+
+    hours = OpeningHours(known=True, weekly={d: [TimeRange(open="08:00", close="23:00")] for d in range(7)},
+                         source=DataSource.OSM)
+
+    def place(i, level):
+        return Place(id=f"r{i}", name=f"Place {i}", kind=PlaceKind.RESTAURANT, categories=["food"],
+                     location=LatLng(lat=26.92, lng=75.81 + i * 0.001), opening_hours=hours, price_level=level,
+                     price_level_estimated=True, best_time=["lunch"], source=DataSource.OSM,
+                     diet=DietInfo(vegetarian_options=True, known=True, source=DataSource.OSM))
+
+    req = TripRequest(destination_city="Jaipur", accommodation={"type": "hotel", "name_or_address": "MI Road"},
+                      num_days=1, budget=100000, currency="INR")
+    ctx = ScoringContext(req=req, origin=LatLng(lat=26.92, lng=75.81), weekdays=[1])
+    engine = FoodEngine(ctx, [place(1, 4), place(2, 1)])
+    picked = engine.pick("lunch", LatLng(lat=26.92, lng=75.81), 780, 1, set(), max_cost=ctx.costs.meal(2))
+    assert picked is not None and picked[0].place.id == "r2"           # the price level 4 place is over the cap
+
+
+def test_osrm_failures_fall_back_to_an_estimate_and_pause():
+    from app.core.errors import ProviderRequestError
+    from app.providers.base import CityContext
+    from app.providers.heuristic_routes import HeuristicRoutesProvider
+    from app.providers.open.providers import OsrmRoutesProvider
+    from app.schemas.common import LatLng
+
+    calls = []
+
+    class DownHttp:
+        def get_json(self, *a, **k):
+            calls.append(1)
+            raise ProviderRequestError("OSRM routing: could not connect (ConnectTimeout)")
+
+    city = CityContext(name="Jaipur", center=LatLng(lat=26.92, lng=75.81), country_code="IN", radius_km=8,
+                       has_metro=None, source=DataSource.OSM)
+    osrm = OsrmRoutesProvider(DownHttp(), "https://osrm.test/driving", "https://osrm.test/walking",
+                              HeuristicRoutesProvider(lambda city: [], DataSource.ESTIMATE))
+    a, b = LatLng(lat=26.92, lng=75.81), LatLng(lat=26.95, lng=75.84)
+    for _ in range(5):
+        r = osrm.compute_route(a, b, TransportMode.CAB, None, city)
+        assert r.available and r.duration_min > 0 and "estimated" in r.note
+    assert len(calls) == 3                                               # paused after three failures
+
+
+def test_google_lookups_stop_after_a_quota_error():
+    from app.core.errors import TripAuraError
+    from app.providers.base import CityContext
+    from app.schemas.common import LatLng
+    from app.schemas.place import Place, PlaceKind
+    from app.services.enrichment import GoogleEnricher
+
+    calls = []
+
+    class Quota:
+        def search(self, city, query):
+            calls.append(query.text)
+            raise TripAuraError("Google Places: HTTP 429 quota exceeded")
+
+    city = CityContext(name="Jaipur", center=LatLng(lat=26.92, lng=75.81), country_code="IN", radius_km=8,
+                       has_metro=None, source=DataSource.OSM)
+    places = [Place(id=f"q{i}", name=f"Sight {i}", kind=PlaceKind.ATTRACTION, location=LatLng(lat=26.9, lng=75.8),
+                    source=DataSource.OSM) for i in range(30)]
+    enricher = GoogleEnricher(Quota())
+    enricher.enrich_all(places, city, workers=1)
+    assert enricher.stopped and len(calls) == 1 and enricher.matched == 0
+
+
+def test_a_degraded_city_is_rebuilt_once_in_the_background():
+    import threading
+
+    settings = Settings(data_mode="open")
+    svc = CityDataService(settings, OpenHttp(settings))
+    built = threading.Event()
+    calls = []
+    now = dt.datetime.now(dt.timezone.utc)
+    old = CityData(key="k", name="X", places=[], stations=[], guide_dishes=[], sources=[],
+                   warnings=["Wikidata was unavailable, so famous place detection is limited."],
+                   built_at=now - dt.timedelta(hours=2), wikivoyage_title=None)
+    fresh = CityData(key="k", name="X", places=[], stations=[], guide_dishes=[], sources=["Wikidata"], warnings=[],
+                     built_at=now, wikivoyage_title=None)
+    svc.build = lambda city: (calls.append(1), built.set(), fresh)[2]
+    svc._save = lambda data: None
+    svc._retry_if_degraded(None, old)
+    svc._retry_if_degraded(None, old)                                  # a second request does not start another
+    assert built.wait(5)
+    for _ in range(100):
+        if svc._memory.get("k") is fresh:
+            break
+        threading.Event().wait(0.02)
+    assert svc._memory.get("k") is fresh and len(calls) == 1

@@ -121,8 +121,15 @@ export default function PlannerPage({ status }: { status: ApiStatus | null }) {
       const it = await api.previewTrip(req);
       const saved = saveTrip(it);
       mutate("localTrips", listSavedTrips());
-      toast.show({ tone: "success", message: `Your ${it.days.length}-day plan for ${req.destination_city} is ready` });
-      nav(`/trips/${saved.id}`, { viewTransition: true });
+      const message = `Your ${it.days.length}-day plan for ${req.destination_city.split(",")[0]} is ready`;
+      if (window.location.pathname === "/") {
+        toast.show({ tone: "success", message });
+        nav(`/trips/${saved.id}`, { viewTransition: true });
+      } else {
+        // the traveller went elsewhere while it was being built: offer the plan instead of pulling them to it
+        toast.show({ tone: "success", message, actionLabel: "Open", ms: 10_000,
+                     onAction: () => nav(`/trips/${saved.id}`, { viewTransition: true }) });
+      }
     } catch (e) {
       const err = e as ApiError;
       setError({ message: err.message, details: err.details });

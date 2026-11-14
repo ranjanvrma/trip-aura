@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import time
 
 from rapidfuzz import fuzz
 
-from app.core.errors import LocationNotFoundError, NotFoundError
+from app.core.errors import LocationNotFoundError, NotFoundError, ProviderRequestError
 from app.core.geo import degree_span
 from app.core.geo import haversine_km
 from app.core.text import fold
@@ -140,6 +141,10 @@ class OpenPlacesProvider:
         raise NotFoundError(f"Place '{place_id}' is not in a loaded city")
 
 
+OSRM_TIMEOUT_S = 10
+OSRM_PAUSE_S = 300
+
+
 class OsrmRoutesProvider:
     """Walking / driving via OSRM (no live traffic); transit via the heuristic provider."""
 
@@ -150,14 +155,34 @@ class OsrmRoutesProvider:
         self.driving_url = driving_url.rstrip("/")
         self.walking_url = walking_url.rstrip("/")
         self.heuristic = heuristic
+        self._failures = 0
+        self._paused_until = 0.0   # after repeated failures OSRM is skipped for a while (public demo servers)
+
+    def _estimate(self, origin: LatLng, destination: LatLng, mode: TransportMode, departure: dt.datetime | None,
+                  city: CityContext, why: str) -> RouteResult:
+        r = self.heuristic.compute_route(origin, destination, mode, departure, city)
+        r.note = f"{why}; time estimated from distance" + (f" ({r.note})" if r.note else "")
+        return r
 
     def compute_route(self, origin: LatLng, destination: LatLng, mode: TransportMode,
                       departure: dt.datetime | None, city: CityContext) -> RouteResult:
         if mode in (TransportMode.METRO, TransportMode.BUS, TransportMode.TRAIN):
             return self.heuristic.compute_route(origin, destination, mode, departure, city)
+        if time.monotonic() < self._paused_until:
+            return self._estimate(origin, destination, mode, departure, city, "OSRM routing is paused after errors")
         base = self.walking_url if mode == TransportMode.WALKING else self.driving_url
         url = f"{base}/{origin.lng:.6f},{origin.lat:.6f};{destination.lng:.6f},{destination.lat:.6f}"
-        data = self.http.get_json(url, {"overview": "simplified", "geometries": "geojson"}, what="OSRM routing")
+        try:
+            data = self.http.get_json(url, {"overview": "simplified", "geometries": "geojson"}, what="OSRM routing",
+                                      timeout=OSRM_TIMEOUT_S)
+        except ProviderRequestError as exc:
+            # one slow or failing leg must not fail the whole plan: estimate it, and rest OSRM if it keeps failing
+            self._failures += 1
+            if self._failures >= 3:
+                self._paused_until, self._failures = time.monotonic() + OSRM_PAUSE_S, 0
+                log.warning("OSRM failed three times in a row; using estimates for %d s", OSRM_PAUSE_S)
+            return self._estimate(origin, destination, mode, departure, city, f"OSRM unavailable ({exc.message})")
+        self._failures = 0
         if data.get("code") != "Ok" or not data.get("routes"):
             return RouteResult.unavailable(mode, self.source, f"OSRM found no {mode.value} route")
         r = data["routes"][0]

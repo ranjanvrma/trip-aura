@@ -31,6 +31,10 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 MIN_SCORE = 1.5
 MIN_EXTERNAL_RATING = 3.3
 MAX_WAIT_MIN = 60
+FAR_FROM_HOME_MIN = 40   # beyond this, dinner is taken near the accommodation, not by the last sight
+LUNCH_BY = LUNCH_WINDOW[1]                # with lunch still to come, a sight must end by this time
+LATEST_LUNCH_START = LUNCH_WINDOW[1] + 30  # so lunch starts by this, after the walk or ride to the restaurant
+EARLY_LUNCH = LUNCH_WINDOW[0] - 60        # lunch may move this early to make room for a long sight
 DEFAULT_HOURS = (9 * 60, 18 * 60)   # assumed when the provider has no opening hours
 
 
@@ -90,7 +94,9 @@ def rank_attractions(places: list[Place], ctx: ScoringContext, constraints: Plan
                 and ctx.costs.to_trip_currency(p.entry_fee).amount > constraints.max_entry_fee_pp:
             rejected.append(UnscheduledPlace(place=p, reason="Entry fee above the budget-fit limit"))
             continue
-        s = score_attraction(p, ctx)
+        s = ctx.attraction_scores.get(p.id)
+        if s is None:
+            s = ctx.attraction_scores[p.id] = score_attraction(p, ctx)
         if s.score < MIN_SCORE:
             rejected.append(UnscheduledPlace(place=p, reason=f"Low suitability for you ({s.score}/5)"))
             continue
@@ -133,6 +139,17 @@ class ItineraryEngine:
         self.lunch_block = self.pace.lunch_min + self.pace.rest_after_lunch + 10
         self.latest_activity_end = self.pace.day_end - self.pace.dinner_min - 30
 
+    def home_minutes(self, loc: LatLng) -> float:
+        return self.transport.quick_minutes(loc, self.home.location)
+
+    def latest_end(self, c: Candidate) -> int:
+        """Latest a visit here may end. A stay far from the sights gets dinner near the stay (see _materialise),
+        so the trip home comes before dinner, and the day must still end by day_end."""
+        back = self.home_minutes(c.loc) + self.pace.buffer_min
+        if not self.req.return_to_accommodation or back <= FAR_FROM_HOME_MIN:
+            return self.latest_activity_end
+        return int(self.pace.day_end - self.pace.dinner_min - back - 20)
+
     # ------------------------------------------------------------------ planning
     def _simulate(self, seq: list[Candidate], weekday: int) -> tuple[bool, float]:
         """Quick feasibility check of an ordered sequence. Returns (feasible, travel minutes)."""
@@ -147,7 +164,7 @@ class ItineraryEngine:
             travel = self.transport.quick_minutes(loc, c.loc)
             travel_total += travel
             w = open_window(c.place, weekday, int(t + travel + self.pace.buffer_min), c.place.typical_visit_minutes)
-            if w is None or w[0] - (t + travel) > MAX_WAIT_MIN or w[1] > self.latest_activity_end:
+            if w is None or w[0] - (t + travel) > MAX_WAIT_MIN or w[1] > self.latest_end(c):
                 return False, travel_total
             if not lunch and w[1] > LUNCH_WINDOW[1] + 30:
                 return False, travel_total
@@ -182,7 +199,7 @@ class ItineraryEngine:
                 travel = self.transport.quick_minutes(loc, c.loc)
                 arrive = int(t + travel + self.pace.buffer_min)
                 w = open_window(c.place, weekday, arrive, c.place.typical_visit_minutes)
-                if w is None or w[1] > self.latest_activity_end:
+                if w is None or w[1] > self.latest_end(c):
                     continue
                 wait = w[0] - arrive
                 if wait > MAX_WAIT_MIN:
@@ -302,30 +319,36 @@ class ItineraryEngine:
         meal("breakfast", self.pace.breakfast_min)
         lunch_done = False
 
-        def maybe_lunch(force: bool = False) -> None:
+        def maybe_lunch(force: bool = False, earliest: int = LUNCH_WINDOW[0]) -> None:
             nonlocal lunch_done
-            if lunch_done or not (force or state["t"] >= LUNCH_WINDOW[0]):
+            if lunch_done or not (force or state["t"] >= earliest):
                 return
-            if state["t"] < LUNCH_WINDOW[0]:   # a day with nothing left to see: lunch still waits for lunchtime
-                add(ItemType.REST, "Free time", int(state["t"]), LUNCH_WINDOW[0],
+            if state["t"] < earliest:   # a day with nothing left to see: lunch still waits for lunchtime
+                add(ItemType.REST, "Free time", int(state["t"]), earliest,
                     notes=["Nothing is planned for this part of the day."])
-                state["t"] = LUNCH_WINDOW[0]
+                state["t"] = earliest
             meal("lunch", self.pace.lunch_min)
             lunch_done = True
             if self.pace.rest_after_lunch > 0:
-                self._rest(add, state, weekday, used_food)
+                self._rest(add, state, weekday, travel_to)
 
-        for c in seq:
-            maybe_lunch()
+        def visit(c: Candidate) -> str:
+            """Travel to a sight and add the visit: 'ok', 'nofit' (opening hours or the end of the day), or
+            'lunch' (it would end after LUNCH_BY with lunch still to come). Anything but 'ok' is rolled back."""
             prev = (state["t"], state["loc"], state["name"], len(items))
             travel_to(c.place.name, c.loc)
             w = open_window(c.place, weekday, int(state["t"]), c.place.typical_visit_minutes)
-            if w is None or w[0] - state["t"] > MAX_WAIT_MIN or w[1] > self.latest_activity_end:
-                # does not fit with real travel times: roll back the leg and report it
+            result = "ok"
+            if w is None or w[0] - state["t"] > MAX_WAIT_MIN or w[1] > self.latest_end(c):
+                result = "nofit"
+            elif not lunch_done and (w[1] > LUNCH_BY
+                                     or (prev[0] >= LUNCH_WINDOW[0] - 30 and w[1] > LUNCH_WINDOW[0] + 60)):
+                # it would end after LUNCH_BY, or it is nearly lunchtime and this visit would run well into it
+                result = "lunch"
+            if result != "ok":
                 state["t"], state["loc"], state["name"] = prev[0], prev[1], prev[2]
                 del items[prev[3]:]
-                dropped.append(UnscheduledPlace(place=c.place, reason="Did not fit after real travel times / opening hours"))
-                continue
+                return result
             if w[0] - state["t"] >= 10:
                 add(ItemType.REST, f"Wait for {c.place.name} to open", int(state["t"]), w[0],
                     notes=["Short break before opening time"])
@@ -337,8 +360,25 @@ class ItineraryEngine:
             add(ItemType.ACTIVITY, c.place.name, w[0], w[1], place=c.place, suitability=c.score,
                 cost=budget_engine.entry_cost(c.place, self.req, self.ctx.costs), notes=notes)
             state["t"] = w[1]
+            return "ok"
+
+        for c in seq:
+            maybe_lunch()
+            result = visit(c)
+            if result == "lunch" and state["t"] >= EARLY_LUNCH:
+                maybe_lunch(force=True, earliest=EARLY_LUNCH)   # an early lunch first, then the long visit
+                result = visit(c)
+            if result != "ok":
+                why = ("Would have pushed lunch past "
+                       f"{min_to_hm(LUNCH_BY)}" if result == "lunch"
+                       else "Did not fit after real travel times / opening hours")
+                dropped.append(UnscheduledPlace(place=c.place, reason=why))
 
         maybe_lunch(force=True)
+        # far from the stay: go back first and have dinner nearby, so the evening does not end with a long ride
+        far = self.req.return_to_accommodation and self.home_minutes(state["loc"]) > FAR_FROM_HOME_MIN
+        if far:
+            travel_to(self.home.name, self.home.location)
         if state["t"] < DINNER_WINDOW[0] - 45:
             add(ItemType.REST, "Free time / relax", int(state["t"]), DINNER_WINDOW[0] - 15,
                 notes=["Unplanned time for shopping, a cafe stop or rest at your accommodation."])
@@ -358,25 +398,32 @@ class ItineraryEngine:
         return DayPlan(day_number=day_number, date=date, weekday=WEEKDAYS[weekday], items=items, budget=db,
                        warnings=warnings)
 
-    def _rest(self, add, state, weekday: int, used_food: set[str]) -> None:
-        """Post-lunch rest: a nearby open park if there is one, otherwise a plain break."""
+    def _rest(self, add, state, weekday: int, travel_to) -> None:
+        """Post-lunch rest: a nearby open park if there is one (with the walk or ride there), otherwise a plain
+        break."""
         dur = self.pace.rest_after_lunch
-        t = int(state["t"])
         here = state["loc"]
 
         def km(p: Place) -> float:
             return haversine_km(here.lat, here.lng, p.location.lat, p.location.lng)
 
+        def open_on_arrival(p: Place) -> bool:
+            arrive = state["t"] + self.transport.quick_minutes(here, p.location) + self.pace.buffer_min
+            return open_window(p, weekday, int(arrive), dur) is not None
+
         parks = [p for p in self._parks
-                 if p.id not in self._used_parks and p.id not in self._visited
-                 and km(p) < 1.5 and open_window(p, weekday, t + 15, dur) is not None]
+                 if p.id not in self._used_parks and p.id not in self._visited and km(p) < 1.5 and open_on_arrival(p)]
         if parks:
             park = min(parks, key=km)
             self._used_parks.add(park.id)
             self._visited.add(park.id)   # a park rested in is not offered again as a sight on a later day
+            travel_to(park.name, park.location)
+            t = int(state["t"])
             add(ItemType.REST, f"Rest at {park.name}", t, t + dur, place=park,
-                cost=budget_engine.entry_cost(park, self.req, self.ctx.costs), notes=["Relaxed break in a nearby park or garden"])
+                cost=budget_engine.entry_cost(park, self.req, self.ctx.costs),
+                notes=["Relaxed break in a nearby park or garden"])
         else:
+            t = int(state["t"])
             add(ItemType.REST, "Rest break", t, t + dur, notes=["Break after lunch - a cafe or shaded spot nearby"])
         state["t"] = t + dur
 

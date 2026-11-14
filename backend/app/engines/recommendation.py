@@ -45,6 +45,8 @@ class ScoringContext:
     semantic: dict[str, dict[str, float]] = field(default_factory=dict)
     pace: PaceProfile = field(init=False)
     daily_budget_pp: float = field(init=False)
+    # attraction scores by place id: the budget optimiser re-plans up to three times with the same scores
+    attraction_scores: dict[str, SuitabilityScore] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.pace = profile_for(self.req.pace)
@@ -214,25 +216,45 @@ def score_attraction(place: Place, ctx: ScoringContext) -> SuitabilityScore:
     return _finalise(comps, reasons, discovery)
 
 
+def meal_cost_pp(place: Place, ctx: ScoringContext) -> float | None:
+    """What a meal here costs per person in the trip currency: the published price, else the price-level estimate."""
+    if place.avg_cost_per_person is not None:
+        return ctx.costs.to_trip_currency(place.avg_cost_per_person).amount
+    if place.price_level is not None:
+        return ctx.costs.meal(place.price_level)
+    return None
+
+
+def food_fixed_components(place: Place, ctx: ScoringContext, food_match: float) -> dict[str, float]:
+    """The parts of a meal score that do not depend on where the traveller is."""
+    packed_ok = place.kind == PlaceKind.CAFE or "street_food" in place.food_categories
+    return {
+        "interest": food_match,
+        "budget": ctx.meal_fit(meal_cost_pp(place, ctx)),
+        "time": open_day_ratio(place, ctx.weekdays),
+        "pace": 1.0 if ctx.req.pace.value != "packed" or packed_ok else 0.8,
+    }
+
+
+def food_distance_components(km: float, ctx: ScoringContext) -> dict[str, float]:
+    return {
+        "distance": distance_component(km, ctx.pace.distance_scale_km * 0.6),
+        "transport": transport_component(km, ctx.req.transport_modes, ctx.pace.max_walk_km),
+    }
+
+
+def score_total(comps: dict[str, float]) -> float:
+    """The 0-5 suitability score from its components, exactly as SuitabilityScore.score is computed."""
+    return round(5 * sum(WEIGHTS[k] * comps[k] for k in WEIGHTS), 2)
+
+
 def score_food_place(place: Place, ctx: ScoringContext, food_match: float, diet_reasons: list[str],
                      origin: LatLng | None = None) -> SuitabilityScore:
     req = ctx.req
     o = origin or ctx.origin
     km = haversine_km(o.lat, o.lng, place.location.lat, place.location.lng)
-    if place.avg_cost_per_person is not None:
-        cost = ctx.costs.to_trip_currency(place.avg_cost_per_person).amount
-    elif place.price_level is not None:
-        cost = ctx.costs.meal(place.price_level)
-    else:
-        cost = None
-    comps = {
-        "interest": food_match,
-        "budget": ctx.meal_fit(cost),
-        "distance": distance_component(km, ctx.pace.distance_scale_km * 0.6),
-        "transport": transport_component(km, req.transport_modes, ctx.pace.max_walk_km),
-        "time": open_day_ratio(place, ctx.weekdays),
-        "pace": 1.0 if req.pace.value != "packed" or (place.kind == PlaceKind.CAFE or "street_food" in place.food_categories) else 0.8,
-    }
+    cost = meal_cost_pp(place, ctx)
+    comps = {**food_fixed_components(place, ctx, food_match), **food_distance_components(km, ctx)}
     reasons = list(diet_reasons)
     matched_cats = [c for c in req.food_categories if c in place.food_categories]
     if matched_cats:
@@ -248,9 +270,8 @@ def score_food_place(place: Place, ctx: ScoringContext, food_match: float, diet_
 
 
 def _finalise(comps: dict[str, float], reasons: list[str], discovery: bool) -> SuitabilityScore:
-    total = sum(WEIGHTS[k] * comps[k] for k in WEIGHTS)
     return SuitabilityScore(
-        score=round(5 * total, 2),
+        score=score_total(comps),
         components={k: round(v, 3) for k, v in comps.items()},
         weights=WEIGHTS,
         reasons=reasons,

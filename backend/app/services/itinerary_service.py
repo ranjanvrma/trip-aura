@@ -214,8 +214,7 @@ class ItineraryService:
                     targets.setdefault(it.place.id, it.place)
         for c in sorted(food.candidates, key=lambda c: -c.base_score.score)[:10]:
             targets.setdefault(c.place.id, c.place)
-        for p in targets.values():
-            enricher.enrich(p, city)
+        enricher.enrich_all(list(targets.values()), city)
         if enricher.errors:
             return (f"Google enrichment failed for {len(enricher.errors)} place(s): {enricher.errors[0]}",
                     enricher.matched > 0)
