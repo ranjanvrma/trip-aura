@@ -19,6 +19,5 @@ Suggestions (not approved):
 - Automated browser tests for the frontend (there is no frontend test runner).
 - Show real progress while a new city loads (10 to 20 s today).
 - More photos: places that have a Wikidata id only from OpenStreetMap get none today; one extra Wikidata query per city could fetch theirs.
-- The Google browser key no longer allows localhost:5173, so the local map shows an error (add it back under Website restrictions if wanted).
 - For Chinmay: confirm TRUSTED_PROXY_COUNT in production.
 - For Chinmay: add VITE_GOOGLE_MAPS_API_KEY to Vercel (Production) and redeploy, so the live site uses Google's map with Street View (steps in HANDOFF section 9).
