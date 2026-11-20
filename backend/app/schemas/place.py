@@ -4,7 +4,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.core.urls import safe_http_url
+from app.core.urls import commons_file, safe_http_url
 from app.schemas.common import DataSource, LatLng, Money
 
 
@@ -99,6 +99,7 @@ class Place(BaseModel):
     google_maps_uri: str | None = None
     external_ids: dict[str, str] = Field(default_factory=dict)   # e.g. {"osm": "n123", "wikidata": "Q1", "google": "..."}
     prominence: int | None = None   # Wikipedia language editions covering the place (Wikidata sitelinks)
+    image: str | None = None        # a Wikimedia Commons file name (Wikidata P18), shown as the place's photo
     source: DataSource
 
     @field_validator("google_maps_uri", mode="before")
@@ -106,3 +107,9 @@ class Place(BaseModel):
     def _http_only(cls, v):
         # links are rendered as <a href>; anything but an absolute http(s) URL is dropped
         return safe_http_url(v)
+
+    @field_validator("image", mode="before")
+    @classmethod
+    def _commons_only(cls, v):
+        # the browser builds a Commons URL from this name, so only a plain image file name is kept
+        return commons_file(v)

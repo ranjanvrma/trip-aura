@@ -16,7 +16,8 @@ function contentSecurityPolicy(apiBase: string, googleKey: boolean): Plugin {
     `script-src 'self'${g("https://*.googleapis.com https://*.gstatic.com https://*.google.com")}`,
     // react-leaflet, motion and the map pins set inline style attributes
     `style-src 'self' 'unsafe-inline'${g("https://fonts.googleapis.com")}`,
-    `img-src 'self' data: blob: https://*.tile.openstreetmap.org${g("https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googleusercontent.com")}`,
+    // place photos: Commons redirects to its thumbnail and upload hosts
+    `img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.wikimedia.org${g("https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googleusercontent.com")}`,
     `font-src 'self'${g("https://fonts.gstatic.com")}`,
     `connect-src 'self'${api ? " " + api : ""}${g("https://*.googleapis.com https://*.google.com https://*.gstatic.com")}`,
     "worker-src 'self' blob:",

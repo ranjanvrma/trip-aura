@@ -1,6 +1,8 @@
 import type { DayPlan, ItineraryItem } from "../../types";
 import { MODE_LABEL, fmtDay, fmtDuration, fmtMoney, moneyLabel } from "../../utils";
-import { type LucideIcon, ArrowRight, Coffee, House, Sun } from "lucide-react";
+import { type LucideIcon, ArrowRight, Coffee, House, Navigation, Sun } from "lucide-react";
+import { directionsUrl } from "../../lib/placeLinks";
+import PlacePeek from "./PlacePeek";
 import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
 import DayRibbon from "./DayRibbon";
 
@@ -90,11 +92,21 @@ export default function DayCard({ day, color, currency, selectedId, onSelect }: 
                 {it.type === "travel" ? <TravelRow item={it} /> : (
                   <>
                     <div className="row wrap gap-s">
-                      {isStop || it.place ? (
+                      {isStop && it.place ? (
+                        <PlacePeek place={it.place}>
+                          <button className="link" onClick={() => onSelect(it)}>{it.title}</button>
+                        </PlacePeek>
+                      ) : it.place ? (
                         <button className="link" onClick={() => onSelect(it)}>{it.title}</button>
                       ) : <span>{it.title}</span>}
                       {it.type !== "start" && it.type !== "end" && (
                         <span className="muted small num" title={`${it.start} to ${it.end}`}>{fmtDuration(it.duration_min)}</span>
+                      )}
+                      {isStop && it.place && (
+                        <a className="directions small" href={directionsUrl(it.place)} target="_blank" rel="noopener noreferrer"
+                           aria-label={`Directions to ${it.place.name} in Google Maps (opens in a new tab)`}>
+                          <Navigation size={12} aria-hidden />Directions
+                        </a>
                       )}
                     </div>
                     {isStop && it.place && (

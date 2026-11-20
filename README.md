@@ -18,6 +18,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Your kind of trip.** Choose how to spend the budget: lowest cost (cheaper meals, free sights, walking and transit), mid-range, or premium (better restaurants, faster rides). The budget stays the ceiling either way.
 - **Food that fits.** Vegetarian, vegan, Jain, eggetarian and non-veg filters, and local dishes only when reviews or a travel guide back them up.
 - **Real places, not map noise.** Using free open data only, the planner prefers places that Wikidata, Wikipedia or two independent map sources know; at most one small neighbourhood park a day; it drops shops, junctions, rentals and offices that map data files as sights or cafes, and keeps bars and meat places away from vegetarian, Jain and vegan travellers.
+- **Photos and directions, free.** Point at a place to see its photo from Wikimedia Commons (for places Wikidata knows), and every stop has a Directions link that opens Google Maps with no key.
 - **Honest numbers.** Every rating and price says where it came from, estimates are labelled, and the fit score never uses outside ratings.
 - **Any currency, local one first.** Plan in any of 150 currencies. Pick a city and the form offers the one used there (EUR for Lisbon, PKR for Karachi) in one click. Rates come from the European Central Bank where it publishes them, and from ExchangeRate-API otherwise.
 - **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
@@ -106,7 +107,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (202 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (215 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration

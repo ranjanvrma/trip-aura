@@ -1,4 +1,6 @@
-import { ExternalLink, X } from "lucide-react";
+import { useState } from "react";
+import { ExternalLink, Navigation, X } from "lucide-react";
+import { directionsUrl, photoPage, photoUrl } from "../../lib/placeLinks";
 import { safeExternalUrl } from "../../lib/safeUrl";
 import type { ItineraryItem } from "../../types";
 import { moneyLabel, pretty } from "../../utils";
@@ -12,6 +14,7 @@ const SOURCE_LABEL: Record<string, string> = {
 const OSM_TYPE: Record<string, string> = { n: "node", w: "way", r: "relation" };
 
 export default function PlaceDetails({ item, onClose, embedded = false }: { item: ItineraryItem; onClose: () => void; embedded?: boolean }) {
+  const [brokenPhoto, setBrokenPhoto] = useState<string | null>(null);
   const p = item.place;
   if (!p) return null;
   const fee = item.type === "meal" ? p.avg_cost_per_person : p.entry_fee;
@@ -19,6 +22,7 @@ export default function PlaceDetails({ item, onClose, embedded = false }: { item
   const wikidata = p.external_ids?.wikidata && /^Q\d+$/.test(p.external_ids.wikidata) ? p.external_ids.wikidata : null;
   const osm = p.external_ids?.osm && /^[nwr]\d+$/.test(p.external_ids.osm) ? p.external_ids.osm : null;
   const tags = p.categories.filter((c) => !c.startsWith("search:") && c !== "food");
+  const photo = p.image && !brokenPhoto ? p.image : null;
   return (
     <aside className={embedded ? "details" : "tile details"} aria-label={`Details for ${p.name}`}>
       {!embedded && (
@@ -27,6 +31,18 @@ export default function PlaceDetails({ item, onClose, embedded = false }: { item
           <button className="icon-btn hit" onClick={onClose} aria-label="Close details"><X size={18} aria-hidden /></button>
         </div>
       )}
+      {photo && (
+        <figure className="place-photo" key={photo}>
+          <img src={photoUrl(photo, 500)} alt={`Photo of ${p.name}`} loading="lazy" decoding="async"
+               referrerPolicy="no-referrer" onError={() => setBrokenPhoto(photo)} />
+          <figcaption className="small muted">
+            Photo from <a href={photoPage(photo)} target="_blank" rel="noopener noreferrer">Wikimedia Commons</a> (author and licence on its page)
+          </figcaption>
+        </figure>
+      )}
+      <a className="btn btn-primary directions-btn" href={directionsUrl(p)} target="_blank" rel="noopener noreferrer">
+        <Navigation size={16} aria-hidden />Directions in Google Maps
+      </a>
       {p.description && <p>{p.description}</p>}
       {p.address && <p className="small muted">{p.address}</p>}
 

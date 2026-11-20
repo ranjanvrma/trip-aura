@@ -65,7 +65,7 @@ def _warm_up() -> None:
 
 
 # Docs routes are registered below so DOCS_ENABLED is checked per request.
-app = FastAPI(title="TripAura API", version="2.10.0", lifespan=lifespan, docs_url=None, redoc_url=None,
+app = FastAPI(title="TripAura API", version="2.11.0", lifespan=lifespan, docs_url=None, redoc_url=None,
               openapi_url=None,
               description="Personalised day-wise travel itineraries for any city (open data, optional Google).")
 # Middleware: the last one added runs first. Order of execution:

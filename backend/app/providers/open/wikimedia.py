@@ -75,13 +75,15 @@ def wikidata_notable_places(http: OpenHttp, lat: float, lng: float, radius_km: f
         raise ValueError("non-finite coordinate")
     min_links, limit = int(min_links), int(limit)
     query = f"""
-SELECT ?item ?itemLabel ?desc ?lat ?lon ?links (GROUP_CONCAT(DISTINCT ?typeLabel; separator="|") AS ?types) WHERE {{
+SELECT ?item ?itemLabel ?desc ?lat ?lon ?links (GROUP_CONCAT(DISTINCT ?typeLabel; separator="|") AS ?types)
+       (SAMPLE(?img) AS ?image) WHERE {{
   SERVICE wikibase:around {{ ?item wdt:P625 ?loc . bd:serviceParam wikibase:center "Point({lng} {lat})"^^geo:wktLiteral .
                             bd:serviceParam wikibase:radius "{radius_km:.1f}" . }}
   ?item wikibase:sitelinks ?links . FILTER(?links >= {min_links})
   ?item wdt:P31 ?t . ?t rdfs:label ?typeLabel . FILTER(LANG(?typeLabel) = "en")
   BIND(geof:latitude(?loc) AS ?lat) BIND(geof:longitude(?loc) AS ?lon)
   OPTIONAL {{ ?item schema:description ?desc . FILTER(LANG(?desc) = "en") }}
+  OPTIONAL {{ ?item wdt:P18 ?img . }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en,mul". }}
 }} GROUP BY ?item ?itemLabel ?desc ?lat ?lon ?links ORDER BY DESC(?links) LIMIT {limit}"""
     data = http.get_json(SPARQL_URL, {"query": query, "format": "json"}, what="Wikidata query service")
@@ -110,6 +112,7 @@ SELECT ?item ?itemLabel ?desc ?lat ?lon ?links (GROUP_CONCAT(DISTINCT ?typeLabel
             opening_hours=OpeningHours(known=False, weekly={}, source=DataSource.WIKIDATA),
             best_time=["morning", "afternoon"] if kind == PlaceKind.PARK else [],
             external_ids={"wikidata": qid}, prominence=int(b["links"]["value"]), source=DataSource.WIKIDATA,
+            image=b.get("image", {}).get("value"),
         ))
     return out
 

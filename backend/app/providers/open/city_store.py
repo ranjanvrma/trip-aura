@@ -35,7 +35,7 @@ from app.schemas.itinerary import DishSuggestion
 from app.schemas.place import Place, PlaceKind
 
 log = logging.getLogger(__name__)
-DATASET_VERSION = 7
+DATASET_VERSION = 8
 FAMOUS_SITELINKS = 20
 
 
@@ -129,6 +129,8 @@ def _absorb(base: Place, extra: Place) -> None:
         base.description = extra.description
     if extra.address and not base.address:
         base.address = extra.address
+    if extra.image and not base.image:
+        base.image = extra.image
     if extra.kind == PlaceKind.ATTRACTION and extra.source == DataSource.WIKIDATA:
         base.typical_visit_minutes = max(base.typical_visit_minutes, extra.typical_visit_minutes)
     for k, v in extra.external_ids.items():

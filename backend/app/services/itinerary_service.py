@@ -30,6 +30,7 @@ from app.services.providers import ProviderBundle
 from app.services.routes_service import RoutesService
 
 log = logging.getLogger(__name__)
+PHOTO_ATTRIBUTION = "Place photos from Wikimedia Commons (author and licence on each photo's page)"
 
 # Successive tightening steps used when fit_to_budget=True and the plan is over budget.
 BUDGET_STEPS = [
@@ -185,6 +186,8 @@ class ItineraryService:
             warnings.append(enrich_note[0])
             if enrich_note[1]:
                 attributions.append("Ratings and reviews marked 'Google' from Google Maps Platform")
+        if any(i.place and i.place.image for d in result.days for i in d.items):
+            attributions.append(PHOTO_ATTRIBUTION)
         live_fx = self.providers.mode != DataMode.MOCK and req.currency != "USD"
         if live_fx and self.fx.basis("USD", req.currency) == OPEN_ER:
             attributions.append(OPEN_ER_ATTRIBUTION)

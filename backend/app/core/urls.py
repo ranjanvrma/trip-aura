@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 _QID = re.compile(r"^Q[1-9][0-9]{0,11}$")
 _CONTROL = re.compile(r"[\x00-\x20\x7f]")
@@ -33,3 +33,15 @@ def wikidata_qid(value: object) -> str | None:
         return None
     v = value.strip().split(";")[0].strip()
     return v if _QID.match(v) else None
+
+
+_COMMONS_FILE = re.compile(r"^[^/\\#?<>\[\]{}|\x00-\x1f\x7f]{1,230}\.(jpe?g|png|gif|webp|tiff?|svg)$", re.I)
+
+
+def commons_file(value: object) -> str | None:
+    """The file name of a Wikimedia Commons image ("Hawa Mahal 2011.jpg"), taken from a Wikidata image (P18) value,
+    which SPARQL returns as a Special:FilePath URL. None for anything that is not a plain image file name."""
+    if not isinstance(value, str):
+        return None
+    name = unquote(value.strip().rsplit("/", 1)[-1] if "/" in value else value.strip()).replace("_", " ").strip()
+    return name if _COMMONS_FILE.match(name) else None

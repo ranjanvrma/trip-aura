@@ -68,6 +68,7 @@ export interface Place {
   google_maps_uri?: string | null;
   external_ids: Record<string, string>;
   prominence?: number | null;
+  image?: string | null;   // a Wikimedia Commons file name (from Wikidata)
   price_level_estimated?: boolean;
   source: DataSource;
 }
