@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from app.core.geo import haversine_km
 from app.core.text import fold
 from app.core.timeutil import hm_to_min
+from app.engines.quality import looks_like_eatery, name_diet_hint, notability
 from app.engines.recommendation import (
     ScoringContext, food_distance_components, food_fixed_components, meal_cost_pp, score_food_place, score_total,
 )
@@ -108,10 +109,23 @@ class DietCheck:
     reasons: list[str]
 
 
+STRICT_DIETS = frozenset({"vegetarian", "vegan", "jain", "eggetarian"})
+# a likely match is preferred over an unverified one, and a confirmed one over both (0-5 score scale)
+DIET_CONFIDENCE_BONUS = {"confirmed": 0.6, "likely": 0.4, "unverified": 0.0}
+NOTABILITY_BONUS = 0.5
+
+
 def diet_check(place: Place, diets: list[str]) -> DietCheck:
     if not diets:
         return DietCheck(True, "confirmed", [])
     d = place.diet
+    hint = name_diet_hint(place)
+    strict = STRICT_DIETS & set(diets)
+    # most eateries carry no diet tag; a name that says "Bar" or "Chicken" is still evidence for a strict diet,
+    # unless the data says the place does have vegetarian food
+    tagged_veg = d is not None and d.known and (d.vegetarian_options or d.vegetarian_only)
+    if strict and hint in ("bar", "nonveg") and not tagged_veg:
+        return DietCheck(False, "likely", ["Its name suggests meat or alcohol"])
     search_tags = {c.removeprefix("search:") for c in place.categories if c.startswith("search:")}
     reasons: list[str] = []
     confidence = "confirmed"
@@ -124,6 +138,11 @@ def diet_check(place: Place, diets: list[str]) -> DietCheck:
                 reasons.append(f"Returned by a '{diet}' search; menu not verified")
                 continue
             if diet == "vegetarian" and d is not None and d.vegetarian_options:
+                continue
+            if hint == "veg" and diet in ("vegetarian", "eggetarian", "jain"):
+                if confidence == "confirmed":
+                    confidence = "likely"
+                reasons.append("Its name suggests vegetarian food (not verified)")
                 continue
             confidence = "unverified"
             reasons.append(f"No verified {diet.replace('_', ' ')} information")
@@ -256,6 +275,8 @@ class FoodCandidate:
     food_match: float
     fixed: dict[str, float] = field(default_factory=dict)   # score parts that do not depend on location
     cost_pp: float | None = None                              # trip currency; published price or estimate
+    preference: float = 0.0                                   # diet certainty and notability, for choosing only
+    is_bar: bool = False                                      # never a breakfast
 
 
 class FoodEngine:
@@ -263,13 +284,23 @@ class FoodEngine:
         self.ctx = ctx
         self.semantic = semantic
         self.candidates: list[FoodCandidate] = []
+        self._strict = bool(STRICT_DIETS & set(ctx.req.food_preferences))
         for p in places:
+            if not looks_like_eatery(p):   # open data tagged it as food, but its name says otherwise
+                continue
             chk = diet_check(p, ctx.req.food_preferences)
             if not chk.ok:
                 continue
             fm = food_match_component(p, ctx.req.food_categories, chk)
             self.candidates.append(FoodCandidate(p, chk, score_food_place(p, ctx, fm, chk.reasons), fm,
-                                                 food_fixed_components(p, ctx, fm), meal_cost_pp(p, ctx)))
+                                                 food_fixed_components(p, ctx, fm), meal_cost_pp(p, ctx),
+                                                 self._preference(p, chk), name_diet_hint(p) == "bar"))
+
+    def _preference(self, place: Place, check: DietCheck) -> float:
+        """Added to the score only to choose between candidates (the score shown is unchanged): an eatery whose diet
+        is confirmed beats a likely one, which beats an unverified one, and a known place beats an unknown one."""
+        bonus = DIET_CONFIDENCE_BONUS[check.confidence] if self._strict else 0.0
+        return bonus + NOTABILITY_BONUS * notability(place)
 
     def pick(self, meal: str, near: LatLng, minute: int, weekday: int, exclude: set[str],
              max_km: float = 3.0, max_cost: float | None = None,
@@ -281,7 +312,7 @@ class FoodEngine:
         found: list[tuple[float, FoodCandidate]] = []   # (km, candidate) passing every test except distance
         for c in self.candidates:
             p = c.place
-            if p.id in exclude or (p.best_time and meal not in p.best_time):
+            if p.id in exclude or (p.best_time and meal not in p.best_time) or (meal == "breakfast" and c.is_bar):
                 continue
             if max_cost is not None and c.cost_pp is not None and c.cost_pp > max_cost:
                 continue
@@ -294,7 +325,7 @@ class FoodEngine:
             for km, c in found:
                 if km > radius:
                     continue
-                s = score_total({**c.fixed, **food_distance_components(km, self.ctx)})
+                s = score_total({**c.fixed, **food_distance_components(km, self.ctx)}) + c.preference
                 if best is None or s > best[0]:
                     best = (s, c)
             if best:
@@ -303,7 +334,7 @@ class FoodEngine:
         return None
 
     def recommendations(self, limit: int = 10) -> list[FoodRecommendation]:
-        ranked = sorted(self.candidates, key=lambda c: -c.base_score.score)[:limit]
+        ranked = sorted(self.candidates, key=lambda c: -(c.base_score.score + c.preference))[:limit]
         return [FoodRecommendation(place=c.place, suitability=c.base_score, meal_types=c.place.best_time,
                                    dishes=dish_suggestions(c.place, self.ctx.req.food_preferences, self.semantic),
                                    diet_match=c.check.reasons + [f"Diet info: {c.check.confidence}"])

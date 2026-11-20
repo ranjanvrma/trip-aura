@@ -22,6 +22,7 @@ from app.core.timeutil import hm_to_min, min_to_hm, period_of
 from app.engines import budget as budget_engine
 from app.engines.food import FoodEngine, is_open_for
 from app.engines.pace import DINNER_WINDOW, LUNCH_WINDOW
+from app.engines.quality import is_minor_park, looks_like_sight, notability
 from app.engines.recommendation import ScoringContext, open_day_ratio, score_attraction
 from app.engines.transport import TransportEngine
 from app.schemas.common import DataSource, LatLng
@@ -32,6 +33,8 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 MIN_SCORE = 1.5
 MIN_EXTERNAL_RATING = 3.3
 MAX_WAIT_MIN = 60
+NOTABLE_BONUS = 0.25    # up to this much utility for a place the open data knows well (Wikidata, two sources)
+MINOR_PARKS_PER_DAY = 1  # neighbourhood and sector parks: one a day at most, so a day is not five parks
 MUST_SEE_BONUS = 3.0   # outweighs any score and any sensible detour, so a must-see is placed first
 FAR_FROM_HOME_MIN = 40   # beyond this, dinner is taken near the accommodation, not by the last sight
 LUNCH_BY = LUNCH_WINDOW[1]                # with lunch still to come, a sight must end by this time
@@ -93,6 +96,8 @@ def rank_attractions(places: list[Place], ctx: ScoringContext, constraints: Plan
             s = ctx.attraction_scores.get(p.id) or score_attraction(p, ctx)
             ctx.attraction_scores[p.id] = s
             ranked.append(Candidate(p, s.model_copy(update={"reasons": ["On your must-see list"] + s.reasons})))
+            continue
+        if not looks_like_sight(p):   # a neighbourhood, junction, shop or rental: not even "also worth considering"
             continue
         er = p.external_rating
         if er and er.rating is not None and er.rating < MIN_EXTERNAL_RATING and (er.review_count or 0) >= 20:
@@ -160,6 +165,20 @@ class ItineraryEngine:
         self.first_activity = self.pace.day_start + self.pace.breakfast_min + 10
         self.lunch_block = self.pace.lunch_min + self.pace.rest_after_lunch + 10
         self.latest_activity_end = self.pace.day_end - self.pace.dinner_min - 30
+        self._notability: dict[str, float] = {}
+        self._minor_parks: dict[str, bool] = {}
+
+    def _notable(self, place: Place) -> float:
+        n = self._notability.get(place.id)
+        if n is None:
+            n = self._notability[place.id] = notability(place)
+        return n
+
+    def _minor(self, place: Place) -> bool:
+        m = self._minor_parks.get(place.id)
+        if m is None:
+            m = self._minor_parks[place.id] = is_minor_park(place)
+        return m
 
     def home_minutes(self, loc: LatLng) -> float:
         return self.transport.quick_minutes(loc, self.home.location)
@@ -210,7 +229,8 @@ class ItineraryEngine:
         # (major) sights make better anchors than quick photo stops.
         def anchor_key(c: Candidate) -> float:
             dist_neutral = c.score.score + 5 * c.score.weights["distance"] * (1 - c.score.components["distance"])
-            return dist_neutral + (0.5 if c.place.is_famous else 0) + c.place.typical_visit_minutes / 300
+            return (dist_neutral + (0.5 if c.place.is_famous else 0) + c.place.typical_visit_minutes / 300
+                    + self._notable(c.place) - (1.0 if self._minor(c.place) else 0.0))
 
         musts_today = [c for c in open_today if c.place.id in must] if must_quota else []
         anchor = max(musts_today or open_today, key=anchor_key, default=None)
@@ -219,8 +239,11 @@ class ItineraryEngine:
                 t += self.lunch_block
                 lunch = True
             best: tuple[float, Candidate, tuple[int, int]] | None = None
+            minor_parks = sum(self._minor(s.place) for s in seq)
             for c in pool:
                 if c.place.id in used:
+                    continue
+                if self._minor(c.place) and minor_parks >= MINOR_PARKS_PER_DAY and c.place.id not in must:
                     continue
                 travel = self.transport.quick_minutes(loc, c.loc)
                 arrive = int(t + travel + self.pace.buffer_min)
@@ -239,6 +262,7 @@ class ItineraryEngine:
                         u += 0.6
                     elif anchor in seq:
                         u -= 0.04 * haversine_km(c.loc.lat, c.loc.lng, anchor.loc.lat, anchor.loc.lng)
+                u += NOTABLE_BONUS * self._notable(c.place)
                 if c.place.id in must and sum(s.place.id in must for s in seq) < must_quota:
                     u += MUST_SEE_BONUS
                 if period_of(w[0]) in c.place.best_time:

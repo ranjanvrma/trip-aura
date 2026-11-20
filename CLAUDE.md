@@ -43,7 +43,7 @@ Browser (React + Vite + TypeScript)
 | `backend/app/core/` | `config.py` (every setting and default), `security.py`, `ratelimit.py`, `network.py` (request ids and timing, body size limit, caching rules and ETags), `errors.py`, small pure helpers (`text.fold`, `geo`, `timeutil`, `urls`) |
 | `backend/app/routers/` | `trips.py` (only `/preview`), `geo.py` (city and address autocomplete, naming a point picked on the map), `nlp.py` (parse a trip description), `meta.py` (status, form options), `routes.py` (compare transport modes), `deps.py` |
 | `backend/app/services/` | `itinerary_service.py` (the pipeline), `providers.py` (picks providers from `DATA_MODE`), `places_service.py`, `enrichment.py` (Google ratings), `fx_service.py`, `ai_service.py` (optional summary) |
-| `backend/app/engines/` | `itinerary.py` (scheduler), `recommendation.py` (suitability score), `food.py`, `transport.py`, `budget.py`, `costs.py`, `fares.py`, `pace.py`, `style.py` (trip style profiles) |
+| `backend/app/engines/` | `itinerary.py` (scheduler), `recommendation.py` (suitability score), `quality.py` (free open-data signals: not an eatery, diet hints in names, notability, minor parks, not a sight), `food.py`, `transport.py`, `budget.py`, `costs.py`, `fares.py`, `pace.py`, `style.py` (trip style profiles) |
 | `backend/app/providers/` | `base.py` (interfaces), `open/` (`city_store.py` loader, merge and cache; `overture.py`, `osm.py`, `wikimedia.py`, `providers.py`, `http.py`), `google/`, `mock/`, `heuristic_routes.py` |
 | `backend/app/nlp/` | `city_index.py`, `trip_parser.py`, `interests.py`, `semantic.py`, `sentiment.py`, `registry.py` |
 | `backend/app/schemas/` | Pydantic models: `trip.py` (request), `itinerary.py` (response), `place.py`, `common.py` (`DataSource`, `Money`, `LatLng`) |
@@ -159,7 +159,7 @@ The visual language is settled; extend it, don't restart it. Everything is defin
 These come from the original brief and are covered by tests. They are the product, so treat a change that weakens one as a behaviour change that needs the owner's agreement.
 
 - A rating shown as Google's must come from a Google API response. Never synthesise or carry over ratings.
-- The suitability score (0 to 5, weights 0.3 interests, 0.2 budget, 0.2 distance, 0.1 each for transport, time and pace) never uses external ratings, and the two are always displayed separately.
+- The suitability score (0 to 5, weights 0.3 interests, 0.2 budget, 0.2 distance, 0.1 each for transport, time and pace) never uses external ratings, and the two are always displayed separately. Choosing between places may also use `engines/quality.py` (notability from open data, diet certainty), but that never changes the score shown, and a diet read from a name is labelled "not verified".
 - Money carries `verified` and `source`. Only a provider-returned price is verified; everything else is an estimate and is labelled so in the UI.
 - A dish is "popular" only with at least two non-negative review mentions; "guide" means Wikivoyage names it; anything else is a labelled suggestion.
 - Entry is assumed free only for kinds of place that usually are (squares, parks, monuments, places of worship), and the assumption is stated. Ticketed kinds are never assumed free.

@@ -17,6 +17,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Plans that hold together.** Every place gets a 0 to 5 fit score with reasons. Each day starts from its strongest sight and the stops are reordered to cut travel (greedy order, then 2-opt), with meals, breaks and opening hours fitted in.
 - **Your kind of trip.** Choose how to spend the budget: lowest cost (cheaper meals, free sights, walking and transit), mid-range, or premium (better restaurants, faster rides). The budget stays the ceiling either way.
 - **Food that fits.** Vegetarian, vegan, Jain, eggetarian and non-veg filters, and local dishes only when reviews or a travel guide back them up.
+- **Real places, not map noise.** Using free open data only, the planner prefers places that Wikidata, Wikipedia or two independent map sources know; at most one small neighbourhood park a day; it drops shops, junctions, rentals and offices that map data files as sights or cafes, and keeps bars and meat places away from vegetarian, Jain and vegan travellers.
 - **Honest numbers.** Every rating and price says where it came from, estimates are labelled, and the fit score never uses outside ratings.
 - **Any currency, local one first.** Plan in any of 150 currencies. Pick a city and the form offers the one used there (EUR for Lisbon, PKR for Karachi) in one click. Rates come from the European Central Bank where it publishes them, and from ExchangeRate-API otherwise.
 - **Type it instead.** A one-sentence description fills in the whole form; city and interest matching handle typos.
