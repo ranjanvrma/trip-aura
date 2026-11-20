@@ -14,7 +14,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 ## What it does
 
 - **Any city, no API key.** Places come from Overture Maps, Wikidata, OpenStreetMap and Wikivoyage, loaded on demand and cached for 30 days. Over 34,000 cities resolve from an offline index.
-- **Plans that hold together.** Every place gets a 0 to 5 fit score with reasons. Each day starts from its strongest sight and the stops are reordered to cut travel (greedy order, then 2-opt), with meals, breaks and opening hours fitted in.
+- **Plans that hold together.** Every place gets a 0 to 5 fit score with reasons. Each day starts from its strongest sight and the stops are reordered to cut travel (a route search over the day's places and travel times, then 2-opt), with meals, breaks and opening hours fitted in.
 - **Your kind of trip.** Choose how to spend the budget: lowest cost (cheaper meals, free sights, walking and transit), mid-range, or premium (better restaurants, faster rides). The budget stays the ceiling either way.
 - **Food that fits.** Vegetarian, vegan, Jain, eggetarian and non-veg filters, and local dishes only when reviews or a travel guide back them up.
 - **Real places, not map noise.** Using free open data only, the planner prefers places that Wikidata, Wikipedia or two independent map sources know; at most one small neighbourhood park a day; it drops shops, junctions, rentals and offices that map data files as sights or cafes, and keeps bars and meat places away from vegetarian, Jain and vegan travellers.
@@ -107,7 +107,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (215 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (220 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration

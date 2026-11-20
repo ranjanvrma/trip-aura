@@ -1,11 +1,14 @@
 """Itinerary engine: selects, orders and schedules places into day plans.
 
 Two passes per day:
-1. PLAN (cheap): greedy construction using straight-line travel estimates.
-   At each step the next stop maximises
-       suitability - travel penalty - waiting penalty + time-of-day fit
-   subject to opening hours, meal windows and the pace's day length; then a
-   2-opt pass removes crossing routes when that stays feasible.
+1. PLAN (cheap): a route search on a graph whose nodes are the day's candidate places and the accommodation and
+   whose edges are estimated travel times. Each stop is worth
+       suitability - travel penalty - waiting penalty + time-of-day fit (+ notability, must-see, anchor)
+   and a route must respect opening hours, the lunch window and the pace's day length. A beam search keeps the
+   best partial routes at each step (keeping one is exactly the old greedy choice, which is always tried too, so
+   on this measure the search can only match or beat it). The wider search pads each leg (SEARCH_PAD), because its
+   tighter routes would otherwise break once real travel and meal detours are known. A 2-opt pass then removes
+   crossings when that stays feasible.
 2. MATERIALISE: real legs from the routes service (mock or Google, with
    traffic) replace the estimates; meals, rests and costs are attached. A stop
    that no longer fits after real travel times is dropped and reported.
@@ -13,6 +16,7 @@ Two passes per day:
 from __future__ import annotations
 
 import datetime as dt
+import heapq
 import math
 import re
 from dataclasses import dataclass, field
@@ -41,6 +45,13 @@ LUNCH_BY = LUNCH_WINDOW[1]                # with lunch still to come, a sight mu
 LATEST_LUNCH_START = LUNCH_WINDOW[1] + 30  # so lunch starts by this, after the walk or ride to the restaurant
 EARLY_LUNCH = LUNCH_WINDOW[0] - 60        # lunch may move this early to make room for a long sight
 DEFAULT_HOURS = (9 * 60, 18 * 60)   # assumed when the provider has no opening hours
+SEARCH_POOL = 16    # places a day's route search considers: the greedy route's, must-sees, the anchor, the best others
+SEARCH_WIDTH = 16   # partial routes kept at each step of the search
+SEARCH_PAD = 10     # minutes of slack per leg in the wider search: its routes are tighter than the greedy one's
+ANCHOR_WEIGHT = 1.5   # a day's route that includes its anchor (its main sight) is worth this much more
+# the search's route replaces the greedy one only when it is clearly better (about another stop, or a much better
+# one): a near tie can swap a famous sight for two minor ones, which is no gain to the traveller
+SEARCH_MARGIN = 0.3
 
 
 @dataclass
@@ -51,6 +62,40 @@ class Candidate:
     @property
     def loc(self) -> LatLng:
         return self.place.location
+
+
+@dataclass(slots=True)
+class _Node:
+    """A place as a node of one day's planning graph, with everything a search step needs worked out once."""
+    c: Candidate
+    id: str
+    loc: LatLng
+    base: float          # what the visit is worth before travel, waiting and order are counted
+    minutes: int         # length of the visit
+    ranges: list[tuple[int, int]]   # opening ranges that day
+    latest: int          # the latest the visit may end
+    minor: bool          # a minor park (MINOR_PARKS_PER_DAY)
+    must: bool
+    park: bool
+    anchor: bool
+    anchor_km: float     # distance to the day's anchor
+    cats: frozenset[str]
+    best_time: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _Route:
+    """A partial day route in the planning search: the stops so far, where and when it ends, and its value."""
+    seq: tuple[_Node, ...]
+    t: float
+    loc: LatLng
+    lunch: bool
+    value: float
+    ids: frozenset[str]
+    minor: int = 0       # minor parks so far
+    musts: int = 0       # must-sees so far
+    park: bool = False   # a park is in the route
+    anchored: bool = False   # the anchor is in the route
 
 
 @dataclass
@@ -69,19 +114,25 @@ class PlanResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def open_window(place: Place, weekday: int, arrive: int, duration: int) -> tuple[int, int] | None:
-    """Earliest (start, end) on `weekday` at/after `arrive` that fits `duration`, or None."""
+def day_ranges(place: Place, weekday: int) -> list[tuple[int, int]]:
+    """Opening ranges on `weekday` in minutes, sorted; the assumed default when the hours are not known."""
     oh = place.opening_hours
-    ranges: list[tuple[int, int]]
     if oh is None or not oh.known:
-        ranges = [DEFAULT_HOURS]
-    else:
-        ranges = [(hm_to_min(r.open), hm_to_min(r.close)) for r in oh.weekly.get(weekday, [])]
-    for o, c in sorted(ranges):
+        return [DEFAULT_HOURS]
+    return sorted((hm_to_min(r.open), hm_to_min(r.close)) for r in oh.weekly.get(weekday, []))
+
+
+def fit_window(ranges: list[tuple[int, int]], arrive: int, duration: int) -> tuple[int, int] | None:
+    for o, c in ranges:
         start = max(arrive, o)
         if start + duration <= c:
             return start, start + duration
     return None
+
+
+def open_window(place: Place, weekday: int, arrive: int, duration: int) -> tuple[int, int] | None:
+    """Earliest (start, end) on `weekday` at/after `arrive` that fits `duration`, or None."""
+    return fit_window(day_ranges(place, weekday), arrive, duration)
 
 
 def rank_attractions(places: list[Place], ctx: ScoringContext, constraints: PlanConstraints) -> tuple[list[Candidate], list[UnscheduledPlace]]:
@@ -160,6 +211,8 @@ class ItineraryEngine:
         self.food = food
         self.c = constraints or PlanConstraints()
         self.max_acts = min(self.pace.max_activities, self.c.max_activities or 99)
+        self.search_width = SEARCH_WIDTH   # 1 gives the plain greedy route (tests compare the two)
+        self.search_pad = SEARCH_PAD
         # planning-pass estimates: first activity after breakfast, the lunch + rest block, and the
         # latest activity end that still leaves time for dinner and the trip back
         self.first_activity = self.pace.day_start + self.pace.breakfast_min + 10
@@ -167,6 +220,14 @@ class ItineraryEngine:
         self.latest_activity_end = self.pace.day_end - self.pace.dinner_min - 30
         self._notability: dict[str, float] = {}
         self._minor_parks: dict[str, bool] = {}
+        self._quick: dict[tuple[float, float, float, float], float] = {}   # the graph's edges, filled as needed
+
+    def _minutes(self, a: LatLng, b: LatLng) -> float:
+        key = (a.lat, a.lng, b.lat, b.lng)
+        m = self._quick.get(key)
+        if m is None:
+            m = self._quick[key] = self.transport.quick_minutes(a, b)
+        return m
 
     def _notable(self, place: Place) -> float:
         n = self._notability.get(place.id)
@@ -181,7 +242,7 @@ class ItineraryEngine:
         return m
 
     def home_minutes(self, loc: LatLng) -> float:
-        return self.transport.quick_minutes(loc, self.home.location)
+        return self._minutes(loc, self.home.location)
 
     def latest_end(self, c: Candidate) -> int:
         """Latest a visit here may end. A stay far from the sights gets dinner near the stay (see _materialise),
@@ -202,7 +263,7 @@ class ItineraryEngine:
             if not lunch and t >= LUNCH_WINDOW[0]:
                 t += self.lunch_block
                 lunch = True
-            travel = self.transport.quick_minutes(loc, c.loc)
+            travel = self._minutes(loc, c.loc)
             travel_total += travel
             w = open_window(c.place, weekday, int(t + travel + self.pace.buffer_min), c.place.typical_visit_minutes)
             if w is None or w[0] - (t + travel) > MAX_WAIT_MIN or w[1] > self.latest_end(c):
@@ -210,23 +271,19 @@ class ItineraryEngine:
             if not lunch and w[1] > LUNCH_WINDOW[1] + 30:
                 return False, travel_total
             t, loc = w[1], c.loc
-        travel_total += self.transport.quick_minutes(loc, self.home.location)
+        travel_total += self._minutes(loc, self.home.location)
         return True, travel_total
 
     def _plan_day(self, weekday: int, pool: list[Candidate], used: set[str], want_park: bool,
                   must_quota: int = 0) -> list[Candidate]:
         """`must_quota`: how many must-see places this day should take, so they spread over the trip."""
         must = self.ctx.must_see
-        t = self.first_activity
-        loc = self.home.location
-        lunch = False
-        seq: list[Candidate] = []
-        # Day anchor: the best remaining place open today. The day is built around it so
-        # high-value but distant sights (e.g. a hill fort) are not crowded out by nearby ones.
         open_today = [c for c in pool if c.place.id not in used
                       and open_window(c.place, weekday, 0, c.place.typical_visit_minutes) is not None]
-        # Anchor = best place ignoring distance (the day travels to it); famous and longer
-        # (major) sights make better anchors than quick photo stops.
+
+        # Day anchor: the best remaining place open today, ignoring distance (the day travels to it). The day is
+        # built around it so high-value but distant sights (a hill fort) are not crowded out by nearby ones;
+        # famous and longer (major) sights make better anchors than quick photo stops.
         def anchor_key(c: Candidate) -> float:
             dist_neutral = c.score.score + 5 * c.score.weights["distance"] * (1 - c.score.components["distance"])
             return (dist_neutral + (0.5 if c.place.is_famous else 0) + c.place.typical_visit_minutes / 300
@@ -234,52 +291,126 @@ class ItineraryEngine:
 
         musts_today = [c for c in open_today if c.place.id in must] if must_quota else []
         anchor = max(musts_today or open_today, key=anchor_key, default=None)
-        while len(seq) < self.max_acts:
-            if not lunch and t >= LUNCH_WINDOW[0]:
-                t += self.lunch_block
-                lunch = True
-            best: tuple[float, Candidate, tuple[int, int]] | None = None
-            minor_parks = sum(self._minor(s.place) for s in seq)
-            for c in pool:
-                if c.place.id in used:
-                    continue
-                if self._minor(c.place) and minor_parks >= MINOR_PARKS_PER_DAY and c.place.id not in must:
-                    continue
-                travel = self.transport.quick_minutes(loc, c.loc)
-                arrive = int(t + travel + self.pace.buffer_min)
-                w = open_window(c.place, weekday, arrive, c.place.typical_visit_minutes)
-                if w is None or w[1] > self.latest_end(c):
-                    continue
-                wait = w[0] - arrive
-                if wait > MAX_WAIT_MIN:
-                    continue
-                if not lunch and w[1] > LUNCH_WINDOW[1] + 30 and w[0] < LUNCH_WINDOW[0]:
-                    continue  # would swallow lunch time
-                travel_weight = 0.25 if not seq else 0.6
-                u = c.score.score / 5 - travel_weight * travel / 60 - 0.3 * wait / 60
-                if anchor is not None:
-                    if c is anchor:
-                        u += 0.6
-                    elif anchor in seq:
-                        u -= 0.04 * haversine_km(c.loc.lat, c.loc.lng, anchor.loc.lat, anchor.loc.lng)
-                u += NOTABLE_BONUS * self._notable(c.place)
-                if c.place.id in must and sum(s.place.id in must for s in seq) < must_quota:
-                    u += MUST_SEE_BONUS
-                if period_of(w[0]) in c.place.best_time:
-                    u += 0.1
-                if want_park and c.place.kind == PlaceKind.PARK and not any(s.place.kind == PlaceKind.PARK for s in seq):
-                    u += 0.08
-                if seq and set(c.place.categories[:2]) == set(seq[-1].place.categories[:2]):
-                    u -= 0.05  # variety
-                if best is None or u > best[0]:
-                    best = (u, c, w)
-            if best is None:
-                break
-            _, c, w = best
-            seq.append(c)
-            used.add(c.place.id)
-            t, loc = w[1], c.loc
+        nodes = [self._node(c, weekday, anchor) for c in open_today]
+        # keeping one route per step is the greedy route; its stops seed the graph, so the wider search can't lose it
+        greedy = self._search(nodes, 1, must_quota, want_park)
+        best = greedy
+        if self.search_width > 1:
+            wide = self._search(self._search_pool(nodes, greedy, anchor), self.search_width, must_quota, want_park,
+                                self.search_pad)
+            if self._final(wide) > self._final(greedy) + SEARCH_MARGIN:
+                best = wide
+        seq = [n.c for n in best.seq]
+        used.update(c.place.id for c in seq)
         return self._two_opt(seq, weekday)
+
+    def _node(self, c: Candidate, weekday: int, anchor: Candidate | None) -> _Node:
+        p = c.place
+        return _Node(
+            c=c, id=p.id, loc=c.loc, base=c.score.score / 5 + NOTABLE_BONUS * self._notable(p),
+            minutes=p.typical_visit_minutes, ranges=day_ranges(p, weekday), latest=self.latest_end(c),
+            minor=self._minor(p), must=p.id in self.ctx.must_see, park=p.kind == PlaceKind.PARK,
+            anchor=c is anchor,
+            anchor_km=haversine_km(c.loc.lat, c.loc.lng, anchor.loc.lat, anchor.loc.lng) if anchor else 0.0,
+            cats=frozenset(p.categories[:2]), best_time=tuple(p.best_time))
+
+    def _search_pool(self, nodes: list[_Node], greedy: _Route, anchor: Candidate | None) -> list[_Node]:
+        """The graph's nodes for one day: the greedy route's stops, the must-sees and the anchor, then the most
+        valuable other places, valued by score and notability less the travel from the anchor (or the stay)."""
+        hub = anchor.loc if anchor is not None else self.home.location
+
+        def worth(n: _Node) -> float:
+            return n.base - 0.6 * self._minutes(hub, n.loc) / 60 - (0.3 if n.minor else 0.0)
+
+        pool = {n.id: n for n in greedy.seq}
+        pool.update((n.id, n) for n in nodes if n.must or n.anchor)
+        for n in sorted(nodes, key=worth, reverse=True):
+            if len(pool) >= SEARCH_POOL:
+                break
+            pool.setdefault(n.id, n)
+        return list(pool.values())
+
+    def _final(self, route: _Route) -> float:
+        """A whole day's value: its stops' worth less the trip back to the stay at the end. The day is built
+        around its anchor, so a route without it (more small stops nearer the stay) does not win on count alone."""
+        back = self._minutes(route.loc, self.home.location) if self.req.return_to_accommodation and route.seq else 0
+        return route.value - 0.6 * back / 60 + (ANCHOR_WEIGHT if route.anchored else 0.0)
+
+    def _search(self, nodes: list[_Node], width: int, must_quota: int, want_park: bool, pad: int = 0) -> _Route:
+        """Beam search over routes through `nodes`: extend every kept route by every node that still fits, keep
+        the `width` most valuable, and return the best whole day seen. Two routes that visit the same places and
+        end at the same one leave the same choices open, so only the better of them is kept. `pad` adds minutes
+        to every leg and to the start, so a route still fits once real travel times and meal detours are known."""
+        start = _Route((), self.first_activity + pad, self.home.location, False, 0.0, frozenset())
+        frontier, best = [start], start
+        best_value = self._final(start)
+        for _ in range(self.max_acts):
+            # score every extension first and build routes only for the best few: most are never kept
+            moves: list[tuple[float, int, int, _Route, _Node, float, int, bool]] = []
+            for route in frontier:
+                for n in nodes:
+                    if n.id in route.ids:
+                        continue
+                    gain = self._gain(route, n, must_quota, want_park, pad)
+                    if gain is None:
+                        continue
+                    u, end, lunch = gain
+                    rank = route.value + u + (ANCHOR_WEIGHT if route.anchored or n.anchor else 0.0)
+                    moves.append((rank, -end, len(moves), route, n, u, end, lunch))
+            if not moves:
+                break
+            frontier, seen = [], set()
+            for _rank, _end, _i, route, n, u, end, lunch in heapq.nlargest(2 * width, moves, key=lambda m: m[:3]):
+                ids = route.ids | {n.id}
+                if (ids, n.id) in seen:   # same places, same last stop: the better-ranked one is already kept
+                    continue
+                seen.add((ids, n.id))
+                frontier.append(_Route(route.seq + (n,), end, n.loc, lunch, route.value + u, ids,
+                                       route.minor + n.minor, route.musts + n.must, route.park or n.park,
+                                       route.anchored or n.anchor))
+                if len(frontier) == width:
+                    break
+            for r in frontier:
+                v = self._final(r)
+                if v > best_value + 1e-9:
+                    best, best_value = r, v
+        return best
+
+    def _gain(self, route: _Route, n: _Node, must_quota: int, want_park: bool, pad: int = 0
+              ) -> tuple[float, int, bool] | None:
+        """What visiting `n` after `route` is worth, when that visit ends and whether lunch is behind by then; None
+        when the visit does not fit (opening hours, a long wait, the end of the day, lunch time, the daily limit
+        on minor parks)."""
+        t, lunch, seq = route.t, route.lunch, route.seq
+        if not lunch and t >= LUNCH_WINDOW[0]:
+            t += self.lunch_block
+            lunch = True
+        if n.minor and not n.must and route.minor >= MINOR_PARKS_PER_DAY:
+            return None
+        travel = self._minutes(route.loc, n.loc)
+        arrive = int(t + travel + self.pace.buffer_min + pad)
+        w = fit_window(n.ranges, arrive, n.minutes)
+        if w is None or w[1] > n.latest:
+            return None
+        wait = w[0] - arrive
+        if wait > MAX_WAIT_MIN:
+            return None
+        if not lunch and w[1] > LUNCH_WINDOW[1] + 30 and w[0] < LUNCH_WINDOW[0]:
+            return None   # would swallow lunch time
+        u = n.base - (0.6 if seq else 0.25) * travel / 60 - 0.3 * wait / 60
+        if n.anchor:
+            u += 0.6
+        elif route.anchored:
+            u -= 0.04 * n.anchor_km
+        if n.must and route.musts < must_quota:
+            u += MUST_SEE_BONUS
+        if n.best_time and period_of(w[0]) in n.best_time:
+            u += 0.1
+        if want_park and n.park and not route.park:
+            u += 0.08
+        if seq and n.cats == seq[-1].cats:
+            u -= 0.05  # variety
+        return u, w[1], lunch
 
     def _two_opt(self, seq: list[Candidate], weekday: int) -> list[Candidate]:
         if len(seq) < 3:
