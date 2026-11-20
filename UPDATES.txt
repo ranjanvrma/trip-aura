@@ -20,3 +20,4 @@ Suggestions (not approved):
 - Show real progress while a new city loads (10 to 20 s today).
 - Place photos from Wikimedia Commons.
 - For Chinmay: confirm TRUSTED_PROXY_COUNT in production.
+- For Chinmay: add VITE_GOOGLE_MAPS_API_KEY to Vercel (Production) and redeploy, so the live site uses Google's map with Street View (steps in HANDOFF section 9).
