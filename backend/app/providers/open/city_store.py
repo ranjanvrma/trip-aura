@@ -35,7 +35,7 @@ from app.schemas.itinerary import DishSuggestion
 from app.schemas.place import Place, PlaceKind
 
 log = logging.getLogger(__name__)
-DATASET_VERSION = 8
+DATASET_VERSION = 10
 FAMOUS_SITELINKS = 20
 
 
@@ -94,7 +94,10 @@ def _same(a: Place, b: Place, max_m: float) -> bool:
     if haversine_km(a.location.lat, a.location.lng, b.location.lat, b.location.lng) * 1000 > max_m:
         return False
     ka, kb = _keys(a.name), _keys(b.name)
-    return bool(ka & kb) or any(x in y or y in x for x in ka for y in kb if min(len(x), len(y)) >= 6)
+    # one name inside the other counts only when it is a good part of it: "Albert Hall" is "Albert Hall Museum",
+    # but "Amber Fort" is not "Tunnel Connecting Amber Fort and Jaigarh Fort"
+    return bool(ka & kb) or any((x in y or y in x) and min(len(x), len(y)) >= max(6, 0.45 * max(len(x), len(y)))
+                                for x in ka for y in kb)
 
 
 def _compatible(a: PlaceKind, b: PlaceKind) -> bool:
@@ -131,6 +134,9 @@ def _absorb(base: Place, extra: Place) -> None:
         base.address = extra.address
     if extra.image and not base.image:
         base.image = extra.image
+    if extra.readers is not None and (base.readers or 0) < extra.readers:
+        base.readers = extra.readers
+    base.guide_pick = base.guide_pick or extra.guide_pick
     if extra.kind == PlaceKind.ATTRACTION and extra.source == DataSource.WIKIDATA:
         base.typical_visit_minutes = max(base.typical_visit_minutes, extra.typical_visit_minutes)
     for k, v in extra.external_ids.items():
@@ -164,6 +170,25 @@ PENDING = object()   # a layer that had not answered when the plan was built
 DEGRADED_CACHE_HOURS = 24
 DEGRADED_RETRY_MINUTES = 30
 MAX_CITIES_IN_MEMORY = 40
+
+
+def mark_guide_picks(places: list[Place], picks: list) -> int:
+    """Marks the places a Wikivoyage guide lists under See: by Wikidata id, else by name (within 1 km when the
+    guide gives coordinates). Returns how many were marked."""
+    by_qid = {p.external_ids.get("wikidata"): p for p in places if p.external_ids.get("wikidata")}
+    by_name: dict[str, list[Place]] = {}
+    for p in places:
+        if p.kind in (PlaceKind.ATTRACTION, PlaceKind.PARK):
+            by_name.setdefault(fold(p.name), []).append(p)
+    marked = 0
+    for pick in picks:
+        found = [by_qid[pick.qid]] if pick.qid in by_qid else by_name.get(fold(pick.name), [])
+        if pick.lat is not None and pick.lng is not None:
+            found = [p for p in found if haversine_km(p.location.lat, p.location.lng, pick.lat, pick.lng) <= 1.0]
+        for p in found:
+            marked += not p.guide_pick
+            p.guide_pick = True
+    return marked
 
 
 def _copy_layers(results: dict[str, object]) -> dict[str, object]:
@@ -330,14 +355,19 @@ class CityDataService:
             return release, places, stations
 
         def wikidata_layer():
-            from app.providers.open.wikimedia import wikidata_notable_places
+            from app.providers.open.wikimedia import add_wikipedia_readers, wikidata_notable_places
 
-            return wikidata_notable_places(self.http, lat, lng, radius_km)
+            places = wikidata_notable_places(self.http, lat, lng, radius_km)
+            try:   # once per city: how many people read each sight's Wikipedia article (kept with the city)
+                add_wikipedia_readers(self.http, places)
+            except Exception as exc:   # the places still count; _assemble reports the missing reader counts
+                log.warning("Wikipedia page views unavailable for %s: %s", city.name, exc)
+            return places
 
         def wikivoyage_layer():
-            from app.providers.open.wikimedia import wikivoyage_dishes
+            from app.providers.open.wikimedia import wikivoyage_guide
 
-            return wikivoyage_dishes(self.http, city.name.split(",")[0], set(DISHES))
+            return wikivoyage_guide(self.http, city.name.split(",")[0], set(DISHES))
 
         osm_deadline = time.monotonic() + self.settings.osm_time_budget_seconds
 
@@ -436,6 +466,11 @@ class CityDataService:
             places = merge_places(places, wd, max_m=300)
             sources.append("Wikidata")
             layers_ok += 1
+            if any(p.readers for p in wd):
+                sources.append("Wikipedia page views")
+            elif any("enwiki" in p.external_ids for p in wd):
+                warnings.append("Wikipedia reader counts were unavailable, so how well known each sight is "
+                                "comes from Wikidata alone.")
         else:
             warnings.append("Wikidata was unavailable, so 'famous place' detection is limited.")
 
@@ -473,9 +508,10 @@ class CityDataService:
         wv_title = None
         wv = results.get("wikivoyage")
         if isinstance(wv, tuple):
-            dishes, wv_title = wv
+            dishes, wv_title, picks = wv
             if wv_title:
                 sources.append(f"Wikivoyage ({wv_title})")
+            mark_guide_picks(places, picks)
         elif isinstance(wv, Exception):
             warnings.append("Wikivoyage was unavailable; no guidebook dish suggestions.")
 
@@ -495,6 +531,7 @@ ATTRIBUTIONS = {
     "Overture": "Overture Maps Foundation places (CDLA-Permissive-2.0; Foursquare records Apache-2.0, "
                 "© 2024 Foursquare Labs, Inc.)",
     "Wikivoyage": "Wikivoyage contributors, CC BY-SA 4.0 (en.wikivoyage.org)",
+    "Wikipedia page views": "Reader counts: Wikimedia page-view statistics for en.wikipedia.org",
     "Nominatim": "Geocoding by Nominatim / OpenStreetMap",
 }
 

@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.ratelimit import ip_route_class
+from app.engines.itinerary import EARLY_LUNCH
 from app.engines.pace import LUNCH_WINDOW
 from app.engines.transport import TransportWeights, choose, score_options
 from app.providers.open import osm
@@ -91,7 +92,8 @@ def test_long_trip_keeps_lunch_at_lunchtime_and_totals_add_up(client, base_reque
         for item in day["items"]:
             hh, mm = item["start"].split(":")
             if item.get("meal_type") == "lunch":
-                assert int(hh) * 60 + int(mm) >= LUNCH_WINDOW[0], (day["day_number"], item["start"])
+                # an early lunch (from EARLY_LUNCH) is allowed to make room for a long sight, never earlier
+                assert int(hh) * 60 + int(mm) >= EARLY_LUNCH, (day["day_number"], item["start"])
             if item["type"] == "travel":
                 total += item["travel"]["chosen"]["cost"]["amount"]
             elif item.get("cost"):

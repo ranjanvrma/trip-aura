@@ -4,7 +4,7 @@ import { directionsUrl, photoPage, photoUrl } from "../../lib/placeLinks";
 import { safeExternalUrl } from "../../lib/safeUrl";
 import type { ItineraryItem } from "../../types";
 import { moneyLabel, pretty } from "../../utils";
-import { ExternalRatingBadge, ScoreBreakdown, SuitabilityBadge } from "./RatingBadges";
+import { ExternalRatingBadge, PopularityDetail, ScoreBreakdown, SuitabilityBadge } from "./RatingBadges";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SOURCE_LABEL: Record<string, string> = {
@@ -57,6 +57,7 @@ export default function PlaceDetails({ item, onClose, embedded = false }: { item
           <SuitabilityBadge score={item.suitability} />
           <div className="small muted">TripAura's own score - not a review rating</div>
         </div>
+        <PopularityDetail place={p} />
       </div>
 
       {item.suitability && (

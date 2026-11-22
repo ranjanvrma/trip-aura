@@ -1,5 +1,52 @@
-import { Star } from "lucide-react";
-import type { ExternalRating, SuitabilityScore } from "../../types";
+import { BookMarked, Star } from "lucide-react";
+import type { ExternalRating, Place, SuitabilityScore } from "../../types";
+import { type Popularity, compactCount, popularity, popularityNote } from "../../lib/popularity";
+
+/** Three rising bars, filled up to the popularity level. */
+export function PopularityBars({ level }: { level: Popularity["level"] }) {
+  return (
+    <span className={`pop-bars pop-${level}`} aria-hidden>
+      <i /><i /><i />
+    </span>
+  );
+}
+
+/**
+ * How well known a place is (Wikipedia readers, Wikivoyage's guide). Free data stored with the city, shown apart
+ * from both the fit score and any Google rating. Nothing is shown for a place neither source knows.
+ */
+export function PopularityBadge({ place }: { place: Place }) {
+  const pop = popularity(place);
+  if (!pop.label) return null;
+  return (
+    <span className={`badge badge-pop badge-pop-${pop.level}`} title={popularityNote(pop)}
+          aria-label={`${pop.label}. ${popularityNote(pop)}`}>
+      <PopularityBars level={pop.level} />
+      {pop.label}
+      {pop.readers != null && pop.readers >= 200 && <span className="num pop-count">{compactCount(pop.readers)}</span>}
+      {pop.guidePick && <BookMarked size={11} aria-hidden className="pop-guide" />}
+    </span>
+  );
+}
+
+/** The popularity block of the place details: the tier and what it is made of, in plain numbers. */
+export function PopularityDetail({ place }: { place: Place }) {
+  const pop = popularity(place);
+  return (
+    <div>
+      <div className="small muted">How well known</div>
+      {pop.label ? (
+        <span className={`badge badge-pop badge-pop-${pop.level}`}><PopularityBars level={pop.level} />{pop.label}</span>
+      ) : <span className="badge badge-muted">Not listed</span>}
+      <div className="small muted">
+        {pop.readers != null && <>{pop.readers.toLocaleString("en")} Wikipedia readers in 30 days</>}
+        {pop.readers != null && pop.guidePick && <br />}
+        {pop.guidePick && <>In Wikivoyage's city guide</>}
+        {pop.readers == null && !pop.guidePick && <>No Wikipedia article or guide listing</>}
+      </div>
+    </div>
+  );
+}
 
 /**
  * External (Google or demo) rating. Always shown separately from our suitability score.

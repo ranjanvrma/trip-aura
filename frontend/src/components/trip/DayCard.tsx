@@ -3,7 +3,7 @@ import { MODE_LABEL, fmtDay, fmtDuration, fmtMoney, moneyLabel } from "../../uti
 import { type LucideIcon, ArrowRight, Coffee, House, Navigation, Sun } from "lucide-react";
 import { directionsUrl } from "../../lib/placeLinks";
 import PlacePeek from "./PlacePeek";
-import { ExternalRatingBadge, SuitabilityBadge } from "./RatingBadges";
+import { ExternalRatingBadge, PopularityBadge, SuitabilityBadge } from "./RatingBadges";
 import DayRibbon from "./DayRibbon";
 
 interface Props {
@@ -113,6 +113,7 @@ export default function DayCard({ day, color, currency, selectedId, onSelect }: 
                       <div className="row wrap gap-s mt-xs">
                         <ExternalRatingBadge rating={it.place.external_rating} hideEmpty />
                         <SuitabilityBadge score={it.suitability} />
+                        <PopularityBadge place={it.place} />
                         <CostTag item={it} />
                         {it.suitability?.discovery && <span className="badge badge-discovery">Beyond your interests</span>}
                       </div>

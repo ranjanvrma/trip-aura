@@ -100,6 +100,9 @@ class Place(BaseModel):
     external_ids: dict[str, str] = Field(default_factory=dict)   # e.g. {"osm": "n123", "wikidata": "Q1", "google": "..."}
     prominence: int | None = None   # Wikipedia language editions covering the place (Wikidata sitelinks)
     image: str | None = None        # a Wikimedia Commons file name (Wikidata P18), shown as the place's photo
+    readers: int | None = Field(default=None, ge=0)   # English Wikipedia readers in the 30 days before the city
+    #                                                   was loaded (open Wikimedia page-view statistics)
+    guide_pick: bool = False        # listed under "See" in the city's Wikivoyage guide
     source: DataSource
 
     @field_validator("google_maps_uri", mode="before")

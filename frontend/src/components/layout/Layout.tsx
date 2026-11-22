@@ -119,7 +119,7 @@ export default function Layout({ banner }: { banner?: React.ReactNode }) {
           <p className="footer-word" aria-hidden>TripAura</p>
           <p className="footer-legal small muted">
             © {new Date().getFullYear()} Ranjan Verma and Chinmay Dahiya. Map data © OpenStreetMap contributors (ODbL),
-            Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Place photos: Wikimedia Commons. Globe: Natural Earth.
+            Overture Maps Foundation, Wikidata (CC0), Wikivoyage (CC BY-SA), GeoNames (CC BY). Place photos: Wikimedia Commons. Reader counts: Wikipedia page views. Globe: Natural Earth.
           </p>
         </div>
       </footer>

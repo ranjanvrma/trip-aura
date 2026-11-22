@@ -609,6 +609,17 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .badge-fit-ok { background: var(--butter); border-color: transparent; color: var(--butter-ink); }
 .badge-fit-low { background: var(--blush); border-color: transparent; color: var(--blush-ink); }
 .badge-discovery { background: var(--apricot); border-color: transparent; color: var(--apricot-ink); }
+/* how well known a place is (Wikipedia readers, Wikivoyage): three rising bars and a word; landmarks get the warm tint */
+.badge-pop { gap: 5px; background: var(--surface); border-color: var(--line-strong); color: var(--ink-2); }
+.badge-pop-3 { background: var(--apricot); border-color: transparent; color: var(--apricot-ink); }
+.pop-bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+.pop-bars i { width: 3px; border-radius: 1px; background: color-mix(in srgb, currentColor 22%, transparent); }
+.pop-bars i:nth-child(1) { height: 5px; } .pop-bars i:nth-child(2) { height: 8px; } .pop-bars i:nth-child(3) { height: 11px; }
+.pop-1 i:nth-child(-n+1), .pop-2 i:nth-child(-n+2), .pop-3 i:nth-child(-n+3) { background: var(--ochre); }
+.badge-pop-3 .pop-bars i { background: var(--accent); }
+.pop-count { font-family: var(--font-mono); font-size: .7rem; font-weight: 500; }
+.pop-guide { color: var(--primary); }
+.badge-pop-3 .pop-guide { color: inherit; }
 
 /* skeletons */
 .skeleton {
@@ -789,7 +800,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .map-error { display: grid; place-items: center; background: var(--blush); padding: 20px; }
 .map-pin div { border-radius: 8px; color: var(--on-day); font-size: 11px; font-weight: 700; text-align: center; border: 2px solid var(--bg); box-shadow: 0 2px 6px rgba(20, 26, 31, .35); }
 
-.details .two-ratings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; background: var(--surface-2); border-radius: var(--r-m); margin: 12px 0; }
+.details .two-ratings { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; padding: 12px; background: var(--surface-2); border-radius: var(--r-m); margin: 12px 0; }
 .details h4 { font-size: .86rem; margin-top: 16px; }
 .details .row.gap-m a { display: inline-flex; align-items: center; gap: 4px; }
 

@@ -26,7 +26,7 @@ from app.core.timeutil import hm_to_min, min_to_hm, period_of
 from app.engines import budget as budget_engine
 from app.engines.food import FoodEngine, is_open_for
 from app.engines.pace import DINNER_WINDOW, LUNCH_WINDOW
-from app.engines.quality import is_minor_park, looks_like_sight, notability
+from app.engines.quality import is_minor_park, looks_like_sight, notability, reader_share
 from app.engines.recommendation import ScoringContext, open_day_ratio, score_attraction
 from app.engines.transport import TransportEngine
 from app.schemas.common import DataSource, LatLng
@@ -37,7 +37,8 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 MIN_SCORE = 1.5
 MIN_EXTERNAL_RATING = 3.3
 MAX_WAIT_MIN = 60
-NOTABLE_BONUS = 0.25    # up to this much utility for a place the open data knows well (Wikidata, two sources)
+NOTABLE_BONUS = 0.5    # up to this much utility for a place the open data knows well (Wikidata, two sources)
+READERS_BONUS = 0.6    # up to this much more for a place many people read about on Wikipedia (reader_share)
 MINOR_PARKS_PER_DAY = 1  # neighbourhood and sector parks: one a day at most, so a day is not five parks
 MUST_SEE_BONUS = 3.0   # outweighs any score and any sensible detour, so a must-see is placed first
 FAR_FROM_HOME_MIN = 40   # beyond this, dinner is taken near the accommodation, not by the last sight
@@ -287,7 +288,7 @@ class ItineraryEngine:
         def anchor_key(c: Candidate) -> float:
             dist_neutral = c.score.score + 5 * c.score.weights["distance"] * (1 - c.score.components["distance"])
             return (dist_neutral + (0.5 if c.place.is_famous else 0) + c.place.typical_visit_minutes / 300
-                    + self._notable(c.place) - (1.0 if self._minor(c.place) else 0.0))
+                    + self._notable(c.place) + 2 * reader_share(c.place) - (1.0 if self._minor(c.place) else 0.0))
 
         musts_today = [c for c in open_today if c.place.id in must] if must_quota else []
         anchor = max(musts_today or open_today, key=anchor_key, default=None)
@@ -307,7 +308,8 @@ class ItineraryEngine:
     def _node(self, c: Candidate, weekday: int, anchor: Candidate | None) -> _Node:
         p = c.place
         return _Node(
-            c=c, id=p.id, loc=c.loc, base=c.score.score / 5 + NOTABLE_BONUS * self._notable(p),
+            c=c, id=p.id, loc=c.loc,
+            base=c.score.score / 5 + NOTABLE_BONUS * self._notable(p) + READERS_BONUS * reader_share(p),
             minutes=p.typical_visit_minutes, ranges=day_ranges(p, weekday), latest=self.latest_end(c),
             minor=self._minor(p), must=p.id in self.ctx.must_see, park=p.kind == PlaceKind.PARK,
             anchor=c is anchor,

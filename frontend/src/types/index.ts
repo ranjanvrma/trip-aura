@@ -69,6 +69,8 @@ export interface Place {
   external_ids: Record<string, string>;
   prominence?: number | null;
   image?: string | null;   // a Wikimedia Commons file name (from Wikidata)
+  readers?: number | null;   // English Wikipedia readers in the 30 days before the city was loaded
+  guide_pick?: boolean;      // listed under "See" in Wikivoyage's city guide
   price_level_estimated?: boolean;
   source: DataSource;
 }

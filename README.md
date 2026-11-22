@@ -17,6 +17,7 @@ Give it a city and where you're staying, plus your dates, budget, interests, die
 - **Plans that hold together.** Every place gets a 0 to 5 fit score with reasons. Each day starts from its strongest sight and the stops are reordered to cut travel (a route search over the day's places and travel times, then 2-opt), with meals, breaks and opening hours fitted in.
 - **Your kind of trip.** Choose how to spend the budget: lowest cost (cheaper meals, free sights, walking and transit), mid-range, or premium (better restaurants, faster rides). The budget stays the ceiling either way.
 - **Food that fits.** Vegetarian, vegan, Jain, eggetarian and non-veg filters, and local dishes only when reviews or a travel guide back them up.
+- **How well known, for free.** Each sight shows Landmark, Popular or Known, from how many people read its Wikipedia article in a month and whether Wikivoyage's city guide lists it. Both are saved with the city's data (no call per plan, no key), drive which sights are chosen, and stay apart from the fit score.
 - **Real places, not map noise.** Using free open data only, the planner prefers places that Wikidata, Wikipedia or two independent map sources know; at most one small neighbourhood park a day; it drops shops, junctions, rentals and offices that map data files as sights or cafes, and keeps bars and meat places away from vegetarian, Jain and vegan travellers.
 - **Photos and directions, free.** Point at a place to see its photo from Wikimedia Commons (for places Wikidata knows), and every stop has a Directions link that opens Google Maps with no key.
 - **Honest numbers.** Every rating and price says where it came from, estimates are labelled, and the fit score never uses outside ratings.
@@ -107,7 +108,7 @@ npm run dev
 Open <http://localhost:5173>, pick a city (e.g. "Lisbon") and a hotel, then generate. API docs are at <http://127.0.0.1:8000/docs>.
 
 **Tests:**
-- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (220 tests, fully offline)
+- Backend: `cd backend && .venv/Scripts/python -m pytest -q` (230 tests, fully offline)
 - Frontend: `cd frontend && npm run build`
 
 ## Configuration

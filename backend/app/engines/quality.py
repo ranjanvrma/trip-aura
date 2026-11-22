@@ -7,7 +7,8 @@ helpers let the planner tell them apart without any paid service:
 - `looks_like_eatery`: a food place whose name says it is something else (a travel agency, a clinic, a salon).
 - `name_diet_hint`: what an eatery's name says about its food ("Bar", "Chicken Corner", "Pure Veg", "भोजनालय").
 - `notability`: 0 to 1 from facts the data already holds: a Wikidata entry, how many Wikipedia languages cover the
-  place, whether two independent sources list it, and a known brand.
+  place, how many people read its Wikipedia article, whether Wikivoyage's guide lists it, whether two independent
+  sources list it, and a known brand.
 - `is_minor_park`: a park with none of that, typically a neighbourhood or sector park.
 - `looks_like_sight`: not a rental, and not a neighbourhood or junction that open data filed as a historic site.
 
@@ -94,7 +95,20 @@ def notability(place: Place) -> float:
         score += 0.15
     if ids.get("brand"):
         score += 0.1
+    if place.readers:   # read on Wikipedia: 250 a month is a little, about 5,000 or more is the full 0.35
+        score += min(0.35, 0.07 * math.log2(1 + place.readers / 250))
+    if place.guide_pick:   # a travel guide's writers chose it
+        score += 0.25
     return min(1.0, score)
+
+
+def reader_share(place: Place) -> float:
+    """0 to 1 on a log scale from Wikipedia readers: about 0.3 at 750 a month, 0.5 at 2,000, 0.9 at 12,000, 1 at
+    20,000 or more. Unlike `notability` it keeps separating well-known places from each other (a palace read by
+    12,000 people a month from a museum read by 2,000), where notability is already full for both."""
+    if not place.readers:
+        return 0.0
+    return min(1.0, math.log2(1 + place.readers / 250) / math.log2(1 + 20_000 / 250))
 
 
 def is_minor_park(place: Place) -> bool:
